@@ -58,6 +58,15 @@ create table if not exists public.league_games (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.league_tournaments (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues(id) on delete cascade,
+  created_by uuid references auth.users(id) on delete set null,
+  data jsonb not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.friend_requests (
   id uuid primary key default gen_random_uuid(),
   requester_id uuid not null references auth.users(id) on delete cascade,
@@ -80,14 +89,18 @@ create table if not exists public.notifications (
   title text not null,
   message text not null,
   link_target text default '',
+  image_url text default '',
   read_at timestamptz,
   created_by uuid references auth.users(id) on delete set null default auth.uid(),
   created_at timestamptz not null default now()
 );
 
+alter table public.notifications add column if not exists image_url text default '';
+
 alter table public.leagues enable row level security;
 alter table public.league_members enable row level security;
 alter table public.league_games enable row level security;
+alter table public.league_tournaments enable row level security;
 alter table public.friend_requests enable row level security;
 alter table public.notifications enable row level security;
 
@@ -378,6 +391,35 @@ for delete
 to authenticated
 using (public.can_manage_league(league_id));
 
+drop policy if exists "members can view league tournaments" on public.league_tournaments;
+create policy "members can view league tournaments"
+on public.league_tournaments
+for select
+to authenticated
+using (public.is_league_member(league_id) or public.is_open_league(league_id));
+
+drop policy if exists "authorized users can create league tournaments" on public.league_tournaments;
+create policy "authorized users can create league tournaments"
+on public.league_tournaments
+for insert
+to authenticated
+with check (public.can_log_league_games(league_id));
+
+drop policy if exists "authorized users can update league tournaments" on public.league_tournaments;
+create policy "authorized users can update league tournaments"
+on public.league_tournaments
+for update
+to authenticated
+using (public.can_log_league_games(league_id))
+with check (public.can_log_league_games(league_id));
+
+drop policy if exists "managers can delete league tournaments" on public.league_tournaments;
+create policy "managers can delete league tournaments"
+on public.league_tournaments
+for delete
+to authenticated
+using (public.can_manage_league(league_id));
+
 drop policy if exists "users can view their friend requests" on public.friend_requests;
 create policy "users can view their friend requests"
 on public.friend_requests
@@ -467,6 +509,12 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.league_games;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.league_tournaments;
 exception when duplicate_object then null;
 end $$;
 

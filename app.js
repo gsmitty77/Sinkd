@@ -59,6 +59,7 @@ const authClient = window.supabase?.createClient(supabaseUrl, supabaseKey);
 const authDisabledForPreview = false;
 let currentUser = null;
 let activeLeagueId = "";
+let activeLeagueTournamentId = "";
 let selectedLeagueRosterMemberId = "";
 let selectedLeagueAchievementsMemberId = "";
 let activeLeagueGameDetailId = "";
@@ -74,6 +75,7 @@ let editingMyProfile = false;
 let leagueCache = [];
 let leagueMemberCache = [];
 let leagueGameCache = [];
+let leagueTournamentCache = [];
 let leagueRealtimeChannel = null;
 let friendRequestCache = [];
 let friendRealtimeChannel = null;
@@ -135,6 +137,12 @@ const els = {
   cancelLeagueGameEditBtn: document.querySelector("#cancelLeagueGameEditBtn"),
   leagueGamePlayerGrid: document.querySelector("#leagueGamePlayerGrid"),
   leagueGameHistory: document.querySelector("#leagueGameHistory"),
+  leagueTournamentForm: document.querySelector("#leagueTournamentForm"),
+  leagueTournamentSelect: document.querySelector("#leagueTournamentSelect"),
+  deleteLeagueTournamentBtn: document.querySelector("#deleteLeagueTournamentBtn"),
+  leagueTournamentSummary: document.querySelector("#leagueTournamentSummary"),
+  leagueTournamentBracket: document.querySelector("#leagueTournamentBracket"),
+  leagueTournamentMatchesList: document.querySelector("#leagueTournamentMatchesList"),
   leagueCompareForm: document.querySelector("#leagueCompareForm"),
   leagueCompareResult: document.querySelector("#leagueCompareResult"),
   leaguePlayerStats: document.querySelector("#leaguePlayerStats"),
@@ -748,6 +756,39 @@ function bindEvents() {
     const gameCardButton = event.target.closest("[data-view-league-game]");
     if (!gameCardButton) return;
     openLeagueGameDetail(gameCardButton.dataset.viewLeagueGame);
+  });
+
+  els.leagueTournamentForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await createCloudLeagueTournament(new FormData(els.leagueTournamentForm));
+  });
+
+  els.leagueTournamentSelect.addEventListener("change", async () => {
+    activeLeagueTournamentId = els.leagueTournamentSelect.value;
+    renderLeagueTournaments();
+  });
+
+  els.leagueTournamentBracket.addEventListener("change", async (event) => {
+    const select = event.target.closest("[data-league-tournament-match-select]");
+    const tournament = activeLeagueTournament();
+    if (!select || !tournament) return;
+    tournament.activeMatchId = select.value;
+    await saveCloudLeagueTournament(tournament);
+    renderLeagueTournaments();
+  });
+
+  els.leagueTournamentBracket.addEventListener("submit", async (event) => {
+    const form = event.target.closest(".league-tournament-match-form");
+    if (!form) return;
+    event.preventDefault();
+    await logLeagueTournamentMatch(form.dataset.tournamentId, form.dataset.matchId, new FormData(form));
+  });
+
+  els.deleteLeagueTournamentBtn.addEventListener("click", async () => {
+    const tournament = activeLeagueTournament();
+    if (!tournament || !canManageActiveLeague()) return;
+    if (!confirm(`Delete ${tournament.name}? This removes the league tournament bracket and its logged matches.`)) return;
+    await deleteCloudLeagueTournament(tournament.id);
   });
 
   els.leagueGameDetail.addEventListener("click", (event) => {
@@ -1743,6 +1784,39 @@ function leagueGames(leagueId = activeLeagueId) {
     .sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
 }
 
+function leagueTournaments(leagueId = activeLeagueId) {
+  return leagueTournamentCache
+    .filter((tournament) => tournament.leagueId === leagueId)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+}
+
+function activeLeagueTournament() {
+  const tournaments = leagueTournaments();
+  if (!tournaments.length) return null;
+  const tournament = tournaments.find((item) => item.id === activeLeagueTournamentId) || tournaments[0];
+  activeLeagueTournamentId = tournament.id;
+  return tournament;
+}
+
+function leagueTournamentGames(leagueId = activeLeagueId) {
+  return leagueTournaments(leagueId)
+    .flatMap((tournament) =>
+      tournament.rounds.flatMap((round) =>
+        round.matches
+          .map((match) => match.game)
+          .filter(Boolean)
+          .map((game) => ({ ...game, source: "league_tournament", leagueId, leagueTournamentId: tournament.id })),
+      ),
+    )
+    .sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
+}
+
+function leagueStatGames(leagueId = activeLeagueId) {
+  return [...leagueGames(leagueId), ...leagueTournamentGames(leagueId)].sort(
+    (a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at),
+  );
+}
+
 function myLeagueMember(leagueId = activeLeagueId) {
   const email = currentUser?.email?.toLowerCase();
   return leagueMemberCache.find(
@@ -1796,20 +1870,24 @@ async function loadLeagueData() {
     leagueCache = [];
     leagueMemberCache = [];
     leagueGameCache = [];
+    leagueTournamentCache = [];
     render();
     return;
   }
 
-  const [{ data: memberLeagues }, { data: members }, { data: games }] = await Promise.all([
+  const [{ data: memberLeagues }, { data: members }, { data: games }, { data: leagueTournaments }] = await Promise.all([
     memberLeagueIds.length ? authClient.from("leagues").select("*").in("id", memberLeagueIds) : Promise.resolve({ data: [] }),
     authClient.from("league_members").select("*").in("league_id", leagueIds),
     authClient.from("league_games").select("*").in("league_id", leagueIds).order("created_at", { ascending: false }),
+    authClient.from("league_tournaments").select("*").in("league_id", leagueIds).order("updated_at", { ascending: false }),
   ]);
 
   leagueCache = [...new Map([...(openLeagues || []), ...(memberLeagues || [])].map((league) => [league.id, league])).values()];
   leagueMemberCache = members || [];
   leagueGameCache = (games || []).map(normalizeLeagueGame);
+  leagueTournamentCache = (leagueTournaments || []).map(normalizeLeagueTournament);
   if (activeLeagueId && !leagueCache.some((league) => league.id === activeLeagueId)) activeLeagueId = "";
+  if (activeLeagueTournamentId && !leagueTournamentCache.some((tournament) => tournament.id === activeLeagueTournamentId)) activeLeagueTournamentId = "";
   buildLeagueGamePlayerCards();
   render();
 }
@@ -1821,6 +1899,7 @@ function subscribeToLeagueChanges() {
     .on("postgres_changes", { event: "*", schema: "public", table: "leagues" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_members" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_games" }, loadLeagueData)
+    .on("postgres_changes", { event: "*", schema: "public", table: "league_tournaments" }, loadLeagueData)
     .subscribe();
 }
 
@@ -1833,6 +1912,8 @@ function clearLeagueCloudState() {
   leagueCache = [];
   leagueMemberCache = [];
   leagueGameCache = [];
+  leagueTournamentCache = [];
+  activeLeagueTournamentId = "";
 }
 
 async function loadFriendData() {
@@ -1977,7 +2058,7 @@ function showBrowserNotification(notification) {
   });
 }
 
-async function createNotification({ recipientId = null, recipientEmail = "", leagueId = null, type, title, message, linkTarget = "" }) {
+async function createNotification({ recipientId = null, recipientEmail = "", leagueId = null, type, title, message, linkTarget = "", imageUrl = "" }) {
   if (!authClient || !currentUser || (!recipientId && !recipientEmail)) return;
   const { error } = await authClient.from("notifications").insert({
     recipient_id: recipientId,
@@ -1987,6 +2068,7 @@ async function createNotification({ recipientId = null, recipientEmail = "", lea
     title,
     message,
     link_target: linkTarget,
+    image_url: imageUrl,
   });
   if (error) console.warn(error);
 }
@@ -2455,6 +2537,89 @@ async function logCloudLeagueGame(form) {
   await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
 }
 
+async function createCloudLeagueTournament(form) {
+  if (!canLogActiveLeagueGames()) return;
+  const name = cleanText(form.get("name"));
+  const teams = parseTeams(form.get("teams"));
+  if (!name) {
+    alert("Add a tournament name.");
+    return;
+  }
+  if (teams.length < 2) {
+    alert("Add at least two teams.");
+    return;
+  }
+
+  const tournament = createTournament(name, teams);
+  const payload = {
+    league_id: activeLeagueId,
+    created_by: currentUser.id,
+    data: leagueTournamentPayload(tournament),
+  };
+  const { data, error } = await authClient.from("league_tournaments").insert(payload).select("id").single();
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  activeLeagueTournamentId = data.id;
+  els.leagueTournamentForm.reset();
+  await loadLeagueData();
+}
+
+async function saveCloudLeagueTournament(tournament) {
+  if (!tournament || !canLogActiveLeagueGames()) return;
+  const { error } = await authClient
+    .from("league_tournaments")
+    .update({ data: leagueTournamentPayload(tournament), updated_at: new Date().toISOString() })
+    .eq("id", tournament.id);
+  if (error) alert(error.message);
+}
+
+async function deleteCloudLeagueTournament(tournamentId) {
+  const { error } = await authClient.from("league_tournaments").delete().eq("id", tournamentId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  activeLeagueTournamentId = "";
+  await loadLeagueData();
+}
+
+function leagueTournamentPayload(tournament) {
+  return {
+    name: tournament.name,
+    teams: tournament.teams,
+    rounds: tournament.rounds,
+    activeMatchId: tournament.activeMatchId || "",
+  };
+}
+
+async function logLeagueTournamentMatch(tournamentId, matchId, form) {
+  if (!canLogActiveLeagueGames()) return;
+  const tournament = leagueTournaments().find((item) => item.id === tournamentId);
+  const match = tournament?.rounds.flatMap((round) => round.matches).find((item) => item.id === matchId);
+  if (!tournament || !match || match.game) return;
+
+  const beforeStats = computeLeagueStats();
+  const beforeAchievementRanks = leagueAchievementRanks(beforeStats);
+  const beforeLeaders = leagueRankingLeaders(beforeStats);
+  const game = readTournamentGameForm(form, match, tournament.id);
+  game.source = "league_tournament";
+  game.leagueId = activeLeagueId;
+  game.leagueTournamentId = tournament.id;
+  match.game = game;
+  match.winner = game.winnerIndex === 0 ? match.teamA : match.teamB;
+  advanceWinner(tournament, match);
+  advanceByes(tournament);
+  tournament.activeMatchId = playableTournamentMatches(tournament)[0]?.id || match.id;
+  await saveCloudLeagueTournament(tournament);
+  await loadLeagueData();
+  const afterStats = computeLeagueStats();
+  await notifyLeagueAchievementUnlocks(beforeAchievementRanks, afterStats);
+  await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
+}
+
 function resetLeagueGameForm() {
   editingLeagueGameId = "";
   els.leagueGameForm.reset();
@@ -2586,6 +2751,22 @@ function normalizeLeagueGame(row) {
     selfSinkPlayer: row.self_sink_player || "",
     selfSinkTeam: row.self_sink_team,
     playerStats,
+  };
+}
+
+function normalizeLeagueTournament(row) {
+  const data = row.data || {};
+  return {
+    ...data,
+    id: row.id,
+    leagueId: row.league_id,
+    league_id: row.league_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    teams: data.teams || [],
+    rounds: data.rounds || [],
+    activeMatchId: data.activeMatchId || "",
   };
 }
 
@@ -2932,8 +3113,10 @@ function actionNotificationRow(item) {
 
 function notificationRow(notification) {
   const league = leagueCache.find((item) => item.id === notification.league_id);
+  const image = cleanText(notification.image_url);
   return `
-    <article class="notification-row ${notification.read_at ? "" : "unread"}">
+    <article class="notification-row ${notification.read_at ? "" : "unread"} ${image ? "has-image" : ""}">
+      ${image ? `<img class="notification-badge-image" src="${escapeHtml(image)}" alt="" />` : ""}
       <div>
         <strong>${escapeHtml(notification.title)}</strong>
         <span>${escapeHtml(notification.message)}</span>
@@ -3132,6 +3315,7 @@ function renderLeagueDetails() {
   `;
 
   renderLeagueGames();
+  renderLeagueTournaments();
   renderLeagueStats();
   renderLeagueStatsTable();
   renderLeagueRankings();
@@ -3155,6 +3339,93 @@ function renderLeagueGames() {
   } else if (editingLeagueGameId) {
     resetLeagueGameForm();
   }
+}
+
+function renderLeagueTournaments() {
+  const tournaments = leagueTournaments();
+  const canLog = canLogActiveLeagueGames();
+  const canManage = canManageActiveLeague();
+  els.leagueTournamentForm.classList.toggle("hidden", !canLog);
+  els.deleteLeagueTournamentBtn.hidden = !canManage || !tournaments.length;
+
+  if (!tournaments.length) {
+    activeLeagueTournamentId = "";
+    els.leagueTournamentSelect.innerHTML = '<option value="">No league tournaments yet</option>';
+    els.leagueTournamentSummary.innerHTML = "";
+    els.leagueTournamentBracket.innerHTML = '<p class="empty">Create a league tournament to see the bracket.</p>';
+    els.leagueTournamentMatchesList.innerHTML = '<p class="empty">No league tournament matches logged yet.</p>';
+    return;
+  }
+
+  const tournament = activeLeagueTournament();
+  ensureActiveTournamentMatch(tournament);
+  els.leagueTournamentSelect.innerHTML = tournaments
+    .map((item) => `<option value="${item.id}" ${item.id === tournament.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`)
+    .join("");
+
+  const champion = tournament.rounds.at(-1).matches[0]?.winner;
+  const completedMatches = tournament.rounds.flatMap((round) => round.matches).filter((match) => match.game).length;
+  els.leagueTournamentSummary.innerHTML = `
+    <div class="summary-item"><b>${tournament.teams.length}</b><span>Teams</span></div>
+    <div class="summary-item"><b>${completedMatches}</b><span>Matches</span></div>
+    <div class="summary-item"><b>${escapeHtml(champion?.name || "Open")}</b><span>Champion</span></div>
+  `;
+
+  const readyMatches = readyTournamentMatches(tournament);
+  const match = selectedTournamentMatch(tournament);
+  if (!readyMatches.length || !match) {
+    els.leagueTournamentBracket.innerHTML = '<p class="empty">Waiting for the next matchup.</p>';
+  } else {
+    els.leagueTournamentBracket.innerHTML = `
+      <section class="tournament-match-picker">
+        <label>
+          Matchup
+          <select data-league-tournament-match-select>
+            ${readyMatches.map((item) => tournamentMatchOption(tournament, item, match.id)).join("")}
+          </select>
+        </label>
+      </section>
+      ${leagueTournamentMatchCard(tournament, match, canLog)}
+    `;
+  }
+
+  const games = tournament.rounds.flatMap((round) => round.matches.map((item) => item.game).filter(Boolean));
+  els.leagueTournamentMatchesList.innerHTML = games.length
+    ? games
+        .slice()
+        .reverse()
+        .map((game) => gameCard(game))
+        .join("")
+    : '<p class="empty">No league tournament matches logged yet.</p>';
+}
+
+function leagueTournamentMatchCard(tournament, match, canLog) {
+  const canLogMatch = canLog && match.teamA && match.teamB && !match.game;
+  const pending = !match.teamA || !match.teamB;
+  const teamsHtml = [match.teamA, match.teamB]
+    .map((team) => {
+      const isWinner = match.winner?.id === team?.id;
+      return `<div class="team-line ${isWinner ? "winner" : ""}">
+        <span>${escapeHtml(team?.name || "TBD")}</span>
+        <span>${match.game ? match.game.teams[team?.id === match.teamA?.id ? 0 : 1].score : ""}</span>
+      </div>`;
+    })
+    .join("");
+
+  return `
+    <article class="match-card ${pending ? "pending" : ""}">
+      <strong>${escapeHtml(tournamentMatchLabel(tournament, match))}</strong>
+      ${teamsHtml}
+      ${match.game ? `<div class="meta-line">Logged ${formatDate(match.game.createdAt)}</div>` : ""}
+      ${canLogMatch ? leagueTournamentMatchForm(tournament, match) : ""}
+    </article>
+  `;
+}
+
+function leagueTournamentMatchForm(tournament, match) {
+  return tournamentMatchForm(match)
+    .replace('class="match-form tournament-big-form"', `class="match-form tournament-big-form league-tournament-match-form" data-tournament-id="${tournament.id}"`)
+    .replace("Log Tournament Game", "Log League Tournament Game");
 }
 
 function renderLeagueGameDetail() {
@@ -3541,11 +3812,11 @@ function leagueRosterDetailCard(selected) {
       </div>
       <div class="roster-detail-actions">
         <button class="small-button secondary-button" type="button" data-roster-achievements="${escapeHtml(selected.id)}">
-          ${achievementsOpen ? "Hide Achievements" : "See Achievements"}
+          ${achievementsOpen ? "Hide League Badges" : "See League Badges"}
         </button>
         <button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(selected.id)}">Add Friend</button>
       </div>
-      ${achievementsOpen ? achievementSection(stats, "League Achievements") : ""}
+      ${achievementsOpen ? leagueBadgeSection(stats) : ""}
     </article>
   `;
 }
@@ -3553,7 +3824,7 @@ function leagueRosterDetailCard(selected) {
 function computeLeagueStats() {
   const players = {};
   const teams = {};
-  leagueGames().forEach((game) => {
+  leagueStatGames().forEach((game) => {
     game.teams.forEach((team, teamIndex) => {
       const won = game.winnerIndex === teamIndex;
       const teamKey = team.players.join(" / ").toLowerCase();
@@ -3583,7 +3854,7 @@ function currentLeagueStreak(playerName) {
   let streakType = "";
   let count = 0;
 
-  for (const game of leagueGames()) {
+  for (const game of leagueStatGames()) {
     const teamIndex = game.teams.findIndex((team) => team.players.some((player) => player.toLowerCase() === target));
     if (teamIndex === -1) continue;
     const result = game.winnerIndex === teamIndex ? "W" : "L";
@@ -3726,6 +3997,43 @@ function achievementSection(stats, title) {
   `;
 }
 
+function leagueBadgeSection(stats) {
+  return `
+    <section class="achievement-section league-badge-section">
+      <h3>League Badges</h3>
+      <div class="league-badge-grid">
+        ${achievementDefinitions.map((definition) => leagueBadgeCard(definition, stats)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function leagueBadgeCard(definition, stats) {
+  const value = Number(stats?.[definition.key]) || 0;
+  const rank = achievementRankValue(value, definition.thresholds);
+  return `
+    <article class="league-badge-card">
+      <div class="league-badge-title">
+        <strong>${escapeHtml(definition.label)}</strong>
+        <span>${value}</span>
+      </div>
+      <div class="league-badge-dots" aria-hidden="true">
+        ${achievementTiers.map((tier, index) => `<i class="badge-dot badge-dot-${tier.toLowerCase()} ${rank >= index + 1 ? "earned" : ""}"></i>`).join("")}
+      </div>
+      <div class="league-badge-images">
+        ${achievementTiers.map((tier, index) => leagueBadgeImage(tier, rank >= index + 1)).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function leagueBadgeImage(tier, earned) {
+  const tierClass = tier.toLowerCase();
+  return `
+    <img class="${earned ? "earned" : "locked"}" src="${achievementBadgeSrc(tierClass)}" alt="${escapeHtml(tier)} badge" />
+  `;
+}
+
 function achievementCard(definition, stats) {
   const value = Number(stats?.[definition.key]) || 0;
   const progress = achievementProgress(value, definition.thresholds);
@@ -3788,6 +4096,12 @@ function achievementRankLabel(rank) {
   return `Diamond x${rank - 3}`;
 }
 
+function achievementRankClass(rank) {
+  if (rank <= 0) return "locked";
+  if (rank >= 4) return "diamond";
+  return achievementTiers[rank - 1].toLowerCase();
+}
+
 function leagueAchievementRanks(stats) {
   return Object.fromEntries(
     Object.entries(stats.players).map(([key, player]) => [
@@ -3817,6 +4131,7 @@ async function notifyLeagueAchievementUnlocks(beforeRanks, afterStats) {
         title: `${achievementRankLabel(afterRank)} ${definition.label}`,
         message: `${member.nickname || member.display_name} unlocked ${achievementRankLabel(afterRank)} ${definition.label} in ${league.name}.`,
         linkTarget: "leagues",
+        imageUrl: achievementBadgeSrc(achievementRankClass(afterRank)),
       });
     });
   });

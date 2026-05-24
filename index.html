@@ -285,6 +285,7 @@
 
           <nav class="tabs sub-tabs" aria-label="League sections">
             <button class="tab active" data-league-detail-tab="games" type="button">League Games</button>
+            <button class="tab" data-league-detail-tab="tournaments" type="button">Tournaments</button>
             <button class="tab" data-league-detail-tab="stats" type="button">Roster</button>
             <button class="tab" data-league-detail-tab="leagueStats" type="button">League Stats</button>
             <button class="tab" data-league-detail-tab="rankings" type="button">Rankings</button>
@@ -313,6 +314,38 @@
               <h3>Game History</h3>
               <div class="list" id="leagueGameHistory"></div>
             </section>
+          </section>
+
+          <section class="league-detail-panel" id="leagueTournamentsPanel">
+            <div class="tournament-layout">
+              <form class="panel" id="leagueTournamentForm">
+                <h3>Create League Tournament</h3>
+                <label>Tournament Name <input name="name" maxlength="32" placeholder="Friday bracket" required /></label>
+                <label>
+                  Teams
+                  <textarea name="teams" rows="6" placeholder="Smitty / Jack&#10;Cole / Ryan&#10;Evan / Tyler&#10;Nick / Mike" required></textarea>
+                </label>
+                <button class="primary-button compact-action-button" type="submit">Create Bracket</button>
+              </form>
+
+              <section class="panel">
+                <h3>Current League Tournament</h3>
+                <div class="tournament-toolbar">
+                  <label>
+                    Tournament
+                    <select id="leagueTournamentSelect"></select>
+                  </label>
+                  <button class="small-button danger-button" id="deleteLeagueTournamentBtn" type="button">Delete</button>
+                </div>
+                <div id="leagueTournamentSummary" class="summary-strip"></div>
+                <div id="leagueTournamentBracket"></div>
+              </section>
+
+              <section class="panel">
+                <h3>League Tournament History</h3>
+                <div class="list" id="leagueTournamentMatchesList"></div>
+              </section>
+            </div>
           </section>
 
           <section class="league-detail-panel" id="leagueStatsPanel">
