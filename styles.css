@@ -1003,28 +1003,58 @@ legend {
 
 .league-badge-card {
   display: grid;
-  gap: 8px;
+  grid-template-columns: 66px 1fr;
+  gap: 10px;
+  align-items: center;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.06);
 }
 
-.league-badge-title {
+.league-badge-body {
+  display: grid;
+  gap: 3px;
+  align-items: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.league-badge-body strong {
+  font-size: 0.72rem;
+  line-height: 1.05;
+}
+
+.league-badge-body span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.league-badge-single {
+  display: block;
+  width: 45px;
+  aspect-ratio: 0.78;
+  object-fit: contain;
+}
+
+.league-badge-single.locked {
+  opacity: 0.26;
+  filter: grayscale(1);
+}
+
+.league-badge-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 
-.league-badge-title strong {
-  font-size: 0.88rem;
-}
-
-.league-badge-title span {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 900;
+.league-badge-footer b {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 950;
 }
 
 .league-badge-dots {
@@ -1053,27 +1083,6 @@ legend {
 
 .badge-dot.earned.badge-dot-diamond {
   background: #7de3ff;
-}
-
-.league-badge-images {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  align-items: center;
-}
-
-.league-badge-images img {
-  display: block;
-  width: 100%;
-  max-width: 54px;
-  margin: 0 auto;
-  aspect-ratio: 0.78;
-  object-fit: contain;
-}
-
-.league-badge-images img.locked {
-  opacity: 0.24;
-  filter: grayscale(1);
 }
 
 .league-create-card,

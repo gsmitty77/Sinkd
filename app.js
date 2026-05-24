@@ -3514,7 +3514,7 @@ function renderLeagueStatsTable() {
   const players = Object.values(stats.players).sort((a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.sinks - a.sinks);
   els.leagueStatsTable.innerHTML = players.length
     ? players.map(leaguePlayerStatsRow).join("")
-    : '<tr><td colspan="11">No league games logged yet.</td></tr>';
+    : '<tr><td colspan="12">No league games logged yet.</td></tr>';
 }
 
 function renderLeagueRankings() {
@@ -3794,8 +3794,8 @@ function leagueRosterDetailCard(selected) {
     ["Tinks", stats.tinks],
     ["FG Offense", stats.fgOffense],
     ["FG Defense", stats.fgDefense],
-    ["Self Sinks", stats.selfSinks],
     ["FIFAs", stats.fifas],
+    ["Self Sinks", stats.selfSinks],
   ];
 
   return `
@@ -3840,6 +3840,10 @@ function computeLeagueStats() {
         const key = playerName.toLowerCase();
         if (!players[key]) players[key] = { name: playerName, ...emptyBucket() };
         addGameToBucket(players[key], team.playerStats?.[playerName] || emptyLeagueStats(), won);
+        if (game.source === "league_tournament") {
+          players[key].tournamentWins += won ? 1 : 0;
+          players[key].tournamentLosses += won ? 0 : 1;
+        }
       });
     });
   });
@@ -3884,6 +3888,7 @@ function leaguePlayerStatsRow(player) {
       <td>${player.fgDefense}</td>
       <td>${player.fifas}</td>
       <td>${player.selfSinks}</td>
+      <td>${player.tournamentWins || 0}-${player.tournamentLosses || 0}</td>
     </tr>
   `;
 }
@@ -3974,8 +3979,8 @@ function renderProfiles() {
         <div><b>${personalStats.tableHits}</b><span>Table Hits</span></div>
         <div><b>${personalStats.fgOffense}</b><span>FG Off</span></div>
         <div><b>${personalStats.fgDefense}</b><span>FG Def</span></div>
-        <div><b>${personalStats.fifas}</b><span>FIFAs</span></div>
         <div><b>${personalStats.selfSinks}</b><span>Self Sinks</span></div>
+        <div><b>${personalStats.fifas}</b><span>FIFAs</span></div>
       </div>
       ${achievementSection(personalStats, "Achievements")}
     </article>
@@ -3983,15 +3988,11 @@ function renderProfiles() {
 }
 
 function achievementSection(stats, title) {
-  const badges = achievementDefinitions
-    .map((definition) => achievementCard(definition, stats))
-    .filter(Boolean)
-    .join("");
   return `
     <section class="achievement-section">
       <h3>${escapeHtml(title)}</h3>
-      <div class="achievement-grid">
-        ${badges || '<p class="empty">No badges earned yet.</p>'}
+      <div class="league-badge-grid">
+        ${achievementDefinitions.map((definition) => achievementProgressCard(definition, stats)).join("")}
       </div>
     </section>
   `;
@@ -4002,35 +4003,36 @@ function leagueBadgeSection(stats) {
     <section class="achievement-section league-badge-section">
       <h3>League Badges</h3>
       <div class="league-badge-grid">
-        ${achievementDefinitions.map((definition) => leagueBadgeCard(definition, stats)).join("")}
+        ${achievementDefinitions.map((definition) => achievementProgressCard(definition, stats)).join("")}
       </div>
     </section>
   `;
 }
 
-function leagueBadgeCard(definition, stats) {
+function achievementProgressCard(definition, stats) {
   const value = Number(stats?.[definition.key]) || 0;
   const rank = achievementRankValue(value, definition.thresholds);
+  const tierIndex = Math.max(0, Math.min(rank - 1, achievementTiers.length - 1));
+  const tier = achievementTiers[tierIndex];
+  const tierClass = tier.toLowerCase();
+  const goalIndex = Math.min(rank, definition.thresholds.length - 1);
+  const goal = definition.thresholds[goalIndex];
+  const fraction = `${value}/${goal}`;
+  const rankName = achievementRankLabel(rank) || `Locked - ${tier}`;
   return `
-    <article class="league-badge-card">
-      <div class="league-badge-title">
+    <article class="league-badge-card achievement-${rank ? tierClass : "locked"}">
+      <div class="league-badge-body">
+        <img class="league-badge-single ${rank ? "earned" : "locked"}" src="${achievementBadgeSrc(tierClass)}" alt="${escapeHtml(`${rankName} ${definition.label}`)}" />
         <strong>${escapeHtml(definition.label)}</strong>
-        <span>${value}</span>
+        <span>${escapeHtml(rankName)}</span>
       </div>
-      <div class="league-badge-dots" aria-hidden="true">
-        ${achievementTiers.map((tier, index) => `<i class="badge-dot badge-dot-${tier.toLowerCase()} ${rank >= index + 1 ? "earned" : ""}"></i>`).join("")}
-      </div>
-      <div class="league-badge-images">
-        ${achievementTiers.map((tier, index) => leagueBadgeImage(tier, rank >= index + 1)).join("")}
+      <div class="league-badge-footer">
+        <div class="league-badge-dots" aria-hidden="true">
+          ${achievementTiers.map((item, index) => `<i class="badge-dot badge-dot-${item.toLowerCase()} ${rank >= index + 1 ? "earned" : ""}"></i>`).join("")}
+        </div>
+        <b>${escapeHtml(fraction)}</b>
       </div>
     </article>
-  `;
-}
-
-function leagueBadgeImage(tier, earned) {
-  const tierClass = tier.toLowerCase();
-  return `
-    <img class="${earned ? "earned" : "locked"}" src="${achievementBadgeSrc(tierClass)}" alt="${escapeHtml(tier)} badge" />
   `;
 }
 
@@ -4277,6 +4279,8 @@ function emptyBucket() {
   return {
     wins: 0,
     losses: 0,
+    tournamentWins: 0,
+    tournamentLosses: 0,
     games: 0,
     ...Object.fromEntries(allStatFields.map(([key]) => [key, 0])),
   };
@@ -4328,8 +4332,8 @@ function playerRow(player) {
       <td>${overall.tinks}</td>
       <td>${overall.fgOffense}</td>
       <td>${overall.fgDefense}</td>
-      <td>${overall.fifas}</td>
       <td>${overall.selfSinks}</td>
+      <td>${overall.fifas}</td>
     </tr>
   `;
 }
