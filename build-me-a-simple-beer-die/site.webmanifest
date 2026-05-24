@@ -1,0 +1,16 @@
+{
+  "name": "Sinkd",
+  "short_name": "Sinkd",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f3ec",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "assets/app-icon.png?v=5",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
