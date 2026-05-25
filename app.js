@@ -44,12 +44,12 @@ const scoringPointValues = {
   fifas: 1,
 };
 const achievementDefinitions = [
-  { key: "sinks", label: "Sink", thresholds: [5, 15, 30, 50] },
-  { key: "tinks", label: "Tink", thresholds: [10, 30, 60, 100] },
-  { key: "fgOffense", label: "FG Off", thresholds: [15, 40, 80, 150] },
-  { key: "fgDefense", label: "FG Def", thresholds: [10, 25, 50, 90] },
-  { key: "fifas", label: "FIFA", thresholds: [25, 75, 150, 300] },
-  { key: "tableHits", label: "Table Hit", thresholds: [25, 100, 200, 500] },
+  { key: "sinks", label: "Cup Hunter", thresholds: [10, 15, 30, 50] },
+  { key: "tinks", label: "Rim Rattler", thresholds: [15, 30, 60, 100] },
+  { key: "fgOffense", label: "Field General", thresholds: [15, 40, 80, 150] },
+  { key: "fgDefense", label: "Return to Sender", thresholds: [10, 25, 50, 90] },
+  { key: "fifas", label: "Soccer Player", thresholds: [25, 75, 150, 300] },
+  { key: "tableHits", label: "Table Setter", thresholds: [25, 100, 200, 500] },
 ];
 const secretAchievementDefinitions = [
   { key: "selfSinks", label: "L Teammate", threshold: 10, tierClass: "diamond" },
@@ -1539,7 +1539,7 @@ function counterControl(name, label, teamIndex = "") {
   const teamAttribute = teamIndex === "" ? "" : ` data-team-index="${teamIndex}"`;
   return `
     <div class="counter-row"${teamAttribute} data-score-stat="${statKey}" data-score-points="${scorePoints}">
-      <span>${label}</span>
+      <span class="counter-label">${label}</span>
       <div class="counter-control">
         <button type="button" data-counter-action="minus" aria-label="Decrease ${label}">-</button>
         <input name="${name}" type="number" min="0" value="0" readonly />
@@ -4281,12 +4281,12 @@ function leagueRosterDetailCard(selected) {
     ["Current Streak", streakLabel(stats)],
     ["Table Hits", stats.tableHits],
     ["Sinks", stats.sinks],
-    ["Tourney Record", `${stats.tournamentWins || 0}-${stats.tournamentLosses || 0}`],
     ["Tinks", stats.tinks],
     ["FG Offense", stats.fgOffense],
     ["FG Defense", stats.fgDefense],
     ["FIFAs", stats.fifas],
     ["Self Sinks", stats.selfSinks],
+    ["Tourney Record", `${stats.tournamentWins || 0}-${stats.tournamentLosses || 0}`],
   ];
 
   return `
@@ -4342,6 +4342,46 @@ function computeLeagueStats() {
     player.streak = currentLeagueStreak(player.name);
   });
   return { players, teams };
+}
+
+function computeMyLifetimeStats(nickname = myProfileNickname()) {
+  const lifetime = emptyBucket();
+  const localStats = computePlayerStats()[profileKey(nickname)]?.overall;
+  mergeStatBucket(lifetime, localStats);
+
+  leagueCache.forEach((league) => {
+    const member = myLeagueMember(league.id);
+    if (!member) return;
+    const leagueStats = computeLeagueStatsForLeague(league.id);
+    const keys = [member.display_name, member.nickname].map(profileKey).filter(Boolean);
+    const playerStats = keys.map((key) => leagueStats.players[key]).find(Boolean);
+    mergeStatBucket(lifetime, playerStats);
+  });
+
+  return lifetime;
+}
+
+function computeLeagueStatsForLeague(leagueId) {
+  return withActiveLeague(leagueId, () => computeLeagueStats());
+}
+
+function withActiveLeague(leagueId, callback) {
+  const previousLeagueId = activeLeagueId;
+  activeLeagueId = leagueId;
+  try {
+    return callback();
+  } finally {
+    activeLeagueId = previousLeagueId;
+  }
+}
+
+function mergeStatBucket(target, source) {
+  if (!source) return target;
+  Object.keys(emptyBucket()).forEach((key) => {
+    if (typeof target[key] === "number") target[key] += Number(source[key]) || 0;
+  });
+  target.streak = source.streak || target.streak;
+  return target;
 }
 
 function currentLeagueStreak(playerName) {
@@ -4449,7 +4489,7 @@ function renderProfiles() {
     return;
   }
 
-  const personalStats = computePlayerStats()[profileKey(nickname)]?.overall || emptyBucket();
+  const personalStats = computeMyLifetimeStats(nickname);
   els.profileList.innerHTML = `
     <article class="profile-card">
       <div class="profile-identity">
@@ -4512,7 +4552,7 @@ function achievementProgressCard(definition, stats) {
   const goalIndex = Math.min(rank, definition.thresholds.length - 1);
   const goal = definition.thresholds[goalIndex];
   const fraction = `${value}/${goal}`;
-  const rankName = achievementRankLabel(rank) || `Locked - ${tier}`;
+  const rankName = achievementRankLabel(rank) || "Locked";
   return `
     <article class="league-badge-card achievement-${rank ? tierClass : "locked"}">
       <div class="league-badge-body">
