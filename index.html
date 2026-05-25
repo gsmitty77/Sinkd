@@ -21,15 +21,16 @@
 
     <section class="auth-shell hidden" id="authShell">
       <div class="auth-card">
-        <img class="auth-icon" src="assets/sinkr-logo.svg" alt="" onerror="this.style.display='none'" />
-        <h1>Sign In</h1>
-        <form id="authForm">
-          <label>
-            Email
-            <input id="authEmail" name="email" type="email" autocomplete="email" required />
+        <div class="auth-brand">
+          <img class="auth-icon" src="assets/sinkr-logo.svg" alt="" onerror="this.style.display='none'" />
+          <div class="auth-wordmark">Sinkd</div>
+        </div>
+          <h1>Sign In</h1>
+          <form id="authForm">
+            <label>
+            <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Email" required />
           </label>
           <label>
-            Password
             <input id="authPassword" name="password" type="password" autocomplete="current-password" required />
           </label>
           <button class="text-button auth-link-button" id="signUpBtn" type="button">Create account</button>
@@ -544,6 +545,7 @@
               <button class="small-button secondary-button" id="openPrivacyBtn" type="button">Privacy Policy</button>
               <button class="small-button secondary-button" id="openRulesBtn" type="button">Rules</button>
               <button class="small-button secondary-button" id="openFeedbackBtn" type="button">Send Feedback</button>
+              <button class="small-button secondary-button" id="openAboutBtn" type="button">About Sinkd</button>
             </div>
           </section>
           <section class="panel">
@@ -647,6 +649,31 @@
           <button class="primary-button compact-action-button" type="submit">Send Feedback</button>
           <p class="auth-message" id="feedbackMessage"></p>
         </form>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="aboutModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>About Sinkd</p>
+            <h2>Built For The Group Chat</h2>
+          </div>
+          <button class="text-button" id="closeAboutBtn" type="button">Close</button>
+        </header>
+
+        <section class="rules-card">
+          <h3>Why Sinkd Exists</h3>
+          <p>Sinkd was built by a college student who wanted game nights to feel less messy and a lot more official.</p>
+          <p>It started with a simple problem: friends were tracking scores in the Notes app, arguing over who had the better record, and forgetting the details that made each match worth talking about later.</p>
+          <p>Sinkd keeps the stats, records, leagues, tournaments, and bragging rights in one place, so the group can settle debates with real numbers and get back to playing.</p>
+        </section>
+
+        <section class="rules-card">
+          <h3>The Vibe</h3>
+          <p>Built for friendly competition, late-night matchups, house rules, and the kind of stat lines that keep a group chat alive.</p>
+          <p>Have fun, keep it responsible, and let the numbers do the talking.</p>
+        </section>
       </div>
     </section>
 

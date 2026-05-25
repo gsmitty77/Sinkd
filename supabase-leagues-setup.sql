@@ -152,10 +152,7 @@ as $$
     select 1
     from public.league_members lm
     where lm.league_id = target_league_id
-      and (
-        lm.user_id = auth.uid()
-        or lower(lm.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-      )
+      and lm.user_id = auth.uid()
   );
 $$;
 
@@ -186,10 +183,7 @@ as $$
     from public.league_members lm
     where lm.league_id = target_league_id
       and lm.role in ('owner', 'co_leader')
-      and (
-        lm.user_id = auth.uid()
-        or lower(lm.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-      )
+      and lm.user_id = auth.uid()
   );
 $$;
 
@@ -205,10 +199,7 @@ as $$
     from public.league_members lm
     where lm.league_id = target_league_id
       and lm.role in ('owner', 'co_leader', 'ref')
-      and (
-        lm.user_id = auth.uid()
-        or lower(lm.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-      )
+      and lm.user_id = auth.uid()
   );
 $$;
 
@@ -236,7 +227,18 @@ create policy "members can view their leagues"
 on public.leagues
 for select
 to authenticated
-using (public.is_open_league(id) or owner_id = auth.uid() or public.is_league_member(id));
+using (
+  public.is_open_league(id)
+  or owner_id = auth.uid()
+  or public.is_league_member(id)
+  or exists (
+    select 1
+    from public.league_members lm
+    where lm.league_id = id
+      and lm.user_id is null
+      and lower(lm.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  )
+);
 
 drop policy if exists "authenticated users can create leagues" on public.leagues;
 create policy "authenticated users can create leagues"
@@ -297,7 +299,10 @@ for select
 to authenticated
 using (
   public.is_league_member(league_id)
-  or public.is_open_league(league_id)
+  or (
+    user_id is null
+    and lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+  )
 );
 
 drop policy if exists "managers can add members" on public.league_members;
@@ -403,7 +408,6 @@ for select
 to authenticated
 using (
   public.is_league_member(league_id)
-  or public.is_open_league(league_id)
 );
 
 drop policy if exists "managers can log league games" on public.league_games;
@@ -433,7 +437,7 @@ create policy "members can view league tournaments"
 on public.league_tournaments
 for select
 to authenticated
-using (public.is_league_member(league_id) or public.is_open_league(league_id));
+using (public.is_league_member(league_id));
 
 drop policy if exists "authorized users can create league tournaments" on public.league_tournaments;
 create policy "authorized users can create league tournaments"

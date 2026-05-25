@@ -194,6 +194,9 @@ const els = {
   feedbackModal: document.querySelector("#feedbackModal"),
   feedbackForm: document.querySelector("#feedbackForm"),
   feedbackMessage: document.querySelector("#feedbackMessage"),
+  openAboutBtn: document.querySelector("#openAboutBtn"),
+  closeAboutBtn: document.querySelector("#closeAboutBtn"),
+  aboutModal: document.querySelector("#aboutModal"),
   deleteTournamentBtn: document.querySelector("#deleteTournamentBtn"),
   quickRematchBtn: document.querySelector("#quickRematchBtn"),
   openBigGameBtn: document.querySelector("#openBigGameBtn"),
@@ -715,6 +718,11 @@ function bindEvents() {
     if (event.target === els.feedbackModal) closeFeedback();
   });
   els.feedbackForm.addEventListener("submit", submitFeedback);
+  els.openAboutBtn.addEventListener("click", openAbout);
+  els.closeAboutBtn.addEventListener("click", closeAbout);
+  els.aboutModal.addEventListener("click", (event) => {
+    if (event.target === els.aboutModal) closeAbout();
+  });
 
   els.friendInviteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1873,10 +1881,7 @@ function leagueStatGames(leagueId = activeLeagueId) {
 }
 
 function myLeagueMember(leagueId = activeLeagueId) {
-  const email = currentUser?.email?.toLowerCase();
-  return leagueMemberCache.find(
-    (member) => member.league_id === leagueId && (member.user_id === currentUser?.id || member.email?.toLowerCase() === email),
-  );
+  return leagueMemberCache.find((member) => member.league_id === leagueId && member.user_id === currentUser?.id);
 }
 
 function canManageActiveLeague() {
@@ -1925,11 +1930,15 @@ async function loadLeagueData() {
     return;
   }
 
-  const memberLeagueIds = [...new Set((memberships || []).map((member) => member.league_id))];
+  const acceptedMemberships = (memberships || []).filter((member) => member.user_id === currentUser.id);
+  const pendingInviteLeagueIds = (memberships || [])
+    .filter((member) => !member.user_id && member.email?.toLowerCase() === email.toLowerCase())
+    .map((member) => member.league_id);
+  const memberLeagueIds = [...new Set(acceptedMemberships.map((member) => member.league_id))];
   const { data: openLeagues, error: openLeagueError } = await authClient.from("leagues").select("*").eq("privacy", "open");
   if (openLeagueError) console.warn(openLeagueError);
   const openLeagueIds = (openLeagues || []).map((league) => league.id);
-  const leagueIds = [...new Set([...memberLeagueIds, ...openLeagueIds])];
+  const leagueIds = [...new Set([...memberLeagueIds, ...pendingInviteLeagueIds, ...openLeagueIds])];
   if (!leagueIds.length) {
     leagueCache = [];
     leagueMemberCache = [];
@@ -1940,14 +1949,14 @@ async function loadLeagueData() {
   }
 
   const [{ data: memberLeagues }, { data: members }, { data: games }, { data: leagueTournaments }] = await Promise.all([
-    memberLeagueIds.length ? authClient.from("leagues").select("*").in("id", memberLeagueIds) : Promise.resolve({ data: [] }),
-    authClient.from("league_members").select("*").in("league_id", leagueIds),
-    authClient.from("league_games").select("*").in("league_id", leagueIds).order("created_at", { ascending: false }),
-    authClient.from("league_tournaments").select("*").in("league_id", leagueIds).order("updated_at", { ascending: false }),
+    leagueIds.length ? authClient.from("leagues").select("*").in("id", leagueIds) : Promise.resolve({ data: [] }),
+    memberLeagueIds.length ? authClient.from("league_members").select("*").in("league_id", memberLeagueIds) : Promise.resolve({ data: [] }),
+    memberLeagueIds.length ? authClient.from("league_games").select("*").in("league_id", memberLeagueIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
+    memberLeagueIds.length ? authClient.from("league_tournaments").select("*").in("league_id", memberLeagueIds).order("updated_at", { ascending: false }) : Promise.resolve({ data: [] }),
   ]);
 
   leagueCache = [...new Map([...(openLeagues || []), ...(memberLeagues || [])].map((league) => [league.id, league])).values()];
-  leagueMemberCache = members || [];
+  leagueMemberCache = [...new Map([...(members || []), ...(memberships || [])].map((member) => [member.id, member])).values()];
   leagueGameCache = (games || []).map(normalizeLeagueGame);
   leagueTournamentCache = (leagueTournaments || []).map(normalizeLeagueTournament);
   if (activeLeagueId && !leagueCache.some((league) => league.id === activeLeagueId)) activeLeagueId = "";
@@ -2204,6 +2213,18 @@ function openFeedback() {
 function closeFeedback() {
   els.feedbackModal.classList.add("hidden");
   els.feedbackModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function openAbout() {
+  els.aboutModal.classList.remove("hidden");
+  els.aboutModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeAbout() {
+  els.aboutModal.classList.add("hidden");
+  els.aboutModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
 }
 
@@ -3635,14 +3656,15 @@ function publicFriendRequestName(request) {
 
 function leagueCard(league) {
   const members = leagueMembers(league.id);
-  const role = members.find((member) => member.user_id === currentUser?.id || member.email === currentUser?.email)?.role || "";
+  const role = myLeagueMember(league.id)?.role || "";
+  const isMember = Boolean(role);
   return `
     <button class="league-card-button" type="button" data-open-league="${league.id}">
       ${cubeBadge(league)}
       <span>
         <strong>${escapeHtml(league.name)}</strong>
         <small>${escapeHtml(league.description || "No description")} </small>
-        <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${members.length}/50${role ? ` - ${displayRole(role)}` : ""}</em>
+        <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/50` : "Join to view data"}${role ? ` - ${displayRole(role)}` : ""}</em>
       </span>
     </button>
   `;
@@ -3677,7 +3699,7 @@ function renderLeagueDetails() {
       <div>
         <h2>${escapeHtml(league.name)}</h2>
         <p>${escapeHtml(league.description || "No description yet.")}</p>
-        <div class="meta-line">${members.length}/50 members - ${league.privacy === "invite" ? "Invite Only" : "Open"}${role ? ` - Your role: ${displayRole(role)}` : ""}</div>
+        <div class="meta-line">${member ? `${members.length}/50 members` : "Join this league to view league data"} - ${league.privacy === "invite" ? "Invite Only" : "Open"}${role ? ` - Your role: ${displayRole(role)}` : ""}</div>
       </div>
     </div>
   `;
@@ -3878,6 +3900,13 @@ function renderLeagueStats() {
 }
 
 function renderLeagueStatsTable() {
+  if (!myLeagueMember()) {
+    els.leagueExportBtn.classList.add("hidden");
+    els.leagueStatsTable.innerHTML = '<tr><td colspan="12">Join this league to view or export league stats.</td></tr>';
+    return;
+  }
+
+  els.leagueExportBtn.classList.remove("hidden");
   const stats = computeLeagueStats();
   const players = Object.values(stats.players).sort((a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.sinks - a.sinks);
   els.leagueStatsTable.innerHTML = players.length
@@ -4714,6 +4743,10 @@ function exportData() {
 function exportLeagueStats() {
   if (!activeLeague()) {
     alert("Open a league first.");
+    return;
+  }
+  if (!myLeagueMember()) {
+    alert("You can only export data for leagues you are in.");
     return;
   }
   openStatReport(statReportHtml({ leagueOnly: true }), "league stat report");
