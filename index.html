@@ -262,7 +262,10 @@
           <section class="panel">
             <div class="notification-head">
               <h3>Inbox</h3>
-              <button class="small-button secondary-button" id="markNotificationsReadBtn" type="button">Mark All Read</button>
+              <div class="notification-actions">
+                <button class="small-button secondary-button" id="markNotificationsReadBtn" type="button">Mark All Read</button>
+                <button class="small-button danger-button" id="deleteAllNotificationsBtn" type="button">Delete All</button>
+              </div>
             </div>
             <div class="notification-list" id="notificationList"></div>
           </section>
@@ -279,6 +282,11 @@
 
           <section class="panel">
             <h3>Invite Friend</h3>
+            <section class="invite-share-card friend-qr-card">
+              <p>Have a friend scan this to send you a request.</p>
+              <button class="small-button secondary-button" id="toggleFriendQrBtn" type="button">Show QR Code</button>
+              <div class="league-qr-box hidden" id="friendQrBox"></div>
+            </section>
             <form class="friend-invite-form" id="friendInviteForm">
               <label>Email <input name="email" type="email" placeholder="friend@email.com" required /></label>
               <button class="primary-button compact-action-button" type="submit">Invite</button>
@@ -385,7 +393,10 @@
 
           <section class="league-detail-panel" id="leagueLeagueStatsPanel">
             <section class="panel">
-              <h3>League Stats</h3>
+              <div class="section-head compact-section-head">
+                <h3>League Stats</h3>
+                <button class="small-button secondary-button" id="leagueExportBtn" type="button">Export PDF</button>
+              </div>
               <div class="table-scroll league-stats-scroll">
                 <table>
                   <thead>
@@ -542,12 +553,8 @@
           <section class="panel settings-rules-panel">
             <button class="primary-button compact-action-button" id="openRulesBtn" type="button">Rules</button>
           </section>
-          <section class="panel">
-            <h3>Notifications</h3>
-            <div class="settings-actions">
-              <button class="small-button secondary-button" id="openPrivacyBtn" type="button">Privacy Policy</button>
-              <button class="small-button secondary-button" id="enablePushBtn" type="button">Notifications On</button>
-            </div>
+          <section class="panel settings-rules-panel">
+            <button class="small-button secondary-button" id="openPrivacyBtn" type="button">Privacy Policy</button>
           </section>
           <section class="panel">
             <h3>Players</h3>
@@ -683,7 +690,7 @@
 
         <section class="rules-card privacy-card">
           <h3>Notifications</h3>
-          <p>Sinkd may show in-app notifications for friend requests, league invites, achievements, and ranking updates. Browser or phone notification popups require device/browser permission. You can turn notification popups on or off in Settings. Some notification records may still be stored in the app so your inbox works.</p>
+          <p>Sinkd may show in-app notifications for friend requests, league invites, achievements, and ranking updates. Browser or phone notification popups require device/browser permission. Notification records are automatically cleared after a short period so your inbox stays current.</p>
         </section>
 
         <section class="rules-card privacy-card">
@@ -693,7 +700,7 @@
             <li>You can delete local players from Settings unless the name is tied to My Profile.</li>
             <li>You can leave leagues if you are not the owner.</li>
             <li>League owners and co-leaders may manage league members and league data.</li>
-            <li>You can disable notification popups in Settings.</li>
+            <li>You can decline notification popups when the app asks for permission.</li>
             <li>You can request that account or cloud data be removed by contacting the app owner.</li>
           </ul>
         </section>

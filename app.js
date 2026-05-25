@@ -84,6 +84,7 @@ let notificationCache = [];
 let notificationRealtimeChannel = null;
 let knownNotificationIds = new Set();
 let notificationsInitialized = false;
+let showingFriendQr = false;
 const state = loadState();
 
 const els = {
@@ -119,10 +120,13 @@ const els = {
   dismissNotificationPromptBtn: document.querySelector("#dismissNotificationPromptBtn"),
   enablePushBtn: document.querySelector("#enablePushBtn"),
   markNotificationsReadBtn: document.querySelector("#markNotificationsReadBtn"),
+  deleteAllNotificationsBtn: document.querySelector("#deleteAllNotificationsBtn"),
   showFriendsBtn: document.querySelector("#showFriendsBtn"),
   backToLeaguesFromFriendsBtn: document.querySelector("#backToLeaguesFromFriendsBtn"),
   friendsBadge: document.querySelector("#friendsBadge"),
   friendInviteForm: document.querySelector("#friendInviteForm"),
+  toggleFriendQrBtn: document.querySelector("#toggleFriendQrBtn"),
+  friendQrBox: document.querySelector("#friendQrBox"),
   leagueInviteList: document.querySelector("#leagueInviteList"),
   friendRequestList: document.querySelector("#friendRequestList"),
   friendsList: document.querySelector("#friendsList"),
@@ -158,6 +162,7 @@ const els = {
   leagueWinRankings: document.querySelector("#leagueWinRankings"),
   leagueSinkRankings: document.querySelector("#leagueSinkRankings"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
+  leagueExportBtn: document.querySelector("#leagueExportBtn"),
   leagueSettingsForm: document.querySelector("#leagueSettingsForm"),
   leaveLeagueBtn: document.querySelector("#leaveLeagueBtn"),
   leaveLeagueConfirm: document.querySelector("#leaveLeagueConfirm"),
@@ -339,6 +344,7 @@ function setAuthView(user) {
     loadLeagueData();
     loadFriendData();
     loadNotificationData();
+    consumePendingFriendInvite();
     ensureSavedPushSubscription();
     syncMyLeagueProfile();
     subscribeToLeagueChanges();
@@ -358,6 +364,20 @@ function consumeNotificationHashTarget() {
   if (!target) return;
   window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
   openNotificationTarget(target);
+}
+
+async function consumePendingFriendInvite() {
+  if (!currentUser) return;
+  const params = new URLSearchParams(window.location.search);
+  const friendUserId = cleanText(params.get("friend"));
+  if (!friendUserId) return;
+  const friendName = cleanText(params.get("name")) || "Friend";
+  params.delete("friend");
+  params.delete("name");
+  const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+  window.history.replaceState({}, document.title, nextUrl);
+  await sendFriendRequestByUserId(friendUserId, friendName);
+  switchView("friends");
 }
 
 function showPasswordRecoveryForm(user) {
@@ -678,7 +698,8 @@ function bindEvents() {
   els.backToLeaguesFromNotificationsBtn.addEventListener("click", () => switchView("leagues"));
 
   els.markNotificationsReadBtn.addEventListener("click", () => markNotificationsRead());
-  els.enablePushBtn.addEventListener("click", enablePushNotifications);
+  els.deleteAllNotificationsBtn.addEventListener("click", deleteAllNotifications);
+  els.enablePushBtn?.addEventListener("click", enablePushNotifications);
   els.enableNotificationPromptBtn.addEventListener("click", async () => {
     localStorage.setItem("sinkdNotificationPromptSeen", "true");
     await enablePushNotifications();
@@ -702,6 +723,11 @@ function bindEvents() {
   els.friendInviteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await sendFriendRequest(new FormData(els.friendInviteForm));
+  });
+
+  els.toggleFriendQrBtn.addEventListener("click", () => {
+    showingFriendQr = !showingFriendQr;
+    renderFriendInviteTools();
   });
 
   els.notificationList.addEventListener("click", async (event) => {
@@ -922,6 +948,7 @@ function bindEvents() {
   });
 
   els.exportBtn.addEventListener("click", exportData);
+  els.leagueExportBtn.addEventListener("click", exportLeagueStats);
   els.resetBtn.addEventListener("click", () => {
     if (!confirm("Reset games, tournaments, and stats? Saved players will stay.")) return;
     const selectedPlayers = currentRegularPlayerSelections();
@@ -1876,6 +1903,15 @@ function roleRank(role) {
   return role === "owner" ? 0 : role === "co_leader" ? 1 : role === "ref" ? 2 : 3;
 }
 
+function friendInviteLink() {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("friend", currentUser?.id || "");
+  url.searchParams.set("name", currentPublicName());
+  return url.toString();
+}
+
 function displayRole(role) {
   return role === "co_leader" ? "Co-Leader" : role === "owner" ? "Owner" : role === "ref" ? "Ref" : "Member";
 }
@@ -1985,6 +2021,7 @@ function clearFriendCloudState() {
 
 async function loadNotificationData() {
   if (!authClient || !currentUser) return;
+  await purgeOldNotifications();
   const email = currentUser.email || "";
   const { data, error } = await authClient
     .from("notifications")
@@ -2009,6 +2046,17 @@ async function loadNotificationData() {
   }
   notificationsInitialized = true;
   renderNotifications();
+}
+
+async function purgeOldNotifications() {
+  if (!authClient || !currentUser) return;
+  const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await authClient
+    .from("notifications")
+    .delete()
+    .lt("created_at", cutoff)
+    .or(`recipient_id.eq.${currentUser.id},recipient_email.eq.${currentUser.email || ""}`);
+  if (error) console.warn(error);
 }
 
 function subscribeToNotificationChanges() {
@@ -2274,12 +2322,44 @@ async function markNotificationsRead(types = null) {
   await loadNotificationData();
 }
 
+async function deleteAllNotifications() {
+  if (!authClient || !currentUser) return;
+  if (!confirm("Delete all notifications from this inbox?")) return;
+  const actionIds = [
+    ...pendingLeagueInvites().map((invite) => `league:${invite.id}`),
+    ...pendingIncomingFriendRequests().map((request) => `friend:${request.id}`),
+  ];
+  saveDismissedActionNotifications([...dismissedActionNotifications(), ...actionIds]);
+  const { error } = await authClient
+    .from("notifications")
+    .delete()
+    .or(`recipient_id.eq.${currentUser.id},recipient_email.eq.${currentUser.email || ""}`);
+  if (error) console.warn(error);
+  await loadNotificationData();
+}
+
+function dismissedActionNotifications() {
+  try {
+    return JSON.parse(localStorage.getItem("sinkdDismissedActionNotifications") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveDismissedActionNotifications(ids) {
+  localStorage.setItem("sinkdDismissedActionNotifications", JSON.stringify([...new Set(ids)]));
+}
+
 async function sendFriendRequest(form) {
   if (!authClient || !currentUser) return;
   const recipientEmail = cleanText(form.get("email")).toLowerCase();
   if (!recipientEmail) return;
   if (recipientEmail === currentUser.email?.toLowerCase()) {
     alert("You cannot invite yourself.");
+    return;
+  }
+  if (hasFriendConnectionByEmail(recipientEmail)) {
+    alert("That player already has a friend request or is already your friend.");
     return;
   }
 
@@ -2303,6 +2383,59 @@ async function sendFriendRequest(form) {
     linkTarget: "friends",
   });
   await loadFriendData();
+}
+
+async function sendFriendRequestByUserId(recipientId, recipientName = "Friend") {
+  if (!authClient || !currentUser || !recipientId || recipientId === currentUser.id) return;
+  if (hasFriendConnectionByUserId(recipientId)) {
+    alert("That player already has a friend request or is already your friend.");
+    return;
+  }
+
+  const { error } = await authClient.from("friend_requests").insert({
+    requester_id: currentUser.id,
+    requester_email: currentUser.email,
+    requester_name: currentPublicName(),
+    recipient_id: recipientId,
+    recipient_email: "",
+    recipient_name: cleanText(recipientName) || "Friend",
+    status: "pending",
+  });
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  await createNotification({
+    recipientId,
+    type: "friend_request",
+    title: "New friend request",
+    message: `${currentPublicName()} sent you a friend request.`,
+    linkTarget: "friends",
+  });
+  await loadFriendData();
+}
+
+function hasFriendConnectionByEmail(email) {
+  const target = cleanText(email).toLowerCase();
+  return friendRequestCache.some((request) => {
+    const involvesMe =
+      request.requester_id === currentUser?.id ||
+      request.recipient_id === currentUser?.id ||
+      request.requester_email?.toLowerCase() === currentUser?.email?.toLowerCase() ||
+      request.recipient_email?.toLowerCase() === currentUser?.email?.toLowerCase();
+    if (!involvesMe || ["denied"].includes(request.status)) return false;
+    return request.requester_email?.toLowerCase() === target || request.recipient_email?.toLowerCase() === target;
+  });
+}
+
+function hasFriendConnectionByUserId(userId) {
+  return friendRequestCache.some((request) => {
+    if (request.status === "denied") return false;
+    return (
+      (request.requester_id === currentUser?.id && request.recipient_id === userId) ||
+      (request.recipient_id === currentUser?.id && request.requester_id === userId)
+    );
+  });
 }
 
 async function updateFriendRequestStatus(requestId, status) {
@@ -3254,17 +3387,28 @@ function renderLeagues() {
 function renderFriends() {
   const friends = acceptedFriends();
   els.friendsBadge.classList.add("hidden");
+  renderFriendInviteTools();
 
   els.friendsList.innerHTML = friends.length
     ? friends.map(friendRow).join("")
     : '<p class="empty">No friends added yet.</p>';
 }
 
+function renderFriendInviteTools() {
+  if (!els.friendQrBox || !els.toggleFriendQrBtn) return;
+  const link = friendInviteLink();
+  els.toggleFriendQrBtn.textContent = showingFriendQr ? "Hide QR Code" : "Show QR Code";
+  els.friendQrBox.classList.toggle("hidden", !showingFriendQr);
+  els.friendQrBox.innerHTML = showingFriendQr
+    ? `<img src="${qrCodeUrl(link)}" alt="QR code to add ${escapeHtml(currentPublicName())}" /><span>Scan to add ${escapeHtml(currentPublicName())}</span>`
+    : "";
+}
+
 function renderNotifications() {
   const actionNotifications = [
-    ...pendingLeagueInvites().map((invite) => ({ actionType: "league_invite", created_at: invite.created_at, data: invite })),
-    ...pendingIncomingFriendRequests().map((request) => ({ actionType: "friend_request", created_at: request.created_at, data: request })),
-  ];
+    ...pendingLeagueInvites().map((invite) => ({ actionType: "league_invite", actionId: `league:${invite.id}`, created_at: invite.created_at, data: invite })),
+    ...pendingIncomingFriendRequests().map((request) => ({ actionType: "friend_request", actionId: `friend:${request.id}`, created_at: request.created_at, data: request })),
+  ].filter((item) => !dismissedActionNotifications().includes(item.actionId));
   const passiveNotifications = notificationCache.filter((notification) => {
     if (!["friend_request", "league_invite"].includes(notification.type)) return true;
     const title = notification.title?.toLowerCase() || "";
@@ -4542,15 +4686,32 @@ function exportData() {
   report.print();
 }
 
-function statReportHtml() {
+function exportLeagueStats() {
+  if (!activeLeague()) {
+    alert("Open a league first.");
+    return;
+  }
+  const report = window.open("", "_blank");
+  if (!report) {
+    alert("Allow popups to export the league stat report.");
+    return;
+  }
+  report.document.write(statReportHtml({ leagueOnly: true }));
+  report.document.close();
+  report.focus();
+  report.print();
+}
+
+function statReportHtml({ leagueOnly = false } = {}) {
   const stats = computePlayerStats();
   const players = Object.values(stats).sort((a, b) => b.overall.wins - a.overall.wins || b.overall.sinks - a.overall.sinks);
   const league = activeLeague();
   const leagueStats = league ? Object.values(computeLeagueStats().players).sort((a, b) => b.wins - a.wins || b.sinks - a.sinks) : [];
-  const overallRecord = statReportRecord(players.map((player) => player.overall));
+  const reportBuckets = leagueOnly ? leagueStats : players.map((player) => player.overall);
+  const overallRecord = statReportRecord(reportBuckets);
   const gameRecord = statReportGameRecord();
   const statDate = new Intl.DateTimeFormat(undefined, { month: "short", day: "2-digit", year: "numeric" }).format(new Date());
-  const title = `${new Date().getFullYear()} Sinkd Stat Tracker`;
+  const title = leagueOnly && league ? `${league.name} League Statistics` : `${new Date().getFullYear()} Sinkd Stat Tracker`;
   return `
     <!doctype html>
     <html>
@@ -4591,12 +4752,20 @@ function statReportHtml() {
             FIFAs: ${overallRecord.fifas} &nbsp;&nbsp;
             Self Sinks: ${overallRecord.selfSinks}
           </div>
-          <div class="section-title">All games Sorted by Win Pct</div>
-          ${statReportTable(players.map((player, index) => statReportPlayerRow(index + 1, player.name, player.overall)), statReportTotalsRow(overallRecord))}
-          <div class="section-title">All games Sorted by Total Sinks</div>
-          ${statReportTable([...players].sort((a, b) => b.overall.sinks - a.overall.sinks || b.overall.wins - a.overall.wins).map((player, index) => statReportPlayerRow(index + 1, player.name, player.overall)), statReportTotalsRow(overallRecord))}
+          <div class="section-title">${leagueOnly ? "League games Sorted by Win Pct" : "All games Sorted by Win Pct"}</div>
           ${
-            league
+            leagueOnly
+              ? statReportTable(leagueStats.map((player, index) => statReportPlayerRow(index + 1, player.name, player)), statReportTotalsRow(overallRecord))
+              : statReportTable(players.map((player, index) => statReportPlayerRow(index + 1, player.name, player.overall)), statReportTotalsRow(overallRecord))
+          }
+          <div class="section-title">${leagueOnly ? "League games Sorted by Total Sinks" : "All games Sorted by Total Sinks"}</div>
+          ${
+            leagueOnly
+              ? statReportTable([...leagueStats].sort((a, b) => b.sinks - a.sinks || b.wins - a.wins).map((player, index) => statReportPlayerRow(index + 1, player.name, player)), statReportTotalsRow(overallRecord))
+              : statReportTable([...players].sort((a, b) => b.overall.sinks - a.overall.sinks || b.overall.wins - a.overall.wins).map((player, index) => statReportPlayerRow(index + 1, player.name, player.overall)), statReportTotalsRow(overallRecord))
+          }
+          ${
+            league && !leagueOnly
               ? `<div class="section-title">${escapeHtml(league.name)} League Statistics</div>
                  ${statReportTable(leagueStats.map((player, index) => statReportPlayerRow(index + 1, player.name, player)), statReportTotalsRow(statReportRecord(leagueStats)))}`
               : ""

@@ -80,6 +80,16 @@ create table if not exists public.friend_requests (
   updated_at timestamptz not null default now()
 );
 
+alter table public.friend_requests alter column recipient_email drop not null;
+
+create unique index if not exists friend_requests_unique_active_email_invite
+on public.friend_requests (requester_id, lower(recipient_email))
+where status in ('pending', 'accepted') and recipient_email is not null and btrim(recipient_email) <> '';
+
+create unique index if not exists friend_requests_unique_active_user_invite
+on public.friend_requests (requester_id, recipient_id)
+where status in ('pending', 'accepted') and recipient_id is not null;
+
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),
   recipient_id uuid references auth.users(id) on delete cascade,
@@ -502,6 +512,16 @@ using (
   or lower(recipient_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
 )
 with check (
+  recipient_id = auth.uid()
+  or lower(recipient_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+);
+
+drop policy if exists "users can delete their notifications" on public.notifications;
+create policy "users can delete their notifications"
+on public.notifications
+for delete
+to authenticated
+using (
   recipient_id = auth.uid()
   or lower(recipient_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
