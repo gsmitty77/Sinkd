@@ -189,6 +189,11 @@ const els = {
   openPrivacyBtn: document.querySelector("#openPrivacyBtn"),
   closePrivacyBtn: document.querySelector("#closePrivacyBtn"),
   privacyModal: document.querySelector("#privacyModal"),
+  openFeedbackBtn: document.querySelector("#openFeedbackBtn"),
+  closeFeedbackBtn: document.querySelector("#closeFeedbackBtn"),
+  feedbackModal: document.querySelector("#feedbackModal"),
+  feedbackForm: document.querySelector("#feedbackForm"),
+  feedbackMessage: document.querySelector("#feedbackMessage"),
   deleteTournamentBtn: document.querySelector("#deleteTournamentBtn"),
   quickRematchBtn: document.querySelector("#quickRematchBtn"),
   openBigGameBtn: document.querySelector("#openBigGameBtn"),
@@ -501,9 +506,6 @@ async function completePasswordReset() {
 }
 
 async function signUpWithEmail() {
-  showAuthMessage("New sign-ups are paused for now.");
-  return;
-
   const email = cleanText(els.authEmail.value);
   const password = els.authPassword.value;
   if (!email || !password) {
@@ -707,6 +709,12 @@ function bindEvents() {
   els.privacyModal.addEventListener("click", (event) => {
     if (event.target === els.privacyModal) closePrivacy();
   });
+  els.openFeedbackBtn.addEventListener("click", openFeedback);
+  els.closeFeedbackBtn.addEventListener("click", closeFeedback);
+  els.feedbackModal.addEventListener("click", (event) => {
+    if (event.target === els.feedbackModal) closeFeedback();
+  });
+  els.feedbackForm.addEventListener("submit", submitFeedback);
 
   els.friendInviteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -2184,6 +2192,54 @@ function closePrivacy() {
   els.privacyModal.classList.add("hidden");
   els.privacyModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+}
+
+function openFeedback() {
+  els.feedbackMessage.textContent = "";
+  els.feedbackModal.classList.remove("hidden");
+  els.feedbackModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeFeedback() {
+  els.feedbackModal.classList.add("hidden");
+  els.feedbackModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+async function submitFeedback(event) {
+  event.preventDefault();
+  if (!authClient || !currentUser) return;
+  const form = new FormData(els.feedbackForm);
+  const topic = cleanText(form.get("topic"));
+  const message = cleanText(form.get("message"));
+  const contact = cleanText(form.get("contact"));
+  if (!message) {
+    els.feedbackMessage.textContent = "Add a message first.";
+    return;
+  }
+  els.feedbackMessage.textContent = "Sending...";
+  const { error } = await authClient.from("feedback").insert({
+    user_id: currentUser.id,
+    email: currentUser.email || "",
+    nickname: myProfileNickname(),
+    topic,
+    message,
+    contact,
+    page: activeViewName(),
+    user_agent: navigator.userAgent,
+  });
+  if (error) {
+    els.feedbackMessage.textContent = error.message;
+    return;
+  }
+  els.feedbackForm.reset();
+  els.feedbackMessage.textContent = "Feedback sent. Thank you.";
+  window.setTimeout(closeFeedback, 900);
+}
+
+function activeViewName() {
+  return document.querySelector(".view.active")?.id || "";
 }
 
 async function showBrowserNotification(notification) {

@@ -118,6 +118,20 @@ create table if not exists public.push_subscriptions (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  email text default '',
+  nickname text default '',
+  topic text not null default 'other',
+  message text not null,
+  contact text default '',
+  page text default '',
+  user_agent text default '',
+  status text not null default 'new' check (status in ('new', 'reviewing', 'done', 'ignored')),
+  created_at timestamptz not null default now()
+);
+
 alter table public.leagues enable row level security;
 alter table public.league_members enable row level security;
 alter table public.league_games enable row level security;
@@ -125,6 +139,7 @@ alter table public.league_tournaments enable row level security;
 alter table public.friend_requests enable row level security;
 alter table public.notifications enable row level security;
 alter table public.push_subscriptions enable row level security;
+alter table public.feedback enable row level security;
 
 create or replace function public.is_league_member(target_league_id uuid)
 returns boolean
@@ -555,6 +570,20 @@ for delete
 to authenticated
 using (user_id = auth.uid());
 
+drop policy if exists "users can create feedback" on public.feedback;
+create policy "users can create feedback"
+on public.feedback
+for insert
+to authenticated
+with check (user_id = auth.uid());
+
+drop policy if exists "users can view their feedback" on public.feedback;
+create policy "users can view their feedback"
+on public.feedback
+for select
+to authenticated
+using (user_id = auth.uid());
+
 do $$
 begin
   alter publication supabase_realtime add table public.leagues;
@@ -594,5 +623,11 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.push_subscriptions;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.feedback;
 exception when duplicate_object then null;
 end $$;

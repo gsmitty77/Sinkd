@@ -543,6 +543,7 @@
             <div class="settings-actions">
               <button class="small-button secondary-button" id="openPrivacyBtn" type="button">Privacy Policy</button>
               <button class="small-button secondary-button" id="openRulesBtn" type="button">Rules</button>
+              <button class="small-button secondary-button" id="openFeedbackBtn" type="button">Send Feedback</button>
             </div>
           </section>
           <section class="panel">
@@ -617,6 +618,35 @@
           <h3>Responsible Use</h3>
           <p>Sinkd is intended for responsible, legal-age players. Follow your local laws, know your limits, and use house penalties responsibly.</p>
         </section>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="feedbackModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>Sinkd Feedback</p>
+            <h2>Send Feedback</h2>
+          </div>
+          <button class="text-button" id="closeFeedbackBtn" type="button">Close</button>
+        </header>
+
+        <form class="rules-card feedback-form" id="feedbackForm">
+          <label>
+            Topic
+            <input name="topic" placeholder="Bug, feature request, league issue, account help, stats correction, other" required />
+          </label>
+          <label>
+            Message
+            <textarea name="message" rows="6" placeholder="Tell me what happened or what you want added." required></textarea>
+          </label>
+          <label>
+            Contact
+            <input name="contact" placeholder="Optional" />
+          </label>
+          <button class="primary-button compact-action-button" type="submit">Send Feedback</button>
+          <p class="auth-message" id="feedbackMessage"></p>
+        </form>
       </div>
     </section>
 
