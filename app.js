@@ -114,6 +114,9 @@ const els = {
   notificationsBadge: document.querySelector("#notificationsBadge"),
   notificationList: document.querySelector("#notificationList"),
   notificationToastWrap: document.querySelector("#notificationToastWrap"),
+  notificationPermissionPrompt: document.querySelector("#notificationPermissionPrompt"),
+  enableNotificationPromptBtn: document.querySelector("#enableNotificationPromptBtn"),
+  dismissNotificationPromptBtn: document.querySelector("#dismissNotificationPromptBtn"),
   enablePushBtn: document.querySelector("#enablePushBtn"),
   markNotificationsReadBtn: document.querySelector("#markNotificationsReadBtn"),
   showFriendsBtn: document.querySelector("#showFriendsBtn"),
@@ -676,6 +679,15 @@ function bindEvents() {
 
   els.markNotificationsReadBtn.addEventListener("click", () => markNotificationsRead());
   els.enablePushBtn.addEventListener("click", enablePushNotifications);
+  els.enableNotificationPromptBtn.addEventListener("click", async () => {
+    localStorage.setItem("sinkdNotificationPromptSeen", "true");
+    await enablePushNotifications();
+    renderNotificationPermissionPrompt();
+  });
+  els.dismissNotificationPromptBtn.addEventListener("click", () => {
+    localStorage.setItem("sinkdNotificationPromptSeen", "true");
+    renderNotificationPermissionPrompt();
+  });
   els.openRulesBtn.addEventListener("click", openRules);
   els.closeRulesBtn.addEventListener("click", closeRules);
   els.rulesModal.addEventListener("click", (event) => {
@@ -698,10 +710,10 @@ function bindEvents() {
     const accept = event.target.closest("[data-league-invite-accept]");
     const deny = event.target.closest("[data-league-invite-deny]");
     const notificationTarget = event.target.closest("[data-notification-target]");
-    if (friendAccept) await updateFriendRequestStatus(friendAccept.dataset.friendAccept, "accepted");
-    if (friendDeny) await updateFriendRequestStatus(friendDeny.dataset.friendDeny, "denied");
-    if (accept) await acceptLeagueInvite(accept.dataset.leagueInviteAccept);
-    if (deny && confirm("Deny this league invite?")) await denyLeagueInvite(deny.dataset.leagueInviteDeny);
+    if (friendAccept) await dismissNotificationAction(friendAccept, () => updateFriendRequestStatus(friendAccept.dataset.friendAccept, "accepted"));
+    if (friendDeny) await dismissNotificationAction(friendDeny, () => updateFriendRequestStatus(friendDeny.dataset.friendDeny, "denied"));
+    if (accept) await dismissNotificationAction(accept, () => acceptLeagueInvite(accept.dataset.leagueInviteAccept));
+    if (deny && confirm("Deny this league invite?")) await dismissNotificationAction(deny, () => denyLeagueInvite(deny.dataset.leagueInviteDeny));
     if (notificationTarget) openNotificationTarget(notificationTarget.dataset.notificationTarget);
   });
 
@@ -2054,13 +2066,23 @@ async function enablePushNotifications() {
 }
 
 function pushNotificationsEnabled() {
-  return localStorage.getItem("sinkdPushEnabled") !== "false" && (!("Notification" in window) || Notification.permission !== "denied");
+  return localStorage.getItem("sinkdPushEnabled") === "true" && (!("Notification" in window) || Notification.permission !== "denied");
 }
 
 function updatePushButton() {
   if (!els.enablePushBtn) return;
   const on = pushNotificationsEnabled() && (!("Notification" in window) || Notification.permission === "granted");
   els.enablePushBtn.textContent = on ? "Notifications On" : "Notifications Off";
+}
+
+function renderNotificationPermissionPrompt() {
+  if (!els.notificationPermissionPrompt) return;
+  const shouldShow =
+    Boolean(currentUser) &&
+    localStorage.getItem("sinkdNotificationPromptSeen") !== "true" &&
+    (!("Notification" in window) || Notification.permission === "default") &&
+    localStorage.getItem("sinkdPushEnabled") !== "true";
+  els.notificationPermissionPrompt.classList.toggle("hidden", !shouldShow);
 }
 
 async function ensureSavedPushSubscription() {
@@ -2264,7 +2286,7 @@ async function sendFriendRequest(form) {
   const { error } = await authClient.from("friend_requests").insert({
     requester_id: currentUser.id,
     requester_email: currentUser.email,
-    requester_name: myProfileNickname() || profileNameFromEmail(currentUser.email),
+    requester_name: currentPublicName(),
     recipient_email: recipientEmail,
     status: "pending",
   });
@@ -2277,7 +2299,7 @@ async function sendFriendRequest(form) {
     recipientEmail,
     type: "friend_request",
     title: "New friend request",
-    message: `${myProfileNickname() || profileNameFromEmail(currentUser.email)} sent you a friend request.`,
+    message: `${currentPublicName()} sent you a friend request.`,
     linkTarget: "friends",
   });
   await loadFriendData();
@@ -2291,7 +2313,7 @@ async function updateFriendRequestStatus(requestId, status) {
     .update({
       status,
       recipient_id: currentUser.id,
-      recipient_name: myProfileNickname() || profileNameFromEmail(currentUser.email),
+      recipient_name: currentPublicName(),
       recipient_email: currentUser.email,
       updated_at: new Date().toISOString(),
     })
@@ -2303,7 +2325,7 @@ async function updateFriendRequestStatus(requestId, status) {
       recipientEmail: request.requester_email,
       type: "friend_request",
       title: "Friend request accepted",
-      message: `${myProfileNickname() || profileNameFromEmail(currentUser.email)} accepted your friend request.`,
+      message: `${currentPublicName()} accepted your friend request.`,
       linkTarget: "friends",
     });
   }
@@ -2358,7 +2380,7 @@ async function inviteFriendToLeague(requestId) {
     leagueId: league.id,
     type: "league_invite",
     title: "League invite",
-    message: `${myProfileNickname() || profileNameFromEmail(currentUser.email)} invited you to ${league.name}.`,
+    message: `${currentPublicName()} invited you to ${league.name}.`,
     linkTarget: "friends",
   });
   alert(`Invite sent to ${friend.name} for ${league.name}.`);
@@ -2380,7 +2402,7 @@ async function acceptLeagueInvite(memberId) {
     .update({
       user_id: currentUser.id,
       email: currentUser.email,
-      display_name: nickname || profileNameFromEmail(currentUser.email),
+      display_name: nickname || "A player",
       nickname,
       cup_color: state.myProfile?.cupColor || "#d71920",
     })
@@ -2393,7 +2415,7 @@ async function acceptLeagueInvite(memberId) {
   await createLeagueNotifications(invite.league_id, {
     type: "league_invite",
     title: "League invite accepted",
-    message: `${nickname || profileNameFromEmail(currentUser.email)} joined ${league?.name || "the league"}.`,
+    message: `${nickname || "A player"} joined ${league?.name || "the league"}.`,
     linkTarget: "leagues",
   });
   await loadLeagueData();
@@ -2449,7 +2471,7 @@ async function createCloudLeague(form) {
     return;
   }
 
-  const ownerName = myProfileNickname() || profileNameFromEmail(currentUser.email);
+  const ownerName = myProfileNickname() || "Me";
   const cupColor = state.myProfile?.cupColor || "#d71920";
   await authClient
     .from("league_members")
@@ -2516,7 +2538,7 @@ async function addCloudLeagueMember(form) {
     alert("You are already in this league.");
     return;
   }
-  const displayName = profileNameFromEmail(email);
+  const displayName = "Invited Player";
   if (members.some((member) => member.email?.toLowerCase() === email)) {
     alert("That member is already in this league.");
     return;
@@ -2537,7 +2559,7 @@ async function addCloudLeagueMember(form) {
       leagueId: activeLeagueId,
       type: "league_invite",
       title: "League invite",
-      message: `${myProfileNickname() || profileNameFromEmail(currentUser.email)} invited you to ${activeLeague()?.name || "a league"}.`,
+      message: `${currentPublicName()} invited you to ${activeLeague()?.name || "a league"}.`,
       linkTarget: "friends",
     });
   }
@@ -2555,7 +2577,7 @@ async function consumePendingLeagueInvite() {
     const { error } = await authClient.from("league_members").insert({
       league_id: leagueId,
       email: currentUser.email,
-      display_name: nickname || profileNameFromEmail(currentUser.email),
+      display_name: nickname || "A player",
       nickname: "",
       role: "member",
     });
@@ -2928,8 +2950,13 @@ function profileNameFromEmail(email) {
   return cleanText(email).split("@")[0] || "Player";
 }
 
+function currentPublicName() {
+  return myProfileNickname() || "A player";
+}
+
 function render() {
   updateAccountLabel();
+  renderNotificationPermissionPrompt();
   renderTournamentSelect();
   renderRegularGames();
   renderBigGames();
@@ -2947,7 +2974,7 @@ function render() {
 }
 
 function updateAccountLabel() {
-  els.userEmail.textContent = currentUser ? myProfileNickname() || profileNameFromEmail(currentUser.email) : "";
+  els.userEmail.textContent = currentUser ? myProfileNickname() || "Me" : "";
 }
 
 function renderQuickRematch() {
@@ -3261,6 +3288,14 @@ function actionNotificationRow(item) {
   return friendRequestNotificationRow(item.data);
 }
 
+async function dismissNotificationAction(button, action) {
+  const row = button.closest(".notification-row");
+  row?.classList.add("is-dismissing");
+  await new Promise((resolve) => window.setTimeout(resolve, 240));
+  await action();
+  renderNotifications();
+}
+
 function notificationRow(notification) {
   const league = leagueCache.find((item) => item.id === notification.league_id);
   const image = cleanText(notification.image_url);
@@ -3311,7 +3346,7 @@ function leagueInviteRow(member) {
     <article class="friend-row">
       <div>
         <strong>${escapeHtml(league?.name || "League Invite")}</strong>
-        <span>${escapeHtml(league?.description || "You were invited by email.")}</span>
+        <span>${escapeHtml(league?.description || "You were invited.")}</span>
       </div>
       <div class="friend-actions">
         <button class="text-button" type="button" data-league-invite-accept="${member.id}">Accept</button>
@@ -3339,11 +3374,12 @@ function leagueInviteNotificationRow(member) {
 }
 
 function friendRequestRow(request) {
+  const name = publicFriendRequestName(request);
   return `
     <article class="friend-row">
       <div>
-        <strong>${escapeHtml(request.requester_name || profileNameFromEmail(request.requester_email))}</strong>
-        <span>${escapeHtml(request.requester_email)}</span>
+        <strong>${escapeHtml(name)}</strong>
+        <span>Wants to add you.</span>
       </div>
       <div class="friend-actions">
         <button class="text-button" type="button" data-friend-accept="${request.id}">Accept</button>
@@ -3354,11 +3390,12 @@ function friendRequestRow(request) {
 }
 
 function friendRequestNotificationRow(request) {
+  const name = publicFriendRequestName(request);
   return `
     <article class="notification-row unread">
       <div>
         <strong>Friend request</strong>
-        <span>${escapeHtml(request.requester_name || profileNameFromEmail(request.requester_email))} wants to add you.</span>
+        <span>${escapeHtml(name)} wants to add you.</span>
         <small>${formatDate(request.created_at)}</small>
       </div>
       <div class="friend-actions">
@@ -3410,9 +3447,13 @@ function localStatsForPlayer(playerName) {
 function friendInfo(request) {
   const isSender = request.requester_id === currentUser?.id;
   return {
-    name: isSender ? request.recipient_name || profileNameFromEmail(request.recipient_email) : request.requester_name || profileNameFromEmail(request.requester_email),
+    name: isSender ? cleanText(request.recipient_name) || "Friend" : cleanText(request.requester_name) || "Friend",
     email: isSender ? request.recipient_email : request.requester_email,
   };
+}
+
+function publicFriendRequestName(request) {
+  return cleanText(request.requester_name) || "A player";
 }
 
 function leagueCard(league) {
@@ -4490,13 +4531,153 @@ function playerRow(player) {
 }
 
 function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "beer-die-stats.json";
-  link.click();
-  URL.revokeObjectURL(url);
+  const report = window.open("", "_blank");
+  if (!report) {
+    alert("Allow popups to export the stat report.");
+    return;
+  }
+  report.document.write(statReportHtml());
+  report.document.close();
+  report.focus();
+  report.print();
+}
+
+function statReportHtml() {
+  const stats = computePlayerStats();
+  const players = Object.values(stats).sort((a, b) => b.overall.wins - a.overall.wins || b.overall.sinks - a.overall.sinks);
+  const league = activeLeague();
+  const leagueStats = league ? Object.values(computeLeagueStats().players).sort((a, b) => b.wins - a.wins || b.sinks - a.sinks) : [];
+  const overallRecord = statReportRecord(players.map((player) => player.overall));
+  const gameRecord = statReportGameRecord();
+  const statDate = new Intl.DateTimeFormat(undefined, { month: "short", day: "2-digit", year: "numeric" }).format(new Date());
+  const title = `${new Date().getFullYear()} Sinkd Stat Tracker`;
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <title>Sinkd Stat Report</title>
+        <style>
+          @page{size:letter portrait;margin:.35in}
+          *{box-sizing:border-box}
+          body{margin:0;color:#000;background:#fff;font-family:"Courier New",Courier,monospace;font-size:8.7px;line-height:1.17}
+          .page{width:100%}
+          h1{margin:0 0 2px;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700}
+          .subhead{text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:10px;margin-bottom:5px}
+          .record{font-weight:700;margin:4px 0 5px}
+          .notes{margin:2px 0 6px}
+          .section-title{margin:8px 0 2px;font-weight:700}
+          table{width:100%;border-collapse:collapse;table-layout:auto}
+          th,td{padding:1px 3px;text-align:right;vertical-align:top;white-space:nowrap}
+          th{font-weight:700;border-top:1px solid #000;border-bottom:1px solid #000}
+          td:first-child,th:first-child{text-align:right}
+          td:nth-child(2),th:nth-child(2){text-align:left}
+          tbody tr.totals td{border-top:1px solid #000;font-weight:700}
+          .soft{color:#111}
+          .break{page-break-before:always}
+          @media screen{body{padding:18px}.page{max-width:8.2in;margin:auto}}
+        </style>
+      </head>
+      <body>
+        <main class="page">
+          <h1>${escapeHtml(title)}</h1>
+          <div class="subhead">Overall Statistics (as of ${escapeHtml(statDate)})</div>
+          <div class="record">Overall Games: ${gameRecord.games} &nbsp;&nbsp; Regular: ${gameRecord.regular} &nbsp;&nbsp; Big: ${gameRecord.big} &nbsp;&nbsp; Tournament: ${gameRecord.tournament}</div>
+          <div class="notes">
+            Points: ${overallRecord.points} &nbsp;&nbsp;
+            Table Hits: ${overallRecord.tableHits} &nbsp;&nbsp;
+            Sinks: ${overallRecord.sinks} &nbsp;&nbsp;
+            Tinks: ${overallRecord.tinks} &nbsp;&nbsp;
+            Field Goals: ${(overallRecord.fgOffense || 0) + (overallRecord.fgDefense || 0)} &nbsp;&nbsp;
+            FIFAs: ${overallRecord.fifas} &nbsp;&nbsp;
+            Self Sinks: ${overallRecord.selfSinks}
+          </div>
+          <div class="section-title">All games Sorted by Win Pct</div>
+          ${statReportTable(players.map((player, index) => statReportPlayerRow(index + 1, player.name, player.overall)), statReportTotalsRow(overallRecord))}
+          <div class="section-title">All games Sorted by Total Sinks</div>
+          ${statReportTable([...players].sort((a, b) => b.overall.sinks - a.overall.sinks || b.overall.wins - a.overall.wins).map((player, index) => statReportPlayerRow(index + 1, player.name, player.overall)), statReportTotalsRow(overallRecord))}
+          ${
+            league
+              ? `<div class="section-title">${escapeHtml(league.name)} League Statistics</div>
+                 ${statReportTable(leagueStats.map((player, index) => statReportPlayerRow(index + 1, player.name, player)), statReportTotalsRow(statReportRecord(leagueStats)))}`
+              : ""
+          }
+        </main>
+      </body>
+    </html>
+  `;
+}
+
+function statReportTable(rows, totalsRow = "") {
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Player</th><th>GP</th><th>W-L</th><th>WIN%</th><th>PTS</th><th>TH</th><th>SNK</th><th>TNK</th><th>OFF</th><th>DEF</th><th>FIFA</th><th>SS</th><th>PPG</th>
+        </tr>
+      </thead>
+      <tbody>${rows.length ? `${rows.join("")}${totalsRow}` : '<tr><td colspan="14">No stats yet.</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+function statReportPlayerRow(index, name, stats) {
+  const pointsPerGame = stats.games ? ((stats.points || 0) / stats.games).toFixed(1) : "0.0";
+  return `
+    <tr>
+      <td>${index}</td>
+      <td>${escapeHtml(name)}</td>
+      <td>${stats.games || 0}</td>
+      <td>${stats.wins}-${stats.losses}</td>
+      <td>${formatPercent(winPercent(stats))}</td>
+      <td>${stats.points || 0}</td>
+      <td>${stats.tableHits || 0}</td>
+      <td>${stats.sinks || 0}</td>
+      <td>${stats.tinks || 0}</td>
+      <td>${stats.fgOffense || 0}</td>
+      <td>${stats.fgDefense || 0}</td>
+      <td>${stats.fifas || 0}</td>
+      <td>${stats.selfSinks || 0}</td>
+      <td>${pointsPerGame}</td>
+    </tr>
+  `;
+}
+
+function statReportTotalsRow(totals) {
+  const pointsPerGame = totals.games ? ((totals.points || 0) / totals.games).toFixed(1) : "0.0";
+  return `
+    <tr class="totals">
+      <td></td><td>Totals</td><td>${totals.games}</td><td>${totals.wins}-${totals.losses}</td><td>${formatPercent(winPercent(totals))}</td>
+      <td>${totals.points}</td><td>${totals.tableHits}</td><td>${totals.sinks}</td><td>${totals.tinks}</td>
+      <td>${totals.fgOffense}</td><td>${totals.fgDefense}</td><td>${totals.fifas}</td><td>${totals.selfSinks}</td><td>${pointsPerGame}</td>
+    </tr>
+  `;
+}
+
+function statReportRecord(buckets) {
+  return buckets.reduce(
+    (total, bucket) => {
+      total.games += bucket.games || 0;
+      total.wins += bucket.wins || 0;
+      total.losses += bucket.losses || 0;
+      allStatFields.forEach(([key]) => {
+        total[key] += bucket[key] || 0;
+      });
+      return total;
+    },
+    { ...emptyBucket() },
+  );
+}
+
+function statReportGameRecord() {
+  const tournament = state.tournaments.flatMap((item) =>
+    item.rounds.flatMap((round) => round.matches.map((match) => match.game).filter(Boolean)),
+  ).length;
+  return {
+    games: state.regularGames.length + state.bigGames.length + tournament,
+    regular: state.regularGames.length,
+    big: state.bigGames.length,
+    tournament,
+  };
 }
 
 function formatDate(value) {
