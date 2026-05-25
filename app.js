@@ -112,6 +112,7 @@ const els = {
   backToLeaguesFromNotificationsBtn: document.querySelector("#backToLeaguesFromNotificationsBtn"),
   notificationsBadge: document.querySelector("#notificationsBadge"),
   notificationList: document.querySelector("#notificationList"),
+  notificationToastWrap: document.querySelector("#notificationToastWrap"),
   enablePushBtn: document.querySelector("#enablePushBtn"),
   markNotificationsReadBtn: document.querySelector("#markNotificationsReadBtn"),
   showFriendsBtn: document.querySelector("#showFriendsBtn"),
@@ -196,11 +197,18 @@ window.addEventListener("load", () => {
   }, 1150);
 });
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "sinkd-notification-target") openNotificationTarget(event.data.target);
+  });
+}
+
 buildRegularPlayerCards();
 buildBigGamePlayerCards();
 buildLeagueGamePlayerCards();
 bindEvents();
 setupAuth();
+registerServiceWorker();
 render();
 
 function loadState() {
@@ -337,6 +345,14 @@ function setAuthView(user) {
     clearNotificationCloudState();
   }
   render();
+  if (isSignedIn) consumeNotificationHashTarget();
+}
+
+function consumeNotificationHashTarget() {
+  const target = cleanText(window.location.hash.replace("#", ""));
+  if (!target) return;
+  window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+  openNotificationTarget(target);
 }
 
 function showPasswordRecoveryForm(user) {
@@ -679,10 +695,12 @@ function bindEvents() {
     const friendDeny = event.target.closest("[data-friend-deny]");
     const accept = event.target.closest("[data-league-invite-accept]");
     const deny = event.target.closest("[data-league-invite-deny]");
+    const notificationTarget = event.target.closest("[data-notification-target]");
     if (friendAccept) await updateFriendRequestStatus(friendAccept.dataset.friendAccept, "accepted");
     if (friendDeny) await updateFriendRequestStatus(friendDeny.dataset.friendDeny, "denied");
     if (accept) await acceptLeagueInvite(accept.dataset.leagueInviteAccept);
     if (deny && confirm("Deny this league invite?")) await denyLeagueInvite(deny.dataset.leagueInviteDeny);
+    if (notificationTarget) openNotificationTarget(notificationTarget.dataset.notificationTarget);
   });
 
   els.friendsList.addEventListener("click", async (event) => {
@@ -1998,13 +2016,22 @@ function clearNotificationCloudState() {
   renderNotifications();
 }
 
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    await navigator.serviceWorker.register("sw.js");
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
 async function enablePushNotifications() {
   if (!("Notification" in window)) {
     alert("Push notifications are not available in this browser.");
     return;
   }
-  if (localStorage.getItem("sinkdPushEnabled") === "false") {
-    localStorage.setItem("sinkdPushEnabled", "true");
+  if (pushNotificationsEnabled()) {
+    localStorage.setItem("sinkdPushEnabled", "false");
     updatePushButton();
     return;
   }
@@ -2015,7 +2042,7 @@ async function enablePushNotifications() {
 }
 
 function pushNotificationsEnabled() {
-  return localStorage.getItem("sinkdPushEnabled") !== "false";
+  return localStorage.getItem("sinkdPushEnabled") !== "false" && (!("Notification" in window) || Notification.permission !== "denied");
 }
 
 function updatePushButton() {
@@ -2047,15 +2074,65 @@ function closePrivacy() {
   document.body.classList.remove("modal-open");
 }
 
-function showBrowserNotification(notification) {
+async function showBrowserNotification(notification) {
+  if (document.visibilityState === "visible") {
+    showNotificationToast(notification);
+    return;
+  }
   if (!pushNotificationsEnabled()) return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  if (document.visibilityState === "visible") return;
-  new Notification(notification.title || "Sinkd", {
+  const payload = {
     body: notification.message || "New notification",
-    icon: "assets/app-icon.png",
+    icon: notification.image_url || "assets/app-icon.png",
+    badge: "assets/app-icon.png",
     tag: notification.id,
+    data: { linkTarget: notification.link_target || "notifications" },
+  };
+  if ("serviceWorker" in navigator) {
+    const registration = await navigator.serviceWorker.ready.catch(() => null);
+    if (registration) {
+      registration.showNotification(notification.title || "Sinkd", payload);
+      return;
+    }
+  }
+  new Notification(notification.title || "Sinkd", payload);
+}
+
+function showNotificationToast(notification) {
+  if (!els.notificationToastWrap) return;
+  const toast = document.createElement("button");
+  toast.className = `notification-toast notification-toast-${notification.type || "general"}`;
+  toast.type = "button";
+  toast.dataset.notificationTarget = notification.link_target || "notifications";
+  const image = cleanText(notification.image_url);
+  toast.innerHTML = `
+    ${image ? `<img src="${escapeHtml(image)}" alt="" />` : '<span class="notification-toast-icon">S</span>'}
+    <span><strong>${escapeHtml(notification.title || "Sinkd")}</strong><small>${escapeHtml(notification.message || "New notification")}</small></span>
+  `;
+  toast.addEventListener("click", () => {
+    toast.remove();
+    openNotificationTarget(toast.dataset.notificationTarget);
   });
+  els.notificationToastWrap.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 6500);
+}
+
+function openNotificationTarget(target = "") {
+  const normalized = cleanText(target) || "notifications";
+  if (normalized === "friends") {
+    switchView("friends");
+    renderFriends();
+    return;
+  }
+  if (normalized === "leagues") {
+    switchView("leagues");
+    renderLeagues();
+    return;
+  }
+  if (normalized === "notifications") {
+    switchView("notifications");
+    renderNotifications();
+  }
 }
 
 async function createNotification({ recipientId = null, recipientEmail = "", leagueId = null, type, title, message, linkTarget = "", imageUrl = "" }) {
@@ -3115,7 +3192,7 @@ function notificationRow(notification) {
   const league = leagueCache.find((item) => item.id === notification.league_id);
   const image = cleanText(notification.image_url);
   return `
-    <article class="notification-row ${notification.read_at ? "" : "unread"} ${image ? "has-image" : ""}">
+    <article class="notification-row ${notification.read_at ? "" : "unread"} ${image ? "has-image" : ""}" data-notification-target="${escapeHtml(notification.link_target || "notifications")}">
       ${image ? `<img class="notification-badge-image" src="${escapeHtml(image)}" alt="" />` : ""}
       <div>
         <strong>${escapeHtml(notification.title)}</strong>
@@ -4179,6 +4256,7 @@ async function notifyLeagueRankingChanges(beforeLeaders, afterLeaders) {
 }
 
 function renderSettings() {
+  updatePushButton();
   const players = collectLocalPlayerNames();
   els.settingsPlayersList.innerHTML = players.length
     ? players
