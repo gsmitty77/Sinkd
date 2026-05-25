@@ -55,6 +55,7 @@ const achievementTiers = ["Copper", "Silver", "Gold", "Diamond"];
 const playerRosterKey = "beerDiePlayers";
 const supabaseUrl = "https://egkdplyqrkoqgysgossd.supabase.co";
 const supabaseKey = "sb_publishable_0tPe5tBwnSAsBf_8OgB68g_362B5XPV";
+const vapidPublicKey = "BKu6165rw3XPcgaASzQ2lfauLSALUx9NP6I5Q718K45iCkDLoix74gylYXYr_saA8NwzKbSOZS0NrsCZb_YyBzc";
 const authClient = window.supabase?.createClient(supabaseUrl, supabaseKey);
 const authDisabledForPreview = false;
 let currentUser = null;
@@ -335,6 +336,7 @@ function setAuthView(user) {
     loadLeagueData();
     loadFriendData();
     loadNotificationData();
+    ensureSavedPushSubscription();
     syncMyLeagueProfile();
     subscribeToLeagueChanges();
     subscribeToFriendChanges();
@@ -2030,13 +2032,23 @@ async function enablePushNotifications() {
     alert("Push notifications are not available in this browser.");
     return;
   }
-  if (pushNotificationsEnabled()) {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    alert("Push notifications are not available in this browser. On iPhone, add Sinkd to your Home Screen first.");
+    return;
+  }
+  if (!vapidPublicKey) {
+    alert("Push notifications need VAPID keys added before closed-app alerts can work.");
+    return;
+  }
+  if (Notification.permission === "granted" && pushNotificationsEnabled()) {
     localStorage.setItem("sinkdPushEnabled", "false");
+    await removePushSubscription();
     updatePushButton();
     return;
   }
   const permission = await Notification.requestPermission();
   localStorage.setItem("sinkdPushEnabled", permission === "granted" ? "true" : "false");
+  if (permission === "granted") await savePushSubscription();
   updatePushButton();
   if (permission !== "granted") alert("Notifications were not enabled.");
 }
@@ -2047,7 +2059,59 @@ function pushNotificationsEnabled() {
 
 function updatePushButton() {
   if (!els.enablePushBtn) return;
-  els.enablePushBtn.textContent = pushNotificationsEnabled() ? "Notifications On" : "Notifications Off";
+  const on = pushNotificationsEnabled() && (!("Notification" in window) || Notification.permission === "granted");
+  els.enablePushBtn.textContent = on ? "Notifications On" : "Notifications Off";
+}
+
+async function ensureSavedPushSubscription() {
+  if (!currentUser || !pushNotificationsEnabled()) return;
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if (!vapidPublicKey) return;
+  await savePushSubscription();
+}
+
+async function savePushSubscription() {
+  if (!authClient || !currentUser) return;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  const registration = await navigator.serviceWorker.ready.catch(() => null);
+  if (!registration) return;
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+    });
+  }
+  const subscriptionJson = subscription.toJSON();
+  const { error } = await authClient.from("push_subscriptions").upsert(
+    {
+      user_id: currentUser.id,
+      email: currentUser.email || "",
+      endpoint: subscription.endpoint,
+      subscription: subscriptionJson,
+      user_agent: navigator.userAgent,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "endpoint" },
+  );
+  if (error) console.warn(error);
+}
+
+async function removePushSubscription() {
+  if (!authClient || !currentUser || !("serviceWorker" in navigator)) return;
+  const registration = await navigator.serviceWorker.ready.catch(() => null);
+  const subscription = await registration?.pushManager.getSubscription();
+  if (!subscription) return;
+  await subscription.unsubscribe().catch(() => false);
+  const { error } = await authClient.from("push_subscriptions").delete().eq("endpoint", subscription.endpoint).eq("user_id", currentUser.id);
+  if (error) console.warn(error);
+}
+
+function urlBase64ToUint8Array(value) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
 }
 
 function openRules() {
@@ -2137,7 +2201,7 @@ function openNotificationTarget(target = "") {
 
 async function createNotification({ recipientId = null, recipientEmail = "", leagueId = null, type, title, message, linkTarget = "", imageUrl = "" }) {
   if (!authClient || !currentUser || (!recipientId && !recipientEmail)) return;
-  const { error } = await authClient.from("notifications").insert({
+  const { data, error } = await authClient.from("notifications").insert({
     recipient_id: recipientId,
     recipient_email: cleanText(recipientEmail).toLowerCase(),
     league_id: leagueId,
@@ -2146,6 +2210,15 @@ async function createNotification({ recipientId = null, recipientEmail = "", lea
     message,
     link_target: linkTarget,
     image_url: imageUrl,
+  }).select("*").single();
+  if (error) console.warn(error);
+  if (!error && data) await triggerPushNotification(data);
+}
+
+async function triggerPushNotification(notification) {
+  if (!authClient || !notification?.id) return;
+  const { error } = await authClient.functions.invoke("send-push", {
+    body: { notificationId: notification.id },
   });
   if (error) console.warn(error);
 }

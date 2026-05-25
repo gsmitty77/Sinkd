@@ -97,12 +97,24 @@ create table if not exists public.notifications (
 
 alter table public.notifications add column if not exists image_url text default '';
 
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  email text default '',
+  endpoint text not null unique,
+  subscription jsonb not null,
+  user_agent text default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.leagues enable row level security;
 alter table public.league_members enable row level security;
 alter table public.league_games enable row level security;
 alter table public.league_tournaments enable row level security;
 alter table public.friend_requests enable row level security;
 alter table public.notifications enable row level security;
+alter table public.push_subscriptions enable row level security;
 
 create or replace function public.is_league_member(target_league_id uuid)
 returns boolean
@@ -494,6 +506,35 @@ with check (
   or lower(recipient_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 
+drop policy if exists "users can view their push subscriptions" on public.push_subscriptions;
+create policy "users can view their push subscriptions"
+on public.push_subscriptions
+for select
+to authenticated
+using (user_id = auth.uid());
+
+drop policy if exists "users can save their push subscriptions" on public.push_subscriptions;
+create policy "users can save their push subscriptions"
+on public.push_subscriptions
+for insert
+to authenticated
+with check (user_id = auth.uid());
+
+drop policy if exists "users can update their push subscriptions" on public.push_subscriptions;
+create policy "users can update their push subscriptions"
+on public.push_subscriptions
+for update
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+drop policy if exists "users can delete their push subscriptions" on public.push_subscriptions;
+create policy "users can delete their push subscriptions"
+on public.push_subscriptions
+for delete
+to authenticated
+using (user_id = auth.uid());
+
 do $$
 begin
   alter publication supabase_realtime add table public.leagues;
@@ -527,5 +568,11 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.notifications;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.push_subscriptions;
 exception when duplicate_object then null;
 end $$;
