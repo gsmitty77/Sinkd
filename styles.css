@@ -814,11 +814,32 @@ legend {
   gap: 10px;
 }
 
+#settingsView {
+  display: none;
+}
+
+#settingsView.active {
+  display: grid;
+  gap: 14px;
+}
+
+#settingsView .section-head {
+  margin-bottom: 0;
+}
+
+#settingsView .panel {
+  margin-top: 0;
+}
+
 .settings-actions .small-button {
   width: 100%;
+  height: 38px;
+  min-height: 38px;
   min-width: 0;
   padding: 0 10px;
   font-size: 0.76rem;
+  margin-top: 0;
+  line-height: 1;
 }
 
 .export-button {
