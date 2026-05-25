@@ -4652,15 +4652,7 @@ function playerRow(player) {
 }
 
 function exportData() {
-  const report = window.open("", "_blank");
-  if (!report) {
-    alert("Allow popups to export the stat report.");
-    return;
-  }
-  report.document.write(statReportHtml());
-  report.document.close();
-  report.focus();
-  report.print();
+  openStatReport(statReportHtml(), "stat report");
 }
 
 function exportLeagueStats() {
@@ -4668,15 +4660,18 @@ function exportLeagueStats() {
     alert("Open a league first.");
     return;
   }
+  openStatReport(statReportHtml({ leagueOnly: true }), "league stat report");
+}
+
+function openStatReport(html, label) {
   const report = window.open("", "_blank");
   if (!report) {
-    alert("Allow popups to export the league stat report.");
+    alert(`Allow popups to export the ${label}.`);
     return;
   }
-  report.document.write(statReportHtml({ leagueOnly: true }));
+  report.document.write(html);
   report.document.close();
   report.focus();
-  report.print();
 }
 
 function statReportHtml({ leagueOnly = false } = {}) {
@@ -4710,13 +4705,17 @@ function statReportHtml({ leagueOnly = false } = {}) {
           td:first-child,th:first-child{text-align:right}
           td:nth-child(2),th:nth-child(2){text-align:left}
           tbody tr.totals td{border-top:1px solid #000;font-weight:700}
+          .report-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;font-family:Arial,Helvetica,sans-serif}
+          .report-actions button{min-height:34px;padding:0 12px;border:1px solid #002147;border-radius:4px;background:#002147;color:#fff;font-weight:700}
           .soft{color:#111}
           .break{page-break-before:always}
           @media screen{body{padding:18px}.page{max-width:8.2in;margin:auto}}
+          @media print{.report-actions{display:none}}
         </style>
       </head>
       <body>
         <main class="page">
+          <div class="report-actions"><button type="button" onclick="window.print()">Print / Save PDF</button></div>
           <h1>${escapeHtml(title)}</h1>
           <div class="subhead">Overall Statistics (as of ${escapeHtml(statDate)})</div>
           <div class="record">Overall Games: ${gameRecord.games} &nbsp;&nbsp; Regular: ${gameRecord.regular} &nbsp;&nbsp; Big: ${gameRecord.big} &nbsp;&nbsp; Tournament: ${gameRecord.tournament}</div>
