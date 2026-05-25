@@ -115,9 +115,6 @@ const els = {
   notificationsBadge: document.querySelector("#notificationsBadge"),
   notificationList: document.querySelector("#notificationList"),
   notificationToastWrap: document.querySelector("#notificationToastWrap"),
-  notificationPermissionPrompt: document.querySelector("#notificationPermissionPrompt"),
-  enableNotificationPromptBtn: document.querySelector("#enableNotificationPromptBtn"),
-  dismissNotificationPromptBtn: document.querySelector("#dismissNotificationPromptBtn"),
   enablePushBtn: document.querySelector("#enablePushBtn"),
   markNotificationsReadBtn: document.querySelector("#markNotificationsReadBtn"),
   deleteAllNotificationsBtn: document.querySelector("#deleteAllNotificationsBtn"),
@@ -700,15 +697,6 @@ function bindEvents() {
   els.markNotificationsReadBtn.addEventListener("click", () => markNotificationsRead());
   els.deleteAllNotificationsBtn.addEventListener("click", deleteAllNotifications);
   els.enablePushBtn?.addEventListener("click", enablePushNotifications);
-  els.enableNotificationPromptBtn.addEventListener("click", async () => {
-    localStorage.setItem("sinkdNotificationPromptSeen", "true");
-    await enablePushNotifications();
-    renderNotificationPermissionPrompt();
-  });
-  els.dismissNotificationPromptBtn.addEventListener("click", () => {
-    localStorage.setItem("sinkdNotificationPromptSeen", "true");
-    renderNotificationPermissionPrompt();
-  });
   els.openRulesBtn.addEventListener("click", openRules);
   els.closeRulesBtn.addEventListener("click", closeRules);
   els.rulesModal.addEventListener("click", (event) => {
@@ -2123,16 +2111,6 @@ function updatePushButton() {
   els.enablePushBtn.textContent = on ? "Notifications On" : "Notifications Off";
 }
 
-function renderNotificationPermissionPrompt() {
-  if (!els.notificationPermissionPrompt) return;
-  const shouldShow =
-    Boolean(currentUser) &&
-    localStorage.getItem("sinkdNotificationPromptSeen") !== "true" &&
-    (!("Notification" in window) || Notification.permission === "default") &&
-    localStorage.getItem("sinkdPushEnabled") !== "true";
-  els.notificationPermissionPrompt.classList.toggle("hidden", !shouldShow);
-}
-
 async function ensureSavedPushSubscription() {
   if (!currentUser || !pushNotificationsEnabled()) return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
@@ -3089,7 +3067,6 @@ function currentPublicName() {
 
 function render() {
   updateAccountLabel();
-  renderNotificationPermissionPrompt();
   renderTournamentSelect();
   renderRegularGames();
   renderBigGames();

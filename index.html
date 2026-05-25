@@ -66,17 +66,6 @@
         <button class="tab" data-view="settings">Settings</button>
       </nav>
 
-      <section class="notification-permission-card hidden" id="notificationPermissionPrompt">
-        <div>
-          <strong>Turn on notifications?</strong>
-          <span>Get alerts for friend requests, league invites, achievements, and new #1 rankings.</span>
-        </div>
-        <div class="friend-actions">
-          <button class="small-button secondary-button" id="dismissNotificationPromptBtn" type="button">Not Now</button>
-          <button class="small-button primary-button" id="enableNotificationPromptBtn" type="button">Enable</button>
-        </div>
-      </section>
-
       <main>
         <section class="view active" id="regularView">
           <div class="section-head">
@@ -550,11 +539,11 @@
               <p>Manage players saved in this tracker.</p>
             </div>
           </div>
-          <section class="panel settings-rules-panel">
-            <button class="primary-button compact-action-button" id="openRulesBtn" type="button">Rules</button>
-          </section>
-          <section class="panel settings-rules-panel">
-            <button class="small-button secondary-button" id="openPrivacyBtn" type="button">Privacy Policy</button>
+          <section class="panel">
+            <div class="settings-actions">
+              <button class="small-button secondary-button" id="openPrivacyBtn" type="button">Privacy Policy</button>
+              <button class="small-button secondary-button" id="openRulesBtn" type="button">Rules</button>
+            </div>
           </section>
           <section class="panel">
             <h3>Players</h3>
@@ -563,7 +552,7 @@
           <section class="panel">
             <h3>Data</h3>
             <div class="settings-actions">
-              <button class="small-button" id="exportBtn" type="button">Export Stat PDF</button>
+              <button class="small-button secondary-button" id="exportBtn" type="button">Export Stat PDF</button>
               <button class="small-button danger-button" id="resetBtn" type="button">Reset Games</button>
             </div>
           </section>
