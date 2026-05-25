@@ -33,6 +33,8 @@ const leagueGameDetailStatFields = [
   ["selfSinks", "Self Sinks"],
   ["fifas", "FIFAs"],
 ];
+const genericLeagueExampleNames = ["Alex", "Jordan", "Casey", "Taylor", "Morgan", "Riley", "Drew", "Quinn"];
+const genericLeagueTeamNames = ["Gold Team", "Navy Team", "White Team", "Black Team"];
 const scoringPointValues = {
   tableHits: 1,
   sinks: 3,
@@ -47,8 +49,10 @@ const achievementDefinitions = [
   { key: "fgOffense", label: "FG Off", thresholds: [15, 40, 80, 150] },
   { key: "fgDefense", label: "FG Def", thresholds: [10, 25, 50, 90] },
   { key: "fifas", label: "FIFA", thresholds: [25, 75, 150, 300] },
-  { key: "selfSinks", label: "Self Sink", thresholds: [3, 8, 15, 25] },
   { key: "tableHits", label: "Table Hit", thresholds: [25, 100, 200, 500] },
+];
+const secretAchievementDefinitions = [
+  { key: "selfSinks", label: "L Teammate", threshold: 10, tierClass: "diamond" },
 ];
 const achievementTiers = ["Copper", "Silver", "Gold", "Diamond"];
 
@@ -86,6 +90,7 @@ let knownNotificationIds = new Set();
 let notificationsInitialized = false;
 let showingFriendQr = false;
 const state = loadState();
+const DEVICE_ACCOUNT_EMAIL_KEY = "sinkdDeviceAccountEmail";
 
 const els = {
   splashScreen: document.querySelector("#splashScreen"),
@@ -158,6 +163,8 @@ const els = {
   leagueTeamRankings: document.querySelector("#leagueTeamRankings"),
   leagueWinRankings: document.querySelector("#leagueWinRankings"),
   leagueSinkRankings: document.querySelector("#leagueSinkRankings"),
+  leagueLiabilitiesPanel: document.querySelector("#leagueLiabilitiesPanel"),
+  leagueLiabilityRankings: document.querySelector("#leagueLiabilityRankings"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
   leagueSettingsForm: document.querySelector("#leagueSettingsForm"),
@@ -265,7 +272,7 @@ function loadState() {
 
 function saveState() {
   saveCurrentProfileForUser();
-  state.players = mergePlayerNames(state.players);
+  state.players = collectLocalPlayerNames();
   localStorage.setItem(playerRosterKey, JSON.stringify(state.players));
   localStorage.setItem("beerDieTracker", JSON.stringify(state));
 }
@@ -330,6 +337,11 @@ async function finishOAuthRedirect() {
 }
 
 function setAuthView(user) {
+  if (user && !deviceAllowsAccount(user.email)) {
+    authClient?.auth.signOut();
+    user = null;
+    showAuthMessage("This device is already linked to another Sinkd account.");
+  }
   if (currentUser && currentUser.id !== user?.id) {
     saveCurrentProfileForUser(currentUser);
     saveState();
@@ -341,6 +353,7 @@ function setAuthView(user) {
   els.authShell.classList.toggle("hidden", isSignedIn);
   els.appShell.classList.toggle("auth-locked", !isSignedIn);
   els.signOutBtn.hidden = !isSignedIn;
+  if (isSignedIn) rememberDeviceAccount(user);
   updateAccountLabel();
   if (isSignedIn) showAuthMessage("");
   if (isSignedIn && !passwordRecoveryMode) restoreAuthButtons();
@@ -362,6 +375,30 @@ function setAuthView(user) {
   }
   render();
   if (isSignedIn) consumeNotificationHashTarget();
+}
+
+function deviceAccountEmail() {
+  try {
+    return cleanText(localStorage.getItem(DEVICE_ACCOUNT_EMAIL_KEY)).toLowerCase();
+  } catch (error) {
+    return "";
+  }
+}
+
+function rememberDeviceAccount(user) {
+  const email = cleanText(user?.email).toLowerCase();
+  if (!email) return;
+  try {
+    if (!deviceAccountEmail()) localStorage.setItem(DEVICE_ACCOUNT_EMAIL_KEY, email);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function deviceAllowsAccount(email) {
+  const savedEmail = deviceAccountEmail();
+  const nextEmail = cleanText(email).toLowerCase();
+  return !savedEmail || !nextEmail || savedEmail === nextEmail;
 }
 
 function consumeNotificationHashTarget() {
@@ -456,7 +493,6 @@ function hydrateMyProfileFromUser(user) {
     updatedAt: cloudProfile.updatedAt || new Date().toISOString(),
   };
   saveCurrentProfileForUser(user);
-  rememberPlayers([state.myProfile.nickname]);
   saveState();
 }
 
@@ -480,6 +516,10 @@ async function signInWithEmail() {
   const password = els.authPassword.value;
   if (!email || !password) {
     showAuthMessage("Enter your email and password.");
+    return;
+  }
+  if (!deviceAllowsAccount(email)) {
+    showAuthMessage("This device is already linked to another Sinkd account.");
     return;
   }
 
@@ -513,6 +553,10 @@ async function signUpWithEmail() {
   const password = els.authPassword.value;
   if (!email || !password) {
     showAuthMessage("Enter an email and password to create an account.");
+    return;
+  }
+  if (!deviceAllowsAccount(email)) {
+    showAuthMessage("This device is already linked to another Sinkd account.");
     return;
   }
 
@@ -629,7 +673,6 @@ function bindEvents() {
       updatedAt: new Date().toISOString(),
     };
     editingMyProfile = false;
-    rememberPlayers([nickname]);
     saveState();
     saveMyProfileToCloud();
     syncMyLeagueProfile();
@@ -1276,14 +1319,32 @@ function leaguePlayerOptions() {
   `;
 }
 
+function leagueExamplePlayerNames(leagueId = activeLeagueId) {
+  const realNames = leagueMembers(leagueId)
+    .map((member) => cleanText(member.nickname || member.display_name))
+    .filter(Boolean);
+  const names = [...realNames];
+  genericLeagueExampleNames.forEach((name) => {
+    if (names.length < 8 && !names.some((existing) => existing.toLowerCase() === name.toLowerCase())) names.push(name);
+  });
+  return names.slice(0, 8);
+}
+
+function leagueTournamentExampleText(leagueId = activeLeagueId) {
+  const names = leagueExamplePlayerNames(leagueId);
+  return genericLeagueTeamNames
+    .map((teamName, index) => `${teamName}: ${names[index * 2]} / ${names[index * 2 + 1]}`)
+    .join("\n");
+}
+
 function knownPlayers() {
   return collectLocalPlayerNames();
 }
 
 function collectLocalPlayerNames(extraNames = []) {
   const names = [];
-  addNames(names, loadSavedPlayerRoster());
-  addNames(names, state.players);
+  addNames(names, loadSavedPlayerRoster().filter((player) => !isOtherAccountProfileName(player)));
+  addNames(names, state.players.filter((player) => !isOtherAccountProfileName(player)));
   addNames(names, extraNames);
   document.querySelectorAll("[data-player-select]").forEach((select) => {
     if (select.value && select.value !== "__new") names.push(select.value);
@@ -1302,7 +1363,12 @@ function collectLocalPlayerNames(extraNames = []) {
     });
   });
 
-  return mergePlayerNames(names);
+  const gameNames = mergePlayerNames(names);
+  if (!gameNames.some((player) => isMyProfileName(player))) {
+    const nickname = myProfileNickname();
+    if (nickname) gameNames.unshift(nickname);
+  }
+  return mergePlayerNames(gameNames);
 }
 
 function collectAllPlayerNames(extraNames = []) {
@@ -1415,6 +1481,19 @@ function deletePlayer(playerName) {
 function isMyProfileName(playerName) {
   const nickname = myProfileNickname();
   return !!nickname && nickname.toLowerCase() === cleanText(playerName).toLowerCase();
+}
+
+function isOtherAccountProfileName(playerName) {
+  const target = cleanText(playerName).toLowerCase();
+  if (!target || isMyProfileName(target)) return false;
+  const profiles = Object.values(state.accountProfiles || {});
+  if (state.legacyMyProfile) profiles.push(state.legacyMyProfile);
+  return profiles.some((profile) =>
+    [profile?.nickname, profile?.name]
+      .map((name) => cleanText(name).toLowerCase())
+      .filter(Boolean)
+      .includes(target),
+  );
 }
 
 function myProfileNickname() {
@@ -3675,22 +3754,31 @@ function renderLeagueDetails() {
   if (!league) return;
   const members = leagueMembers();
   const member = myLeagueMember();
+  const isMember = Boolean(member);
   const role = member?.role || "";
   const canManage = canManageActiveLeague();
   const canLog = canLogActiveLeagueGames();
   const canInvite = canInviteActiveLeague();
   const isOwner = isActiveLeagueOwner();
+  const guestTabs = ["stats", "rankings"];
+  if (!isMember && !guestTabs.includes(leagueDetailTab)) leagueDetailTab = "stats";
 
   els.leagueDetailTabs.forEach((tab) => {
     const tabName = tab.dataset.leagueDetailTab;
     const managerOnly = false;
     const loggerOnly = false;
     const inviteOnly = tabName === "invite";
+    const guestHidden = !isMember && !guestTabs.includes(tabName);
+    tab.classList.toggle("hidden", guestHidden);
     tab.classList.toggle("active", tabName === leagueDetailTab);
-    tab.disabled = (managerOnly && !canManage) || (loggerOnly && !canLog) || (inviteOnly && !canInvite);
+    tab.disabled = guestHidden || (managerOnly && !canManage) || (loggerOnly && !canLog) || (inviteOnly && !canInvite);
   });
   els.leagueDetailPanels.forEach((panel) => {
-    panel.classList.toggle("active", panel.id === `league${capitalize(leagueDetailTab)}Panel`);
+    const tabName = panel.id.replace(/^league/, "").replace(/Panel$/, "");
+    const normalizedTabName = tabName.charAt(0).toLowerCase() + tabName.slice(1);
+    const guestHidden = !isMember && !guestTabs.includes(normalizedTabName);
+    panel.classList.toggle("hidden", guestHidden);
+    panel.classList.toggle("active", !guestHidden && panel.id === `league${capitalize(leagueDetailTab)}Panel`);
   });
 
   els.leagueDetailHero.innerHTML = `
@@ -3735,6 +3823,8 @@ function renderLeagueTournaments() {
   const tournaments = leagueTournaments();
   const canLog = canLogActiveLeagueGames();
   const canManage = canManageActiveLeague();
+  const teamsTextarea = els.leagueTournamentForm.elements.teams;
+  if (teamsTextarea) teamsTextarea.placeholder = leagueTournamentExampleText();
   els.leagueTournamentForm.classList.toggle("hidden", !canLog);
   els.deleteLeagueTournamentBtn.hidden = !canManage || !tournaments.length;
 
@@ -3917,17 +4007,20 @@ function renderLeagueStatsTable() {
 function renderLeagueRankings() {
   const stats = computeLeagueStats();
   const players = Object.values(stats.players);
-  const teams = Object.values(stats.teams);
-  const byOverall = [...players].sort((a, b) => b.wins - a.wins || b.sinks - a.sinks);
-  const byWinPercent = [...players].filter((player) => player.games).sort((a, b) => winPercent(b) - winPercent(a) || b.wins - a.wins);
-  const bySinks = [...players].sort((a, b) => b.sinks - a.sinks);
-  const byTeams = [...teams].sort((a, b) => b.wins - a.wins || winPercent(b) - winPercent(a));
+  const byOverall = [...players].sort((a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.sinks - a.sinks);
+  const bySinks = [...players].sort((a, b) => b.sinks - a.sinks || b.wins - a.wins);
+  const byPoints = [...players].sort((a, b) => b.points - a.points || b.wins - a.wins);
+  const byFifas = [...players].sort((a, b) => b.fifas - a.fifas || b.points - a.points);
+  const bySelfSinks = [...players].filter((player) => player.selfSinks > 0).sort((a, b) => b.selfSinks - a.selfSinks || a.wins - b.wins);
 
-  els.leagueOverallRankings.innerHTML = rankingCards(byOverall, (player) => `${player.wins}-${player.losses} - ${player.sinks} sinks`);
-  els.leaguePlayerRankings.innerHTML = rankingCards(byOverall, (player) => `${player.games} games - ${formatPercent(winPercent(player))}`);
-  els.leagueTeamRankings.innerHTML = rankingCards(byTeams, (team) => `${team.wins}-${team.losses} - ${team.totalPoints} pts`);
-  els.leagueWinRankings.innerHTML = rankingCards(byWinPercent, (player) => `${formatPercent(winPercent(player))} - ${player.wins}-${player.losses}`);
+  els.leagueOverallRankings.innerHTML = rankingCards(byOverall, (player) => `${player.wins}-${player.losses} record`);
   els.leagueSinkRankings.innerHTML = rankingCards(bySinks, (player) => `${player.sinks} sinks`);
+  els.leaguePlayerRankings.innerHTML = rankingCards(byPoints, (player) => `${player.points} points`);
+  els.leagueWinRankings.innerHTML = rankingCards(byFifas, (player) => `${player.fifas} FIFAs`);
+  els.leagueLiabilitiesPanel.classList.toggle("hidden", !bySelfSinks.length);
+  els.leagueLiabilityRankings.innerHTML = bySelfSinks.length
+    ? rankingCards(bySelfSinks, (player) => `${player.selfSinks} self sinks`)
+    : "";
 }
 
 function renderLeagueSettings() {
@@ -4188,6 +4281,7 @@ function leagueRosterDetailCard(selected) {
     ["Current Streak", streakLabel(stats)],
     ["Table Hits", stats.tableHits],
     ["Sinks", stats.sinks],
+    ["Tourney Record", `${stats.tournamentWins || 0}-${stats.tournamentLosses || 0}`],
     ["Tinks", stats.tinks],
     ["FG Offense", stats.fgOffense],
     ["FG Defense", stats.fgDefense],
@@ -4293,7 +4387,7 @@ function leaguePlayerStatsRow(player) {
 function rankingCards(items, detailFn) {
   return items.length
     ? items
-        .slice(0, 10)
+        .slice(0, 5)
         .map(
           (item, index) => `
             <article class="stat-card">
@@ -4362,10 +4456,9 @@ function renderProfiles() {
         ${profileCupBadge(profile)}
         <div>
           <strong>${escapeHtml(nickname)}</strong>
-          <span>Favorite cup</span>
+          <span>${profile.preferredPartner ? `Preferred partner: ${escapeHtml(profile.preferredPartner)}` : "Preferred partner: -"}</span>
         </div>
       </div>
-      ${profile.preferredPartner ? `<p>Preferred partner: ${escapeHtml(profile.preferredPartner)}</p>` : ""}
       ${profile.notes ? `<p>${escapeHtml(profile.notes)}</p>` : ""}
       <button class="small-button secondary-button" type="button" data-edit-profile>Edit Profile</button>
       <div class="profile-stat-grid">
@@ -4385,22 +4478,26 @@ function renderProfiles() {
 }
 
 function achievementSection(stats, title) {
+  const secretCards = secretAchievementDefinitions.map((definition) => secretAchievementCard(definition, stats)).join("");
   return `
     <section class="achievement-section">
       <h3>${escapeHtml(title)}</h3>
       <div class="league-badge-grid">
         ${achievementDefinitions.map((definition) => achievementProgressCard(definition, stats)).join("")}
+        ${secretCards}
       </div>
     </section>
   `;
 }
 
 function leagueBadgeSection(stats) {
+  const secretCards = secretAchievementDefinitions.map((definition) => secretAchievementCard(definition, stats)).join("");
   return `
     <section class="achievement-section league-badge-section">
       <h3>League Badges</h3>
       <div class="league-badge-grid">
         ${achievementDefinitions.map((definition) => achievementProgressCard(definition, stats)).join("")}
+        ${secretCards}
       </div>
     </section>
   `;
@@ -4428,6 +4525,27 @@ function achievementProgressCard(definition, stats) {
           ${achievementTiers.map((item, index) => `<i class="badge-dot badge-dot-${item.toLowerCase()} ${rank >= index + 1 ? "earned" : ""}"></i>`).join("")}
         </div>
         <b>${escapeHtml(fraction)}</b>
+      </div>
+    </article>
+  `;
+}
+
+function secretAchievementCard(definition, stats) {
+  const value = Number(stats?.[definition.key]) || 0;
+  if (value < definition.threshold) return "";
+  const tierClass = cleanText(definition.tierClass);
+  return `
+    <article class="league-badge-card achievement-${tierClass} secret-badge-card">
+      <div class="league-badge-body">
+        <img class="league-badge-single earned" src="${achievementBadgeSrc(tierClass)}" alt="${escapeHtml(definition.label)}" />
+        <strong>${escapeHtml(definition.label)}</strong>
+        <span>Secret Badge</span>
+      </div>
+      <div class="league-badge-footer">
+        <div class="league-badge-dots secret-badge-dots" aria-hidden="true">
+          <i class="badge-dot badge-dot-diamond earned"></i>
+        </div>
+        <b>${escapeHtml(`${value}/${definition.threshold}`)}</b>
       </div>
     </article>
   `;
@@ -4505,9 +4623,16 @@ function leagueAchievementRanks(stats) {
   return Object.fromEntries(
     Object.entries(stats.players).map(([key, player]) => [
       key,
-      Object.fromEntries(achievementDefinitions.map((definition) => [definition.key, achievementRankValue(player[definition.key] || 0, definition.thresholds)])),
+      {
+        ...Object.fromEntries(achievementDefinitions.map((definition) => [definition.key, achievementRankValue(player[definition.key] || 0, definition.thresholds)])),
+        ...Object.fromEntries(secretAchievementDefinitions.map((definition) => [definition.label, secretAchievementUnlocked(player, definition) ? 1 : 0])),
+      },
     ]),
   );
+}
+
+function secretAchievementUnlocked(player, definition) {
+  return (Number(player?.[definition.key]) || 0) >= definition.threshold;
 }
 
 async function notifyLeagueAchievementUnlocks(beforeRanks, afterStats) {
@@ -4531,6 +4656,21 @@ async function notifyLeagueAchievementUnlocks(beforeRanks, afterStats) {
         message: `${member.nickname || member.display_name} unlocked ${achievementRankLabel(afterRank)} ${definition.label} in ${league.name}.`,
         linkTarget: "leagues",
         imageUrl: achievementBadgeSrc(achievementRankClass(afterRank)),
+      });
+    });
+    secretAchievementDefinitions.forEach((definition) => {
+      const beforeUnlocked = beforeRanks[playerKey]?.[definition.label] || 0;
+      const afterUnlocked = secretAchievementUnlocked(player, definition) ? 1 : 0;
+      if (beforeUnlocked || !afterUnlocked) return;
+      messages.push({
+        recipientId: member.user_id || null,
+        recipientEmail: member.email || "",
+        leagueId: league.id,
+        type: "achievement",
+        title: definition.label,
+        message: `${member.nickname || member.display_name} unlocked the secret ${definition.label} badge in ${league.name}.`,
+        linkTarget: "leagues",
+        imageUrl: achievementBadgeSrc(definition.tierClass),
       });
     });
   });

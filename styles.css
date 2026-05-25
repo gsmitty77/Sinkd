@@ -772,6 +772,10 @@ legend {
   color: var(--accent-strong);
 }
 
+.back-nav-button {
+  margin: -4px 0 12px;
+}
+
 .form-actions {
   display: grid;
   gap: 10px;
@@ -860,6 +864,12 @@ legend {
 }
 
 .export-button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #002147;
+}
+
+#leagueExportBtn {
   background: var(--accent);
   border-color: var(--accent);
   color: #002147;
@@ -1173,8 +1183,11 @@ legend {
 }
 
 .league-badge-dots {
-  display: flex;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  justify-items: center;
+  width: min(92px, 100%);
+  margin-left: auto;
 }
 
 .badge-dot {
@@ -1198,6 +1211,11 @@ legend {
 
 .badge-dot.earned.badge-dot-diamond {
   background: #7de3ff;
+}
+
+.secret-badge-dots {
+  grid-template-columns: 1fr;
+  width: 24px;
 }
 
 .league-create-card,
@@ -1826,6 +1844,10 @@ legend {
   grid-template-columns: 1fr;
   gap: 18px;
   align-items: start;
+}
+
+#leagueLiabilitiesPanel {
+  order: 99;
 }
 
 .list {

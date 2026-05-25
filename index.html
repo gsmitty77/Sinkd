@@ -31,7 +31,7 @@
             <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Email" required />
           </label>
           <label>
-            <input id="authPassword" name="password" type="password" autocomplete="current-password" required />
+            <input id="authPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required />
           </label>
           <button class="text-button auth-link-button" id="signUpBtn" type="button">Create account</button>
           <div class="auth-actions">
@@ -74,7 +74,7 @@
               <h2>Regular Games</h2>
               <p>Log head-to-head games and keep overall player totals current.</p>
             </div>
-            <button class="small-button secondary-button" id="openBigGameBtn" type="button">Big Game?</button>
+            <button class="small-button export-button" id="openBigGameBtn" type="button">Big Game?</button>
           </div>
 
           <form class="panel stat-form" id="regularGameForm">
@@ -93,7 +93,7 @@
             <input type="hidden" name="selfSinkPlayer" value="" />
             <input type="hidden" name="selfSinkTeam" value="" />
             <div class="form-actions">
-              <button class="small-button secondary-button" id="quickRematchBtn" type="button">Quick Rematch</button>
+              <button class="small-button export-button" id="quickRematchBtn" type="button">Quick Rematch</button>
             </div>
             <button class="primary-button" type="submit">Log Regular Game</button>
           </form>
@@ -111,13 +111,13 @@
         </section>
 
         <section class="view" id="bigView">
-          <button class="text-button" id="backToRegularBtn" type="button">Back to Regular Games</button>
           <div class="section-head">
             <div>
               <h2>Big Games</h2>
               <p>Track long-format games with expanded individual player stats.</p>
             </div>
           </div>
+          <button class="small-button secondary-button back-nav-button" id="backToRegularBtn" type="button">Back to Regular Games</button>
 
           <form class="panel stat-form" id="bigGameForm">
             <div class="score-grid">
@@ -242,13 +242,13 @@
         </section>
 
         <section class="view" id="notificationsView">
-          <button class="text-button" id="backToLeaguesFromNotificationsBtn" type="button">Back to Leagues</button>
           <div class="section-head">
             <div>
               <h2>Notifications</h2>
               <p>Achievements, invites, friend requests, and league ranking updates.</p>
             </div>
           </div>
+          <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromNotificationsBtn" type="button">Back to Leagues</button>
           <section class="panel">
             <div class="notification-head">
               <h3>Inbox</h3>
@@ -262,13 +262,13 @@
         </section>
 
         <section class="view" id="friendsView">
-          <button class="text-button" id="backToLeaguesFromFriendsBtn" type="button">Back to Leagues</button>
           <div class="section-head">
             <div>
               <h2>Friends</h2>
               <p>Invite players, answer requests, and see your friends.</p>
             </div>
           </div>
+          <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromFriendsBtn" type="button">Back to Leagues</button>
 
           <section class="panel">
             <h3>Invite Friend</h3>
@@ -290,8 +290,8 @@
         </section>
 
         <section class="view" id="leagueDetailsView">
-          <button class="text-button" id="backToLeaguesBtn" type="button">Back to Leagues</button>
           <section class="panel league-detail-hero" id="leagueDetailHero"></section>
+          <button class="small-button secondary-button back-nav-button" id="backToLeaguesBtn" type="button">Back to Leagues</button>
 
           <nav class="tabs sub-tabs" aria-label="League sections">
             <button class="tab active" data-league-detail-tab="games" type="button">League Games</button>
@@ -306,7 +306,7 @@
           <section class="league-detail-panel active" id="leagueGamesPanel">
             <form class="panel stat-form" id="leagueGameForm">
               <h3 id="leagueGameFormTitle">Log League Game</h3>
-              <button class="small-button secondary-button" id="leagueQuickRematchBtn" type="button">Quick Rematch</button>
+              <button class="small-button export-button" id="leagueQuickRematchBtn" type="button">Quick Rematch</button>
               <div class="score-grid">
                 <label>Team 1 Score <input name="teamAScore" type="number" min="0" value="0" required /></label>
                 <label>Team 2 Score <input name="teamBScore" type="number" min="0" value="0" required /></label>
@@ -333,7 +333,7 @@
                 <label>Tournament Name <input name="name" maxlength="32" placeholder="Friday bracket" required /></label>
                 <label>
                   Teams
-                  <textarea name="teams" rows="6" placeholder="Smitty / Jack&#10;Cole / Ryan&#10;Evan / Tyler&#10;Nick / Mike" required></textarea>
+                  <textarea name="teams" rows="6" placeholder="Gold Team: Alex / Jordan&#10;Navy Team: Casey / Taylor&#10;White Team: Morgan / Riley&#10;Black Team: Drew / Quinn" required></textarea>
                 </label>
                 <button class="primary-button compact-action-button" type="submit">Create Bracket</button>
               </form>
@@ -373,11 +373,11 @@
 
           <section class="league-detail-panel" id="leagueRankingsPanel">
             <div class="history-grid">
-              <section class="panel"><h3>Overall Leaderboard</h3><div class="leaderboard" id="leagueOverallRankings"></div></section>
-              <section class="panel"><h3>Player Rankings</h3><div class="leaderboard" id="leaguePlayerRankings"></div></section>
-              <section class="panel"><h3>Team Rankings</h3><div class="leaderboard" id="leagueTeamRankings"></div></section>
-              <section class="panel"><h3>Win Percentage</h3><div class="leaderboard" id="leagueWinRankings"></div></section>
-              <section class="panel"><h3>Total Sinks</h3><div class="leaderboard" id="leagueSinkRankings"></div></section>
+              <section class="panel"><h3>Top 5 Players</h3><div class="leaderboard" id="leagueOverallRankings"></div></section>
+              <section class="panel"><h3>Sinks</h3><div class="leaderboard" id="leagueSinkRankings"></div></section>
+              <section class="panel"><h3>Total Points</h3><div class="leaderboard" id="leaguePlayerRankings"></div></section>
+              <section class="panel"><h3>Soccer Players</h3><div class="leaderboard" id="leagueWinRankings"></div></section>
+              <section class="panel hidden" id="leagueLiabilitiesPanel"><h3>Liabilities</h3><div class="leaderboard" id="leagueLiabilityRankings"></div></section>
             </div>
           </section>
 
@@ -385,7 +385,7 @@
             <section class="panel">
               <div class="section-head compact-section-head">
                 <h3>League Stats</h3>
-                <button class="small-button secondary-button" id="leagueExportBtn" type="button">Export PDF</button>
+                <button class="small-button export-button" id="leagueExportBtn" type="button">Export PDF</button>
               </div>
               <div class="table-scroll league-stats-scroll">
                 <table>
@@ -465,7 +465,13 @@
         </section>
 
         <section class="view" id="leagueGameDetailView">
-          <button class="text-button" id="backToLeagueGamesBtn" type="button">Back to League Games</button>
+          <div class="section-head">
+            <div>
+              <h2>League Game</h2>
+              <p>Review the full match log.</p>
+            </div>
+          </div>
+          <button class="small-button secondary-button back-nav-button" id="backToLeagueGamesBtn" type="button">Back to League Games</button>
           <section class="panel" id="leagueGameDetail"></section>
         </section>
 
@@ -518,7 +524,6 @@
               <input name="preferredPartner" placeholder="Optional" />
             </label>
             <label>
-              Cup Color
               <input name="cupColor" type="color" value="#d71920" />
             </label>
             <label>
