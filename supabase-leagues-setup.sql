@@ -111,6 +111,16 @@ create table if not exists public.notifications (
 
 alter table public.notifications add column if not exists image_url text default '';
 
+create table if not exists public.league_chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null default auth.uid(),
+  author_name text default '',
+  type text not null default 'user' check (type in ('user', 'system')),
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -140,6 +150,7 @@ alter table public.leagues enable row level security;
 alter table public.league_members enable row level security;
 alter table public.league_games enable row level security;
 alter table public.league_tournaments enable row level security;
+alter table public.league_chat_messages enable row level security;
 alter table public.friend_requests enable row level security;
 alter table public.notifications enable row level security;
 alter table public.push_subscriptions enable row level security;
@@ -465,6 +476,20 @@ for delete
 to authenticated
 using (public.can_manage_league(league_id));
 
+drop policy if exists "members can view league chat" on public.league_chat_messages;
+create policy "members can view league chat"
+on public.league_chat_messages
+for select
+to authenticated
+using (public.is_league_member(league_id));
+
+drop policy if exists "members can write league chat" on public.league_chat_messages;
+create policy "members can write league chat"
+on public.league_chat_messages
+for insert
+to authenticated
+with check (public.is_league_member(league_id) and user_id = auth.uid());
+
 drop policy if exists "users can view their friend requests" on public.friend_requests;
 create policy "users can view their friend requests"
 on public.friend_requests
@@ -613,6 +638,12 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.league_tournaments;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.league_chat_messages;
 exception when duplicate_object then null;
 end $$;
 

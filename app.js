@@ -81,6 +81,7 @@ let leagueCache = [];
 let leagueMemberCache = [];
 let leagueGameCache = [];
 let leagueTournamentCache = [];
+let leagueChatCache = [];
 let leagueRealtimeChannel = null;
 let friendRequestCache = [];
 let friendRealtimeChannel = null;
@@ -167,6 +168,8 @@ const els = {
   leagueSinkRankings: document.querySelector("#leagueSinkRankings"),
   leagueLiabilitiesPanel: document.querySelector("#leagueLiabilitiesPanel"),
   leagueLiabilityRankings: document.querySelector("#leagueLiabilityRankings"),
+  leagueChatList: document.querySelector("#leagueChatList"),
+  leagueChatForm: document.querySelector("#leagueChatForm"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
   openLeagueRulesBtn: document.querySelector("#openLeagueRulesBtn"),
@@ -919,6 +922,15 @@ function bindEvents() {
       .map((member) => ({ ...member, stats: stats.players[member.display_name.toLowerCase()] || emptyBucket() }))
       .sort((a, b) => b.stats.wins - a.stats.wins || winPercent(b.stats) - winPercent(a.stats) || b.stats.sinks - a.stats.sinks);
     renderLeagueCompare(players);
+  });
+
+  els.leagueChatForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = cleanText(new FormData(els.leagueChatForm).get("message"));
+    if (!message) return;
+    await createLeagueChatMessage(activeLeagueId, message, "user");
+    els.leagueChatForm.reset();
+    await loadLeagueData();
   });
 
   els.leagueSettingsForm.addEventListener("submit", async (event) => {
@@ -1947,6 +1959,12 @@ function leagueTournaments(leagueId = activeLeagueId) {
     .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
 }
 
+function leagueChatMessages(leagueId = activeLeagueId) {
+  return leagueChatCache
+    .filter((message) => message.league_id === leagueId)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+}
+
 function activeLeagueTournament() {
   const tournaments = leagueTournaments();
   if (!tournaments.length) return null;
@@ -2038,21 +2056,24 @@ async function loadLeagueData() {
     leagueMemberCache = [];
     leagueGameCache = [];
     leagueTournamentCache = [];
+    leagueChatCache = [];
     render();
     return;
   }
 
-  const [{ data: memberLeagues }, { data: members }, { data: games }, { data: leagueTournaments }] = await Promise.all([
+  const [{ data: memberLeagues }, { data: members }, { data: games }, { data: leagueTournaments }, { data: chatMessages }] = await Promise.all([
     leagueIds.length ? authClient.from("leagues").select("*").in("id", leagueIds) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_members").select("*").in("league_id", memberLeagueIds) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_games").select("*").in("league_id", memberLeagueIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_tournaments").select("*").in("league_id", memberLeagueIds).order("updated_at", { ascending: false }) : Promise.resolve({ data: [] }),
+    memberLeagueIds.length ? authClient.from("league_chat_messages").select("*").in("league_id", memberLeagueIds).order("created_at", { ascending: false }).limit(250) : Promise.resolve({ data: [] }),
   ]);
 
   leagueCache = [...new Map([...(openLeagues || []), ...(memberLeagues || [])].map((league) => [league.id, league])).values()];
   leagueMemberCache = [...new Map([...(members || []), ...(memberships || [])].map((member) => [member.id, member])).values()];
   leagueGameCache = (games || []).map(normalizeLeagueGame);
   leagueTournamentCache = (leagueTournaments || []).map(normalizeLeagueTournament);
+  leagueChatCache = chatMessages || [];
   if (activeLeagueId && !leagueCache.some((league) => league.id === activeLeagueId)) activeLeagueId = "";
   if (activeLeagueTournamentId && !leagueTournamentCache.some((tournament) => tournament.id === activeLeagueTournamentId)) activeLeagueTournamentId = "";
   buildLeagueGamePlayerCards();
@@ -2067,6 +2088,7 @@ function subscribeToLeagueChanges() {
     .on("postgres_changes", { event: "*", schema: "public", table: "league_members" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_games" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_tournaments" }, loadLeagueData)
+    .on("postgres_changes", { event: "*", schema: "public", table: "league_chat_messages" }, loadLeagueData)
     .subscribe();
 }
 
@@ -2080,6 +2102,7 @@ function clearLeagueCloudState() {
   leagueMemberCache = [];
   leagueGameCache = [];
   leagueTournamentCache = [];
+  leagueChatCache = [];
   activeLeagueTournamentId = "";
 }
 
@@ -2503,6 +2526,20 @@ async function createLeagueNotifications(leagueId, notification, options = {}) {
   );
 }
 
+async function createLeagueChatMessage(leagueId, message, type = "system") {
+  if (!authClient || !currentUser || !leagueId || !cleanText(message)) return;
+  const member = myLeagueMember(leagueId);
+  const authorName = cleanText(member?.nickname || member?.display_name || myProfileNickname() || "A player");
+  const { error } = await authClient.from("league_chat_messages").insert({
+    league_id: leagueId,
+    user_id: currentUser.id,
+    author_name: authorName,
+    type,
+    message: cleanText(message),
+  });
+  if (error) console.warn(error);
+}
+
 async function markNotificationsRead(types = null) {
   if (!authClient || !currentUser) return;
   let query = authClient
@@ -2738,13 +2775,7 @@ async function acceptLeagueInvite(memberId) {
     alert(error.message);
     return;
   }
-  const league = leagueCache.find((item) => item.id === invite.league_id);
-  await createLeagueNotifications(invite.league_id, {
-    type: "league_invite",
-    title: "League invite accepted",
-    message: `${nickname || "A player"} joined ${league?.name || "the league"}.`,
-    linkTarget: "leagues",
-  });
+  await createLeagueChatMessage(invite.league_id, `${nickname || "A player"} joined the league.`, "system");
   await loadLeagueData();
   activeLeagueId = invite.league_id;
   switchView("leagues");
@@ -2761,6 +2792,8 @@ async function denyLeagueInvite(memberId) {
 async function leaveCloudLeague() {
   const member = myLeagueMember();
   if (!authClient || !member || member.role === "owner") return;
+  const leagueId = activeLeagueId;
+  await createLeagueChatMessage(leagueId, `${member.nickname || member.display_name || "A player"} left the league.`, "system");
   const { error } = await authClient.from("league_members").delete().eq("id", member.id);
   if (error) {
     alert(error.message);
@@ -3034,6 +3067,8 @@ async function logCloudLeagueGame(form) {
   resetLeagueGameForm();
   await loadLeagueData();
   const afterStats = computeLeagueStats();
+  const winner = game.teams[game.winnerIndex];
+  await createLeagueChatMessage(activeLeagueId, `${winner.name} logged a ${winner.score}-${game.teams[game.winnerIndex === 0 ? 1 : 0].score} league win.`, "system");
   await notifyLeagueAchievementUnlocks(beforeAchievementRanks, afterStats);
   await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
 }
@@ -3117,6 +3152,7 @@ async function logLeagueTournamentMatch(tournamentId, matchId, form) {
   await saveCloudLeagueTournament(tournament);
   await loadLeagueData();
   const afterStats = computeLeagueStats();
+  await createLeagueChatMessage(activeLeagueId, `${match.winner.name} advanced in ${tournament.name}.`, "system");
   await notifyLeagueAchievementUnlocks(beforeAchievementRanks, afterStats);
   await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
 }
@@ -3859,6 +3895,7 @@ function renderLeagueDetails() {
   renderLeagueStats();
   renderLeagueStatsTable();
   renderLeagueRankings();
+  renderLeagueChat();
   renderLeagueSettings();
   renderLeagueMembers();
   renderLeagueInviteTools();
@@ -4083,6 +4120,28 @@ function renderLeagueRankings() {
   els.leagueLiabilityRankings.innerHTML = bySelfSinks.length
     ? rankingCards(bySelfSinks, (player) => `${player.selfSinks} self sinks`)
     : "";
+}
+
+function renderLeagueChat() {
+  const member = myLeagueMember();
+  els.leagueChatForm.classList.toggle("hidden", !member);
+  const messages = leagueChatMessages();
+  els.leagueChatList.innerHTML = messages.length
+    ? messages.map(leagueChatRow).join("")
+    : '<p class="empty">No league chat yet.</p>';
+}
+
+function leagueChatRow(message) {
+  const isSystem = message.type !== "user";
+  return `
+    <article class="league-chat-row ${isSystem ? "system" : ""}">
+      <div>
+        <strong>${escapeHtml(isSystem ? "League Update" : message.author_name || "A player")}</strong>
+        <span>${formatDate(message.created_at)}</span>
+      </div>
+      <p>${escapeHtml(message.message)}</p>
+    </article>
+  `;
 }
 
 function renderLeagueSettings() {
@@ -4805,20 +4864,7 @@ async function notifyLeagueRankingChanges(beforeLeaders, afterLeaders) {
     teams: "Team Rankings",
   };
   const changes = Object.entries(afterLeaders).filter(([key, leader]) => leader && beforeLeaders[key] && leader !== beforeLeaders[key]);
-  await Promise.all(
-    changes.map(([key, leader]) =>
-      createLeagueNotifications(
-        league.id,
-        {
-          type: "ranking",
-          title: `New #1: ${labels[key]}`,
-          message: `${leader} took #1 in ${labels[key]} for ${league.name}.`,
-          linkTarget: "leagues",
-        },
-        { excludeCurrentUser: false },
-      ),
-    ),
-  );
+  await Promise.all(changes.map(([key, leader]) => createLeagueChatMessage(league.id, `${leader} took #1 in ${labels[key]}.`, "system")));
 }
 
 function renderSettings() {

@@ -265,7 +265,7 @@
           <div class="section-head">
             <div>
               <h2>Notifications</h2>
-              <p>Achievements, invites, friend requests, and league ranking updates.</p>
+              <p>Achievements, invites, friend requests, and personal updates.</p>
             </div>
           </div>
           <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromNotificationsBtn" type="button">Back to Leagues</button>
@@ -319,6 +319,7 @@
             <button class="tab" data-league-detail-tab="stats" type="button">Roster</button>
             <button class="tab" data-league-detail-tab="leagueStats" type="button">League Stats</button>
             <button class="tab" data-league-detail-tab="rankings" type="button">Rankings</button>
+            <button class="tab" data-league-detail-tab="chat" type="button">Chat</button>
             <button class="tab" data-league-detail-tab="settings" type="button">Settings</button>
             <button class="tab" data-league-detail-tab="invite" type="button">Invite</button>
           </nav>
@@ -400,6 +401,17 @@
               <section class="panel"><h3>Soccer Players</h3><div class="leaderboard" id="leagueWinRankings"></div></section>
               <section class="panel hidden" id="leagueLiabilitiesPanel"><h3>Liabilities</h3><div class="leaderboard" id="leagueLiabilityRankings"></div></section>
             </div>
+          </section>
+
+          <section class="league-detail-panel" id="leagueChatPanel">
+            <section class="panel">
+              <h3>League Chat</h3>
+              <div class="league-chat-list" id="leagueChatList"></div>
+              <form class="league-chat-form" id="leagueChatForm">
+                <input name="message" maxlength="240" placeholder="Message your league..." required />
+                <button class="small-button export-button" type="submit">Send</button>
+              </form>
+            </section>
           </section>
 
           <section class="league-detail-panel" id="leagueLeagueStatsPanel">
@@ -747,9 +759,9 @@
             <li>Account information, such as your email address and login provider.</li>
             <li>Profile information you choose to add, including nickname, preferred partner, cup color, and notes.</li>
             <li>Game and stat information, including scores, wins, losses, sinks, tinks, table hits, field goals, FIFAs, self sinks, achievements, rankings, and game history.</li>
-            <li>League information, including league name, description, logo colors, membership, roles, invites, roster data, rankings, and league game logs.</li>
+            <li>League information, including league name, description, logo colors, membership, roles, invites, roster data, rankings, league chat messages, and league game logs.</li>
             <li>Friend information, including friend requests, accepted friends, invite emails, and display names.</li>
-            <li>Notification information, including league invites, friend requests, achievement unlocks, ranking updates, read status, and timestamps.</li>
+            <li>Notification information, including league invites, friend requests, achievement unlocks, personal updates, read status, and timestamps.</li>
             <li>Device/browser information that may be collected automatically by hosting, authentication, database, or analytics infrastructure, such as IP address, browser type, device type, and basic logs.</li>
           </ul>
         </section>
@@ -761,7 +773,7 @@
             <li>To save profiles, stats, game history, achievements, rankings, friends, leagues, and notifications.</li>
             <li>To sync league data across users and phones.</li>
             <li>To let league owners, co-leaders, refs, and members use the correct league permissions.</li>
-            <li>To send or show in-app notifications for achievements, friend requests, league invites, and league ranking changes.</li>
+            <li>To send or show in-app notifications for achievements, friend requests, league invites, and updates about you.</li>
             <li>To maintain, debug, secure, and improve the app.</li>
           </ul>
         </section>
@@ -769,7 +781,7 @@
         <section class="rules-card privacy-card">
           <h3>Local Data vs Cloud Data</h3>
           <p>Some app data is stored locally on your device, such as local player lists, regular games, big games, tournament data, and local profile stats. Local data may not sync across devices.</p>
-          <p>League data is stored in a shared cloud database so league members can see synced rosters, league games, rankings, stats, invites, and notifications.</p>
+          <p>League data is stored in a shared cloud database so league members can see synced rosters, league games, rankings, stats, invites, and league chat updates.</p>
         </section>
 
         <section class="rules-card privacy-card">
@@ -784,7 +796,7 @@
 
         <section class="rules-card privacy-card">
           <h3>Notifications</h3>
-          <p>Sinkd may show in-app notifications for friend requests, league invites, achievements, and ranking updates. Browser or phone notification popups require device/browser permission. Notification records are automatically cleared after a short period so your inbox stays current.</p>
+          <p>Sinkd may show in-app notifications for friend requests, league invites, achievements, and updates about you. Browser or phone notification popups require device/browser permission. Notification records are automatically cleared after a short period so your inbox stays current.</p>
         </section>
 
         <section class="rules-card privacy-card">
