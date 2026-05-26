@@ -19,6 +19,19 @@
     </section>
     <div class="notification-toast-wrap" id="notificationToastWrap" aria-live="polite"></div>
 
+    <section class="intro-modal hidden" id="ageGateModal" aria-hidden="true">
+      <div class="intro-sheet age-gate-sheet">
+        <img class="intro-logo" src="assets/splash-logo.svg" alt="" />
+        <h2>Before You Enter</h2>
+        <p class="intro-lead">Are you at least 21 years old?</p>
+        <div class="age-gate-actions" id="ageGateActions">
+          <button class="primary-button" id="ageGateYesBtn" type="button">Yes</button>
+          <button class="small-button secondary-button" id="ageGateNoBtn" type="button">No</button>
+        </div>
+        <p class="age-gate-message hidden" id="ageGateMessage">Sinkd is intended for users who are 21 or older.</p>
+      </div>
+    </section>
+
     <section class="intro-modal hidden" id="introModal" aria-hidden="true">
       <div class="intro-sheet">
         <p class="intro-kicker">Welcome to</p>
@@ -34,6 +47,17 @@
           <article><strong>Settings</strong><span>Export PDFs, manage players, read rules, and send feedback.</span></article>
         </div>
         <button class="primary-button" id="closeIntroBtn" type="button">Track Stats Now</button>
+      </div>
+    </section>
+
+    <section class="intro-modal hidden" id="confirmModal" aria-hidden="true">
+      <div class="intro-sheet confirm-sheet">
+        <h2 id="confirmTitle">Are you sure?</h2>
+        <p class="intro-lead" id="confirmMessage"></p>
+        <div class="age-gate-actions">
+          <button class="primary-button danger-confirm-button" id="confirmYesBtn" type="button">Yes</button>
+          <button class="small-button secondary-button" id="confirmCancelBtn" type="button">Cancel</button>
+        </div>
       </div>
     </section>
 
@@ -319,7 +343,10 @@
             <button class="tab" data-league-detail-tab="stats" type="button">Roster</button>
             <button class="tab" data-league-detail-tab="leagueStats" type="button">League Stats</button>
             <button class="tab" data-league-detail-tab="rankings" type="button">Rankings</button>
-            <button class="tab" data-league-detail-tab="chat" type="button">Chat</button>
+            <button class="tab league-chat-tab" data-league-detail-tab="chat" type="button">
+              Chat
+              <span class="notification-badge chat-badge hidden" id="leagueChatBadge">0</span>
+            </button>
             <button class="tab" data-league-detail-tab="settings" type="button">Settings</button>
             <button class="tab" data-league-detail-tab="invite" type="button">Invite</button>
           </nav>

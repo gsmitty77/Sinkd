@@ -90,13 +90,25 @@ let notificationRealtimeChannel = null;
 let knownNotificationIds = new Set();
 let notificationsInitialized = false;
 let showingFriendQr = false;
+let pendingConfirmAction = null;
 const state = loadState();
 const INTRO_VERSION = "tab-tour-v2";
+const AGE_GATE_KEY = "sinkdAgeVerified21";
 
 const els = {
   splashScreen: document.querySelector("#splashScreen"),
+  ageGateModal: document.querySelector("#ageGateModal"),
+  ageGateYesBtn: document.querySelector("#ageGateYesBtn"),
+  ageGateNoBtn: document.querySelector("#ageGateNoBtn"),
+  ageGateActions: document.querySelector("#ageGateActions"),
+  ageGateMessage: document.querySelector("#ageGateMessage"),
   introModal: document.querySelector("#introModal"),
   closeIntroBtn: document.querySelector("#closeIntroBtn"),
+  confirmModal: document.querySelector("#confirmModal"),
+  confirmTitle: document.querySelector("#confirmTitle"),
+  confirmMessage: document.querySelector("#confirmMessage"),
+  confirmYesBtn: document.querySelector("#confirmYesBtn"),
+  confirmCancelBtn: document.querySelector("#confirmCancelBtn"),
   authShell: document.querySelector("#authShell"),
   appShell: document.querySelector("#appShell"),
   authForm: document.querySelector("#authForm"),
@@ -168,6 +180,7 @@ const els = {
   leagueSinkRankings: document.querySelector("#leagueSinkRankings"),
   leagueLiabilitiesPanel: document.querySelector("#leagueLiabilitiesPanel"),
   leagueLiabilityRankings: document.querySelector("#leagueLiabilityRankings"),
+  leagueChatBadge: document.querySelector("#leagueChatBadge"),
   leagueChatList: document.querySelector("#leagueChatList"),
   leagueChatForm: document.querySelector("#leagueChatForm"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
@@ -380,7 +393,52 @@ function setAuthView(user) {
   }
   render();
   if (isSignedIn) consumeNotificationHashTarget();
-  if (isSignedIn) window.setTimeout(maybeShowIntro, 250);
+  if (isSignedIn) window.setTimeout(maybeShowEntryFlow, 250);
+}
+
+function hasPassedAgeGate() {
+  try {
+    return localStorage.getItem(AGE_GATE_KEY) === "true";
+  } catch (error) {
+    return false;
+  }
+}
+
+function rememberAgeGatePassed() {
+  try {
+    localStorage.setItem(AGE_GATE_KEY, "true");
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function maybeShowEntryFlow() {
+  if (!hasPassedAgeGate()) {
+    showAgeGate();
+    return;
+  }
+  maybeShowIntro();
+}
+
+function showAgeGate() {
+  if (!els.ageGateModal) return;
+  els.ageGateActions?.classList.remove("hidden");
+  els.ageGateMessage?.classList.add("hidden");
+  els.ageGateModal.classList.remove("hidden");
+  els.ageGateModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeAgeGate() {
+  els.ageGateModal.classList.add("hidden");
+  els.ageGateModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+async function rejectAgeGate() {
+  els.ageGateActions?.classList.add("hidden");
+  els.ageGateMessage?.classList.remove("hidden");
+  await signOut();
 }
 
 function introStorageKey(user = currentUser) {
@@ -415,6 +473,22 @@ function closeIntro() {
   rememberIntroSeen();
   els.introModal.classList.add("hidden");
   els.introModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function showAppConfirm({ title = "Are you sure?", message = "", onConfirm }) {
+  pendingConfirmAction = onConfirm;
+  els.confirmTitle.textContent = title;
+  els.confirmMessage.textContent = message;
+  els.confirmModal.classList.remove("hidden");
+  els.confirmModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeAppConfirm() {
+  pendingConfirmAction = null;
+  els.confirmModal.classList.add("hidden");
+  els.confirmModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
 }
 
@@ -622,9 +696,27 @@ function showAuthMessage(message) {
 }
 
 function bindEvents() {
+  els.ageGateYesBtn.addEventListener("click", () => {
+    rememberAgeGatePassed();
+    closeAgeGate();
+    maybeShowIntro();
+  });
+  els.ageGateNoBtn.addEventListener("click", rejectAgeGate);
+  els.ageGateModal.addEventListener("click", (event) => {
+    if (event.target === els.ageGateModal) event.stopPropagation();
+  });
   els.closeIntroBtn.addEventListener("click", closeIntro);
   els.introModal.addEventListener("click", (event) => {
     if (event.target === els.introModal) event.stopPropagation();
+  });
+  els.confirmYesBtn.addEventListener("click", async () => {
+    const action = pendingConfirmAction;
+    closeAppConfirm();
+    if (action) await action();
+  });
+  els.confirmCancelBtn.addEventListener("click", closeAppConfirm);
+  els.confirmModal.addEventListener("click", (event) => {
+    if (event.target === els.confirmModal) closeAppConfirm();
   });
   els.signInBtn.addEventListener("click", signInWithEmail);
   els.signUpBtn.addEventListener("click", signUpWithEmail);
@@ -855,6 +947,7 @@ function bindEvents() {
   els.leagueDetailTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       leagueDetailTab = tab.dataset.leagueDetailTab;
+      if (leagueDetailTab === "chat") rememberLeagueChatSeen();
       renderLeagueDetails();
     });
   });
@@ -1965,6 +2058,39 @@ function leagueChatMessages(leagueId = activeLeagueId) {
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 }
 
+function leagueChatSeenKey(leagueId = activeLeagueId) {
+  return `sinkdLeagueChatSeen:${profileStorageKey() || "guest"}:${leagueId || "none"}`;
+}
+
+function leagueChatLastSeen(leagueId = activeLeagueId) {
+  try {
+    return localStorage.getItem(leagueChatSeenKey(leagueId)) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function rememberLeagueChatSeen(leagueId = activeLeagueId) {
+  if (!leagueId) return;
+  const messages = leagueChatMessages(leagueId);
+  const latest = messages.at(-1)?.created_at || new Date().toISOString();
+  try {
+    localStorage.setItem(leagueChatSeenKey(leagueId), latest);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function leagueChatUnreadCount(leagueId = activeLeagueId) {
+  if (!leagueId || !myLeagueMember(leagueId)) return 0;
+  const lastSeen = leagueChatLastSeen(leagueId);
+  const lastSeenTime = lastSeen ? new Date(lastSeen).getTime() : 0;
+  return leagueChatMessages(leagueId).filter((message) => {
+    if (message.user_id && message.user_id === currentUser?.id) return false;
+    return new Date(message.created_at).getTime() > lastSeenTime;
+  }).length;
+}
+
 function activeLeagueTournament() {
   const tournaments = leagueTournaments();
   if (!tournaments.length) return null;
@@ -2555,7 +2681,15 @@ async function markNotificationsRead(types = null) {
 
 async function deleteAllNotifications() {
   if (!authClient || !currentUser) return;
-  if (!confirm("Delete all notifications from this inbox?")) return;
+  showAppConfirm({
+    title: "Delete notifications?",
+    message: "This clears your personal notification inbox.",
+    onConfirm: performDeleteAllNotifications,
+  });
+}
+
+async function performDeleteAllNotifications() {
+  if (!authClient || !currentUser) return;
   const actionIds = [
     ...pendingLeagueInvites().map((invite) => `league:${invite.id}`),
     ...pendingIncomingFriendRequests().map((request) => `friend:${request.id}`),
@@ -3896,6 +4030,7 @@ function renderLeagueDetails() {
   renderLeagueStatsTable();
   renderLeagueRankings();
   renderLeagueChat();
+  renderLeagueChatBadge();
   renderLeagueSettings();
   renderLeagueMembers();
   renderLeagueInviteTools();
@@ -4129,6 +4264,14 @@ function renderLeagueChat() {
   els.leagueChatList.innerHTML = messages.length
     ? messages.map(leagueChatRow).join("")
     : '<p class="empty">No league chat yet.</p>';
+  if (leagueDetailTab === "chat") rememberLeagueChatSeen();
+}
+
+function renderLeagueChatBadge() {
+  if (!els.leagueChatBadge) return;
+  const count = leagueChatUnreadCount();
+  els.leagueChatBadge.textContent = count > 99 ? "99+" : String(count);
+  els.leagueChatBadge.classList.toggle("hidden", count === 0);
 }
 
 function leagueChatRow(message) {
