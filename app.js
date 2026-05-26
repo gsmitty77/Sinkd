@@ -44,12 +44,12 @@ const scoringPointValues = {
   fifas: 1,
 };
 const achievementDefinitions = [
-  { key: "sinks", label: "Cup Hunter", thresholds: [10, 15, 30, 50] },
-  { key: "tinks", label: "Rim Rattler", thresholds: [15, 30, 60, 100] },
-  { key: "fgOffense", label: "Field General", thresholds: [15, 40, 80, 150] },
-  { key: "fgDefense", label: "Return to Sender", thresholds: [10, 25, 50, 90] },
-  { key: "fifas", label: "Soccer Player", thresholds: [25, 75, 150, 300] },
-  { key: "tableHits", label: "Table Setter", thresholds: [25, 100, 200, 500] },
+  { key: "sinks", label: "Cup Hunter", statLabel: "sinks", thresholds: [10, 15, 30, 50] },
+  { key: "tinks", label: "Rim Rattler", statLabel: "tinks", thresholds: [15, 30, 60, 100] },
+  { key: "fgOffense", label: "Field General", statLabel: "FG offense", thresholds: [15, 40, 80, 150] },
+  { key: "fgDefense", label: "Return to Sender", statLabel: "FG defense", thresholds: [10, 25, 50, 90] },
+  { key: "fifas", label: "Soccer Player", statLabel: "FIFAs", thresholds: [25, 75, 150, 300] },
+  { key: "tableHits", label: "Table Setter", statLabel: "table hits", thresholds: [25, 100, 200, 500] },
 ];
 const secretAchievementDefinitions = [
   { key: "selfSinks", label: "L Teammate", threshold: 10, tierClass: "diamond" },
@@ -90,10 +90,12 @@ let knownNotificationIds = new Set();
 let notificationsInitialized = false;
 let showingFriendQr = false;
 const state = loadState();
-const DEVICE_ACCOUNT_EMAIL_KEY = "sinkdDeviceAccountEmail";
+const INTRO_VERSION = "tab-tour-v2";
 
 const els = {
   splashScreen: document.querySelector("#splashScreen"),
+  introModal: document.querySelector("#introModal"),
+  closeIntroBtn: document.querySelector("#closeIntroBtn"),
   authShell: document.querySelector("#authShell"),
   appShell: document.querySelector("#appShell"),
   authForm: document.querySelector("#authForm"),
@@ -167,6 +169,12 @@ const els = {
   leagueLiabilityRankings: document.querySelector("#leagueLiabilityRankings"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
+  openLeagueRulesBtn: document.querySelector("#openLeagueRulesBtn"),
+  closeLeagueRulesBtn: document.querySelector("#closeLeagueRulesBtn"),
+  leagueRulesModal: document.querySelector("#leagueRulesModal"),
+  leagueRulesTitle: document.querySelector("#leagueRulesTitle"),
+  leagueRulesContent: document.querySelector("#leagueRulesContent"),
+  leagueRulesSummary: document.querySelector("#leagueRulesSummary"),
   leagueSettingsForm: document.querySelector("#leagueSettingsForm"),
   leaveLeagueBtn: document.querySelector("#leaveLeagueBtn"),
   leaveLeagueConfirm: document.querySelector("#leaveLeagueConfirm"),
@@ -337,11 +345,6 @@ async function finishOAuthRedirect() {
 }
 
 function setAuthView(user) {
-  if (user && !deviceAllowsAccount(user.email)) {
-    authClient?.auth.signOut();
-    user = null;
-    showAuthMessage("This device is already linked to another Sinkd account.");
-  }
   if (currentUser && currentUser.id !== user?.id) {
     saveCurrentProfileForUser(currentUser);
     saveState();
@@ -353,7 +356,6 @@ function setAuthView(user) {
   els.authShell.classList.toggle("hidden", isSignedIn);
   els.appShell.classList.toggle("auth-locked", !isSignedIn);
   els.signOutBtn.hidden = !isSignedIn;
-  if (isSignedIn) rememberDeviceAccount(user);
   updateAccountLabel();
   if (isSignedIn) showAuthMessage("");
   if (isSignedIn && !passwordRecoveryMode) restoreAuthButtons();
@@ -375,30 +377,42 @@ function setAuthView(user) {
   }
   render();
   if (isSignedIn) consumeNotificationHashTarget();
+  if (isSignedIn) window.setTimeout(maybeShowIntro, 250);
 }
 
-function deviceAccountEmail() {
+function introStorageKey(user = currentUser) {
+  const key = profileStorageKey(user) || "guest";
+  return `sinkdIntroSeen:${INTRO_VERSION}:${key}`;
+}
+
+function hasSeenIntro() {
   try {
-    return cleanText(localStorage.getItem(DEVICE_ACCOUNT_EMAIL_KEY)).toLowerCase();
+    return localStorage.getItem(introStorageKey()) === "true";
   } catch (error) {
-    return "";
+    return false;
   }
 }
 
-function rememberDeviceAccount(user) {
-  const email = cleanText(user?.email).toLowerCase();
-  if (!email) return;
+function rememberIntroSeen() {
   try {
-    if (!deviceAccountEmail()) localStorage.setItem(DEVICE_ACCOUNT_EMAIL_KEY, email);
+    localStorage.setItem(introStorageKey(), "true");
   } catch (error) {
     console.warn(error);
   }
 }
 
-function deviceAllowsAccount(email) {
-  const savedEmail = deviceAccountEmail();
-  const nextEmail = cleanText(email).toLowerCase();
-  return !savedEmail || !nextEmail || savedEmail === nextEmail;
+function maybeShowIntro() {
+  if (!els.introModal || hasSeenIntro()) return;
+  els.introModal.classList.remove("hidden");
+  els.introModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeIntro() {
+  rememberIntroSeen();
+  els.introModal.classList.add("hidden");
+  els.introModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
 }
 
 function consumeNotificationHashTarget() {
@@ -518,10 +532,6 @@ async function signInWithEmail() {
     showAuthMessage("Enter your email and password.");
     return;
   }
-  if (!deviceAllowsAccount(email)) {
-    showAuthMessage("This device is already linked to another Sinkd account.");
-    return;
-  }
 
   showAuthMessage("Signing in...");
   const { error } = await authClient.auth.signInWithPassword({ email, password });
@@ -553,10 +563,6 @@ async function signUpWithEmail() {
   const password = els.authPassword.value;
   if (!email || !password) {
     showAuthMessage("Enter an email and password to create an account.");
-    return;
-  }
-  if (!deviceAllowsAccount(email)) {
-    showAuthMessage("This device is already linked to another Sinkd account.");
     return;
   }
 
@@ -613,6 +619,10 @@ function showAuthMessage(message) {
 }
 
 function bindEvents() {
+  els.closeIntroBtn.addEventListener("click", closeIntro);
+  els.introModal.addEventListener("click", (event) => {
+    if (event.target === els.introModal) event.stopPropagation();
+  });
   els.signInBtn.addEventListener("click", signInWithEmail);
   els.signUpBtn.addEventListener("click", signUpWithEmail);
   els.forgotPasswordBtn.addEventListener("click", sendPasswordReset);
@@ -914,6 +924,11 @@ function bindEvents() {
   els.leagueSettingsForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await updateCloudLeagueSettings(new FormData(els.leagueSettingsForm));
+  });
+  els.openLeagueRulesBtn.addEventListener("click", openLeagueRules);
+  els.closeLeagueRulesBtn.addEventListener("click", closeLeagueRules);
+  els.leagueRulesModal.addEventListener("click", (event) => {
+    if (event.target === els.leagueRulesModal) closeLeagueRules();
   });
 
   els.leaveLeagueBtn.addEventListener("click", async () => {
@@ -2270,6 +2285,51 @@ function closeRules() {
   document.body.classList.remove("modal-open");
 }
 
+function defaultLeagueRulesText() {
+  return [
+    "Scoring: Table Hit = 1, Sink = 3, Tink = 2, FG Off = 2, FG Def = 2, FIFA = 1.",
+    "Self Sink is an automatic loss. Bounce-ins count as sinks.",
+    "The die has to be at least 10 feet over the table.",
+    "The die has to hit the line or the opponent's side.",
+    "Body catches are awarded the point.",
+    "FIFAs are playable off the side of the table. No knees allowed.",
+    "Defensive field goals have to be blocked before they fall off the table.",
+    "Defensive FIFAs do not have to hit the table, but they are allowed to.",
+    "Call FIFA and hit the table: house penalty.",
+    "If your toss is short and you catch it on the back of your hand, you are awarded your throw back.",
+    "If the die hits the opponent's side and stays on, the thrower can guess the die number without looking. If correct, the thrower gets their toss back.",
+    "If the die hits the opponent's side, stays on, and lands on 5, group penalty.",
+  ].join("\n");
+}
+
+function openLeagueRules() {
+  const league = activeLeague();
+  if (!league) return;
+  const customRules = cleanText(league.rules);
+  const rulesText = customRules || defaultLeagueRulesText();
+  els.leagueRulesTitle.textContent = customRules ? `${league.name} Rules` : "House Rules We Play With";
+  els.leagueRulesContent.innerHTML = `
+    <h3>${customRules ? "Custom League Rules" : "Default House Rules"}</h3>
+    <ul>
+      ${rulesText
+        .split("\n")
+        .map(cleanText)
+        .filter(Boolean)
+        .map((line) => `<li>${escapeHtml(line)}</li>`)
+        .join("")}
+    </ul>
+  `;
+  els.leagueRulesModal.classList.remove("hidden");
+  els.leagueRulesModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeLeagueRules() {
+  els.leagueRulesModal.classList.add("hidden");
+  els.leagueRulesModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
 function openPrivacy() {
   els.privacyModal.classList.remove("hidden");
   els.privacyModal.setAttribute("aria-hidden", "false");
@@ -2726,6 +2786,7 @@ async function createCloudLeague(form) {
     owner_id: currentUser.id,
     name: leagueName,
     description: cleanText(form.get("description")),
+    rules: cleanText(form.get("rules")),
     privacy: form.get("privacy") === "invite" ? "invite" : "open",
     logo_top: form.get("logoTop") || "#EFBF04",
     logo_left: form.get("logoLeft") || "#ffffff",
@@ -2765,6 +2826,7 @@ async function updateCloudLeagueSettings(form) {
     .update({
       name: leagueName,
       description: cleanText(form.get("description")),
+      rules: cleanText(form.get("rules")),
       privacy: form.get("privacy") === "invite" ? "invite" : "open",
       logo_top: form.get("logoTop") || "#EFBF04",
       logo_left: form.get("logoLeft") || "#ffffff",
@@ -4036,10 +4098,14 @@ function renderLeagueSettings() {
   if (!league || !canManage) return;
   els.leagueSettingsForm.elements.name.value = league.name;
   els.leagueSettingsForm.elements.description.value = league.description || "";
+  els.leagueSettingsForm.elements.rules.value = league.rules || "";
   els.leagueSettingsForm.elements.privacy.value = league.privacy;
   els.leagueSettingsForm.elements.logoTop.value = league.logo_top || "#EFBF04";
   els.leagueSettingsForm.elements.logoLeft.value = league.logo_left || "#ffffff";
   els.leagueSettingsForm.elements.logoRight.value = league.logo_right || "#4f7fc8";
+  els.leagueRulesSummary.textContent = league.rules
+    ? "This league is using custom rules."
+    : "This league is using the default House Rules We Play With.";
 }
 
 function renderLeagueMembers() {
@@ -4551,7 +4617,7 @@ function achievementProgressCard(definition, stats) {
   const tierClass = tier.toLowerCase();
   const goalIndex = Math.min(rank, definition.thresholds.length - 1);
   const goal = definition.thresholds[goalIndex];
-  const fraction = `${value}/${goal}`;
+  const fraction = `${value}/${goal} ${definition.statLabel || definition.label}`;
   const rankName = achievementRankLabel(rank) || "Locked";
   return `
     <article class="league-badge-card achievement-${rank ? tierClass : "locked"}">
@@ -4564,8 +4630,8 @@ function achievementProgressCard(definition, stats) {
         <div class="league-badge-dots" aria-hidden="true">
           ${achievementTiers.map((item, index) => `<i class="badge-dot badge-dot-${item.toLowerCase()} ${rank >= index + 1 ? "earned" : ""}"></i>`).join("")}
         </div>
-        <b>${escapeHtml(fraction)}</b>
       </div>
+      <b class="league-badge-progress">${escapeHtml(fraction)}</b>
     </article>
   `;
 }
@@ -4585,8 +4651,8 @@ function secretAchievementCard(definition, stats) {
         <div class="league-badge-dots secret-badge-dots" aria-hidden="true">
           <i class="badge-dot badge-dot-diamond earned"></i>
         </div>
-        <b>${escapeHtml(`${value}/${definition.threshold}`)}</b>
       </div>
+      <b class="league-badge-progress">${escapeHtml(`${value}/${definition.threshold} self sinks`)}</b>
     </article>
   `;
 }

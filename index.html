@@ -19,6 +19,24 @@
     </section>
     <div class="notification-toast-wrap" id="notificationToastWrap" aria-live="polite"></div>
 
+    <section class="intro-modal hidden" id="introModal" aria-hidden="true">
+      <div class="intro-sheet">
+        <p class="intro-kicker">Welcome to</p>
+        <img class="intro-logo" src="assets/splash-logo.svg" alt="" />
+        <h2>Sinkd</h2>
+        <p class="intro-lead">A quick guide to what each tab does before you start tracking.</p>
+        <div class="intro-grid">
+          <article><strong>Quick Log</strong><span>Log fast local games and keep lifetime stats moving.</span></article>
+          <article><strong>Tournaments</strong><span>Create brackets, play one match at a time, and track tournament runs.</span></article>
+          <article><strong>Leagues</strong><span>Join friends, sync shared games, rankings, rosters, and badges.</span></article>
+          <article><strong>Player Stats</strong><span>View local-only stats from games saved on this device.</span></article>
+          <article><strong>My Profile</strong><span>Set your nickname, cup color, partner, and see lifetime totals.</span></article>
+          <article><strong>Settings</strong><span>Export PDFs, manage players, read rules, and send feedback.</span></article>
+        </div>
+        <button class="primary-button" id="closeIntroBtn" type="button">Track Stats Now</button>
+      </div>
+    </section>
+
     <section class="auth-shell hidden" id="authShell">
       <div class="auth-card">
         <div class="auth-brand">
@@ -59,7 +77,7 @@
       </header>
 
       <nav class="tabs" aria-label="Primary sections">
-        <button class="tab active" data-view="regular">Regular Games</button>
+        <button class="tab active" data-view="regular">Quick Log</button>
         <button class="tab" data-view="tournaments">Tournaments</button>
         <button class="tab" data-view="leagues">Leagues</button>
         <button class="tab" data-view="players">Player Stats</button>
@@ -71,7 +89,7 @@
         <section class="view active" id="regularView">
           <div class="section-head">
             <div>
-              <h2>Regular Games</h2>
+              <h2>Quick Log</h2>
               <p>Log head-to-head games and keep overall player totals current.</p>
             </div>
             <button class="small-button export-button" id="openBigGameBtn" type="button">Big Game?</button>
@@ -88,6 +106,7 @@
                 <input name="teamBScore" type="number" min="0" value="0" required />
               </label>
             </div>
+            <p class="score-helper">Plus and minus buttons update the score automatically. You can still type the score manually.</p>
 
             <div class="regular-player-grid" id="regularPlayerGrid"></div>
             <input type="hidden" name="selfSinkPlayer" value="" />
@@ -95,7 +114,7 @@
             <div class="form-actions">
               <button class="small-button export-button" id="quickRematchBtn" type="button">Quick Rematch</button>
             </div>
-            <button class="primary-button" type="submit">Log Regular Game</button>
+            <button class="primary-button" type="submit">Quick Log</button>
           </form>
 
           <div class="history-grid">
@@ -117,7 +136,7 @@
               <p>Track long-format games with expanded individual player stats.</p>
             </div>
           </div>
-          <button class="small-button secondary-button back-nav-button" id="backToRegularBtn" type="button">Back to Regular Games</button>
+          <button class="small-button secondary-button back-nav-button" id="backToRegularBtn" type="button">Back to Quick Log</button>
 
           <form class="panel stat-form" id="bigGameForm">
             <div class="score-grid">
@@ -130,6 +149,7 @@
                 <input name="teamBScore" type="number" min="0" value="0" required />
               </label>
             </div>
+            <p class="score-helper">Plus and minus buttons update the score automatically. You can still type the score manually.</p>
             <div class="regular-player-grid" id="bigGamePlayerGrid"></div>
             <input type="hidden" name="selfSinkPlayer" value="" />
             <input type="hidden" name="selfSinkTeam" value="" />
@@ -311,6 +331,7 @@
                 <label>Team 1 Score <input name="teamAScore" type="number" min="0" value="0" required /></label>
                 <label>Team 2 Score <input name="teamBScore" type="number" min="0" value="0" required /></label>
               </div>
+              <p class="score-helper">Plus and minus buttons update the score automatically. You can still type the score manually.</p>
               <div class="regular-player-grid" id="leagueGamePlayerGrid"></div>
               <input type="hidden" name="selfSinkPlayer" value="" />
               <input type="hidden" name="selfSinkTeam" value="" />
@@ -412,8 +433,17 @@
           </section>
 
           <section class="league-detail-panel" id="leagueSettingsPanel">
+            <section class="panel">
+              <h3>League Rules</h3>
+              <p class="meta-line" id="leagueRulesSummary">Use the default house rules or save custom rules for this league.</p>
+              <button class="small-button export-button" id="openLeagueRulesBtn" type="button">League Rules</button>
+            </section>
             <form class="panel" id="leagueSettingsForm">
               <h3>League Settings</h3>
+              <label class="manager-setting">
+                League Rules
+                <textarea name="rules" rows="7" placeholder="Leave blank to use the default House Rules We Play With."></textarea>
+              </label>
               <label class="manager-setting">League Name <input name="name" maxlength="32" required /></label>
               <label class="manager-setting">Description <textarea name="description" rows="3"></textarea></label>
               <label class="manager-setting">
@@ -625,6 +655,19 @@
           <h3>Responsible Use</h3>
           <p>Sinkd is intended for responsible, legal-age players. Follow your local laws, know your limits, and use house penalties responsibly.</p>
         </section>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="leagueRulesModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>League Rules</p>
+            <h2 id="leagueRulesTitle">League Rules</h2>
+          </div>
+          <button class="text-button" id="closeLeagueRulesBtn" type="button">Close</button>
+        </header>
+        <section class="rules-card" id="leagueRulesContent"></section>
       </div>
     </section>
 

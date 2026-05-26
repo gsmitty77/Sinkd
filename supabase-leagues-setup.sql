@@ -8,6 +8,7 @@ create table if not exists public.leagues (
   owner_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
   description text default '',
+  rules text default '',
   privacy text not null default 'open' check (privacy in ('open', 'invite')),
   logo_top text not null default '#f6d365',
   logo_left text not null default '#0f766e',
@@ -18,6 +19,9 @@ create table if not exists public.leagues (
 
 create unique index if not exists leagues_unique_normalized_name
 on public.leagues (lower(btrim(name)));
+
+alter table public.leagues
+add column if not exists rules text default '';
 
 create table if not exists public.league_members (
   id uuid primary key default gen_random_uuid(),
