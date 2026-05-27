@@ -1,7 +1,7 @@
 {
   "name": "Sinkd",
   "short_name": "Sinkd",
-  "start_url": "./index.html",
+  "start_url": "https://sinkd.online",
   "display": "standalone",
   "background_color": "#002147",
   "theme_color": "#002147",
