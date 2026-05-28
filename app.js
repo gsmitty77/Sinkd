@@ -92,6 +92,7 @@ let notificationsInitialized = false;
 let showingFriendQr = false;
 let pendingConfirmAction = null;
 let pendingCancelAction = null;
+let lastPlayerProfileLookupSyncKey = "";
 const state = loadState();
 
 const els = {
@@ -614,8 +615,13 @@ function generatePlayerCode() {
 
 function ensureMyPlayerCode() {
   state.myProfile ||= {};
-  if (!normalizePlayerCode(state.myProfile.playerCode)) state.myProfile.playerCode = generatePlayerCode();
-  else state.myProfile.playerCode = normalizePlayerCode(state.myProfile.playerCode);
+  const normalized = normalizePlayerCode(state.myProfile.playerCode);
+  if (!normalized) {
+    state.myProfile.playerCode = generatePlayerCode();
+    state.myProfile.updatedAt = new Date().toISOString();
+  } else {
+    state.myProfile.playerCode = normalized;
+  }
   return state.myProfile.playerCode;
 }
 
@@ -693,7 +699,10 @@ async function savePlayerProfileLookup() {
       cup_color: state.myProfile.cupColor || "#d71920",
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
-    if (!error) return;
+    if (!error) {
+      lastPlayerProfileLookupSyncKey = `${currentUser.id}:${state.myProfile.playerCode}:${myProfileNickname()}:${state.myProfile.cupColor || ""}`;
+      return;
+    }
     if (error.code !== "23505") {
       console.warn(error);
       return;
@@ -708,7 +717,13 @@ async function findPlayerByCode(code) {
   if (!authClient) return null;
   const playerCode = normalizePlayerCode(code);
   if (!/^SINK-[A-Z0-9]{4}$/.test(playerCode)) {
-    alert("Enter a player code like SINK-1234.");
+    showAppConfirm({
+      title: "Player code needed",
+      message: "Enter a player code like SINK-1234.",
+      confirmLabel: "OK",
+      cancelLabel: "Close",
+      onConfirm: () => {},
+    });
     return null;
   }
   const { data, error } = await authClient
@@ -717,11 +732,30 @@ async function findPlayerByCode(code) {
     .eq("player_code", playerCode)
     .limit(1);
   if (error) {
-    alert(error.message);
+    const missingLookup =
+      error.code === "42P01" ||
+      /player_profiles|relation .* does not exist/i.test(error.message || "");
+    showAppConfirm({
+      title: missingLookup ? "Player codes need setup" : "Could not search player code",
+      message: missingLookup
+        ? "Run the latest Supabase SQL once, then have each player open My Profile so Sinkd can sync their code."
+        : error.message,
+      confirmLabel: "OK",
+      cancelLabel: "Close",
+      onConfirm: () => {},
+    });
     return null;
   }
   const player = data?.[0];
-  if (!player) alert("No player found with that code.");
+  if (!player) {
+    showAppConfirm({
+      title: "No player found",
+      message: "That code is not synced yet. Have them open Sinkd, go to My Profile once, then try again.",
+      confirmLabel: "OK",
+      cancelLabel: "Close",
+      onConfirm: () => {},
+    });
+  }
   return player || null;
 }
 
@@ -1239,7 +1273,10 @@ function bindEvents() {
   });
 
   els.leaguePlayerStats.addEventListener("click", (event) => {
-    if (event.target.closest("[data-add-friend]")) {
+    const addFriend = event.target.closest("[data-add-friend]");
+    if (addFriend) {
+      const member = leagueMembers().find((item) => item.id === addFriend.dataset.addFriend);
+      if (member?.user_id === currentUser?.id) return;
       alert("Friend requests are coming when we build the Friends page.");
       return;
     }
@@ -1258,7 +1295,10 @@ function bindEvents() {
   });
 
   els.leagueRosterDetail.addEventListener("click", (event) => {
-    if (!event.target.closest("[data-add-friend]")) return;
+    const addFriend = event.target.closest("[data-add-friend]");
+    if (!addFriend) return;
+    const member = leagueMembers().find((item) => item.id === addFriend.dataset.addFriend);
+    if (member?.user_id === currentUser?.id) return;
     alert("Friend requests are coming when we build the Friends page.");
   });
 
@@ -4919,6 +4959,7 @@ function renderLeagueRosterDetail(players) {
 function leagueRosterDetailCard(selected) {
   const stats = selected.stats || emptyBucket();
   const achievementsOpen = selectedLeagueAchievementsMemberId === selected.id;
+  const isSelf = selected.user_id === currentUser?.id;
   const statItems = [
     ["Games", stats.games],
     ["Record", `${stats.wins}-${stats.losses}`],
@@ -4950,7 +4991,7 @@ function leagueRosterDetailCard(selected) {
         <button class="small-button secondary-button" type="button" data-roster-achievements="${escapeHtml(selected.id)}">
           ${achievementsOpen ? "Hide League Badges" : "See League Badges"}
         </button>
-        <button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(selected.id)}">Add Friend</button>
+        ${isSelf ? "" : `<button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(selected.id)}">Add Friend</button>`}
       </div>
       ${achievementsOpen ? leagueBadgeSection(stats) : ""}
     </article>
@@ -5136,6 +5177,12 @@ function renderProfiles() {
 
   const personalStats = computeMyLifetimeStats(nickname);
   const playerCode = ensureMyPlayerCode();
+  const lookupSyncKey = `${currentUser?.id || ""}:${playerCode}:${nickname}:${profile?.cupColor || ""}`;
+  if (currentUser && lookupSyncKey !== lastPlayerProfileLookupSyncKey) {
+    saveCurrentProfileForUser();
+    saveState();
+    void savePlayerProfileLookup();
+  }
   els.profileList.innerHTML = `
     <article class="profile-card">
       <div class="profile-identity">
