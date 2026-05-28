@@ -91,6 +91,7 @@ let knownNotificationIds = new Set();
 let notificationsInitialized = false;
 let showingFriendQr = false;
 let pendingConfirmAction = null;
+let pendingCancelAction = null;
 const state = loadState();
 
 const els = {
@@ -100,6 +101,8 @@ const els = {
   confirmModal: document.querySelector("#confirmModal"),
   confirmTitle: document.querySelector("#confirmTitle"),
   confirmMessage: document.querySelector("#confirmMessage"),
+  confirmInput: document.querySelector("#confirmInput"),
+  confirmChoiceList: document.querySelector("#confirmChoiceList"),
   confirmYesBtn: document.querySelector("#confirmYesBtn"),
   confirmCancelBtn: document.querySelector("#confirmCancelBtn"),
   authShell: document.querySelector("#authShell"),
@@ -395,6 +398,11 @@ function introStorageKey(user = currentUser) {
   return `sinkdIntroSeen:${key}`;
 }
 
+function pushPromptStorageKey(user = currentUser) {
+  const key = profileStorageKey(user) || "guest";
+  return `sinkdPushPromptSeen:${key}`;
+}
+
 function hasSeenIntro() {
   try {
     const accountKey = introStorageKey();
@@ -413,7 +421,10 @@ function rememberIntroSeen() {
 }
 
 function maybeShowIntro() {
-  if (!els.introModal || hasSeenIntro()) return;
+  if (!els.introModal || hasSeenIntro()) {
+    maybePromptForPushNotifications();
+    return;
+  }
   els.introModal.classList.remove("hidden");
   els.introModal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
@@ -424,12 +435,103 @@ function closeIntro() {
   els.introModal.classList.add("hidden");
   els.introModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+  maybePromptForPushNotifications();
 }
 
-function showAppConfirm({ title = "Are you sure?", message = "", onConfirm }) {
+function hasSeenPushPrompt() {
+  try {
+    return localStorage.getItem(pushPromptStorageKey()) === "true";
+  } catch (error) {
+    return true;
+  }
+}
+
+function rememberPushPromptSeen() {
+  try {
+    localStorage.setItem(pushPromptStorageKey(), "true");
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function maybePromptForPushNotifications() {
+  if (!currentUser || hasSeenPushPrompt()) return;
+  if (!("Notification" in window) || Notification.permission !== "default") {
+    rememberPushPromptSeen();
+    return;
+  }
+  window.setTimeout(() => {
+    if (document.body.classList.contains("modal-open") || hasSeenPushPrompt()) return;
+    showAppConfirm({
+      title: "Enable notifications?",
+      message: "Sinkd can send phone alerts for friend requests, league invites, achievements, and updates about you.",
+      confirmLabel: "Enable",
+      cancelLabel: "Don't Allow",
+      onConfirm: async () => {
+        rememberPushPromptSeen();
+        await enablePushNotifications({ fromPrompt: true });
+      },
+      onCancel: rememberPushPromptSeen,
+    });
+  }, 450);
+}
+
+function showAppConfirm({ title = "Are you sure?", message = "", confirmLabel = "Yes", cancelLabel = "Cancel", onConfirm, onCancel = null }) {
   pendingConfirmAction = onConfirm;
+  pendingCancelAction = onCancel;
   els.confirmTitle.textContent = title;
   els.confirmMessage.textContent = message;
+  els.confirmInput.classList.add("hidden");
+  els.confirmInput.value = "";
+  els.confirmChoiceList.classList.add("hidden");
+  els.confirmChoiceList.innerHTML = "";
+  els.confirmYesBtn.classList.remove("hidden");
+  els.confirmYesBtn.textContent = confirmLabel;
+  els.confirmCancelBtn.textContent = cancelLabel;
+  els.confirmModal.classList.remove("hidden");
+  els.confirmModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function askAppText({ title = "Add", message = "", placeholder = "", onConfirm }) {
+  pendingConfirmAction = () => onConfirm(cleanText(els.confirmInput.value));
+  pendingCancelAction = null;
+  els.confirmTitle.textContent = title;
+  els.confirmMessage.textContent = message;
+  els.confirmInput.value = "";
+  els.confirmInput.placeholder = placeholder;
+  els.confirmInput.classList.remove("hidden");
+  els.confirmChoiceList.classList.add("hidden");
+  els.confirmChoiceList.innerHTML = "";
+  els.confirmYesBtn.classList.remove("hidden");
+  els.confirmYesBtn.textContent = "Add";
+  els.confirmCancelBtn.textContent = "Cancel";
+  els.confirmModal.classList.remove("hidden");
+  els.confirmModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => els.confirmInput.focus(), 0);
+}
+
+function askAppChoice({ title = "Choose", message = "", choices = [], onChoose }) {
+  pendingConfirmAction = null;
+  pendingCancelAction = null;
+  els.confirmTitle.textContent = title;
+  els.confirmMessage.textContent = message;
+  els.confirmInput.classList.add("hidden");
+  els.confirmInput.value = "";
+  els.confirmYesBtn.classList.add("hidden");
+  els.confirmCancelBtn.textContent = "Cancel";
+  els.confirmChoiceList.classList.remove("hidden");
+  els.confirmChoiceList.innerHTML = choices
+    .map((choice, index) => `<button class="small-button secondary-button" type="button" data-confirm-choice="${index}">${escapeHtml(choice.label)}</button>`)
+    .join("");
+  els.confirmChoiceList.querySelectorAll("[data-confirm-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const choice = choices[Number(button.dataset.confirmChoice)];
+      closeAppConfirm();
+      if (choice) onChoose(choice.value);
+    });
+  });
   els.confirmModal.classList.remove("hidden");
   els.confirmModal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
@@ -437,6 +539,10 @@ function showAppConfirm({ title = "Are you sure?", message = "", onConfirm }) {
 
 function closeAppConfirm() {
   pendingConfirmAction = null;
+  pendingCancelAction = null;
+  els.confirmInput.classList.add("hidden");
+  els.confirmChoiceList.classList.add("hidden");
+  els.confirmYesBtn.classList.remove("hidden");
   els.confirmModal.classList.add("hidden");
   els.confirmModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
@@ -727,9 +833,17 @@ function bindEvents() {
     closeAppConfirm();
     if (action) await action();
   });
-  els.confirmCancelBtn.addEventListener("click", closeAppConfirm);
+  els.confirmCancelBtn.addEventListener("click", async () => {
+    const action = pendingCancelAction;
+    closeAppConfirm();
+    if (action) await action();
+  });
   els.confirmModal.addEventListener("click", (event) => {
-    if (event.target === els.confirmModal) closeAppConfirm();
+    if (event.target === els.confirmModal) {
+      const action = pendingCancelAction;
+      closeAppConfirm();
+      if (action) action();
+    }
   });
   els.signInBtn.addEventListener("click", signInWithEmail);
   els.signUpBtn.addEventListener("click", signUpWithEmail);
@@ -856,9 +970,9 @@ function bindEvents() {
     }
   });
 
-  els.backToLeaguesFromFriendsBtn.addEventListener("click", () => switchView("leagues"));
+  els.backToLeaguesFromFriendsBtn.addEventListener("click", () => switchView("profiles"));
 
-  els.backToLeaguesFromNotificationsBtn.addEventListener("click", () => switchView("leagues"));
+  els.backToLeaguesFromNotificationsBtn.addEventListener("click", () => switchView("profiles"));
 
   els.markNotificationsReadBtn.addEventListener("click", () => markNotificationsRead());
   els.deleteAllNotificationsBtn.addEventListener("click", deleteAllNotifications);
@@ -904,18 +1018,29 @@ function bindEvents() {
     if (friendAccept) await dismissNotificationAction(friendAccept, () => updateFriendRequestStatus(friendAccept.dataset.friendAccept, "accepted"));
     if (friendDeny) await dismissNotificationAction(friendDeny, () => updateFriendRequestStatus(friendDeny.dataset.friendDeny, "denied"));
     if (accept) await dismissNotificationAction(accept, () => acceptLeagueInvite(accept.dataset.leagueInviteAccept));
-    if (deny && confirm("Deny this league invite?")) await dismissNotificationAction(deny, () => denyLeagueInvite(deny.dataset.leagueInviteDeny));
+    if (deny) {
+      showAppConfirm({
+        title: "Deny invite?",
+        message: "This removes the league invite from your inbox.",
+        onConfirm: () => dismissNotificationAction(deny, () => denyLeagueInvite(deny.dataset.leagueInviteDeny)),
+      });
+    }
     if (notificationTarget) openNotificationTarget(notificationTarget.dataset.notificationTarget);
   });
 
   els.friendsList.addEventListener("click", async (event) => {
     const inviteToLeague = event.target.closest("[data-invite-friend-league]");
+    const preferredPartner = event.target.closest("[data-preferred-partner]");
     const unfriend = event.target.closest("[data-unfriend]");
     const confirmUnfriend = event.target.closest("[data-unfriend-confirm]");
     const cancelUnfriend = event.target.closest("[data-unfriend-cancel]");
     const card = event.target.closest("[data-friend-card]");
     if (inviteToLeague) {
       await inviteFriendToLeague(inviteToLeague.dataset.inviteFriendLeague);
+      return;
+    }
+    if (preferredPartner) {
+      setPreferredPartnerFromFriend(preferredPartner.dataset.preferredPartner);
       return;
     }
     if (confirmUnfriend) {
@@ -1021,8 +1146,11 @@ function bindEvents() {
   els.deleteLeagueTournamentBtn.addEventListener("click", async () => {
     const tournament = activeLeagueTournament();
     if (!tournament || !canManageActiveLeague()) return;
-    if (!confirm(`Delete ${tournament.name}? This removes the league tournament bracket and its logged matches.`)) return;
-    await deleteCloudLeagueTournament(tournament.id);
+    showAppConfirm({
+      title: "Delete tournament?",
+      message: `Delete ${tournament.name}? This removes the bracket and logged matches.`,
+      onConfirm: () => deleteCloudLeagueTournament(tournament.id),
+    });
   });
 
   els.leagueGameDetail.addEventListener("click", (event) => {
@@ -1089,8 +1217,11 @@ function bindEvents() {
   els.deleteLeagueBtn.addEventListener("click", async () => {
     const league = activeLeague();
     if (!league || !isActiveLeagueOwner()) return;
-    if (!confirm(`Delete ${league.name}? This removes its games, roster, and rankings for everyone.`)) return;
-    await deleteCloudLeague();
+    showAppConfirm({
+      title: "Delete league?",
+      message: `Delete ${league.name}? This removes its games, roster, and rankings for everyone.`,
+      onConfirm: deleteCloudLeague,
+    });
   });
 
   els.leagueInviteForm.addEventListener("submit", async (event) => {
@@ -1140,35 +1271,45 @@ function bindEvents() {
     if (promote) await updateCloudLeagueMemberRole(promote.dataset.leaguePromote, "co_leader");
     if (makeRef) await updateCloudLeagueMemberRole(makeRef.dataset.leagueRef, "ref");
     if (demote) await updateCloudLeagueMemberRole(demote.dataset.leagueDemote, "member");
-    if (remove && confirm("Kick this member from the league?")) await removeCloudLeagueMember(remove.dataset.leagueRemove);
-    if (transfer && confirm("Transfer league ownership to this member?")) await transferCloudLeagueOwnership(transfer.dataset.leagueTransfer);
+    if (remove) {
+      showAppConfirm({
+        title: "Kick member?",
+        message: "Remove this member from the league?",
+        onConfirm: () => removeCloudLeagueMember(remove.dataset.leagueRemove),
+      });
+    }
+    if (transfer) {
+      showAppConfirm({
+        title: "Transfer ownership?",
+        message: "Transfer league ownership to this co-leader?",
+        onConfirm: () => transferCloudLeagueOwnership(transfer.dataset.leagueTransfer),
+      });
+    }
   });
 
   els.exportBtn.addEventListener("click", exportData);
   els.leagueExportBtn.addEventListener("click", exportLeagueStats);
   els.resetBtn.addEventListener("click", () => {
-    if (!confirm("Reset games, tournaments, and stats? Saved players will stay.")) return;
-    const selectedPlayers = currentRegularPlayerSelections();
-    const preservedPlayers = collectAllPlayerNames(selectedPlayers);
-    state.regularGames = [];
-    state.bigGames = [];
-    state.tournaments = [];
-    state.players = preservedPlayers;
-    state.activeTournamentId = "";
-    saveState();
-    buildRegularPlayerCards();
-    buildBigGamePlayerCards();
-    restoreRegularPlayerSelections(selectedPlayers);
-    render();
+    showAppConfirm({
+      title: "Reset games?",
+      message: "Reset games, tournaments, and stats? Saved players will stay.",
+      onConfirm: resetLocalGames,
+    });
   });
 
   els.deleteTournamentBtn.addEventListener("click", () => {
     const tournament = activeTournament();
-    if (!tournament || !confirm(`Delete ${tournament.name}?`)) return;
-    state.tournaments = state.tournaments.filter((item) => item.id !== tournament.id);
-    state.activeTournamentId = state.tournaments[0]?.id || "";
-    saveState();
-    render();
+    if (!tournament) return;
+    showAppConfirm({
+      title: "Delete tournament?",
+      message: `Delete ${tournament.name}?`,
+      onConfirm: () => {
+        state.tournaments = state.tournaments.filter((item) => item.id !== tournament.id);
+        state.activeTournamentId = state.tournaments[0]?.id || "";
+        saveState();
+        render();
+      },
+    });
   });
 
   els.quickRematchBtn.addEventListener("click", loadQuickRematch);
@@ -1197,13 +1338,18 @@ function bindEvents() {
       alert("Your My Profile name stays saved. Change it from My Profile first if you want a different name.");
       return;
     }
-    if (!confirm(`Delete ${playerName} from players and logged games?`)) return;
-    if (!deletePlayer(playerName)) return;
-    saveState();
-    buildRegularPlayerCards();
-    buildBigGamePlayerCards();
-    buildLeagueGamePlayerCards();
-    render();
+    showAppConfirm({
+      title: "Delete player?",
+      message: `Delete ${playerName} from players and logged games?`,
+      onConfirm: () => {
+        if (!deletePlayer(playerName)) return;
+        saveState();
+        buildRegularPlayerCards();
+        buildBigGamePlayerCards();
+        buildLeagueGamePlayerCards();
+        render();
+      },
+    });
   });
 
   document.addEventListener("click", (event) => {
@@ -1242,16 +1388,21 @@ function bindEvents() {
     const select = event.target.closest("[data-player-select]");
     if (!select || select.value !== "__new") return;
 
-    const playerName = cleanText(prompt("Player name"));
-    if (!playerName) {
-      select.value = "";
-      return;
-    }
-
-    rememberPlayers([playerName]);
-    saveState();
-    addPlayerToSelects(playerName);
-    select.value = playerName;
+    askAppText({
+      title: "Add player",
+      message: "Enter the player name.",
+      placeholder: "Player name",
+      onConfirm: (playerName) => {
+        if (!playerName) {
+          select.value = "";
+          return;
+        }
+        rememberPlayers([playerName]);
+        saveState();
+        addPlayerToSelects(playerName);
+        select.value = playerName;
+      },
+    });
   });
 }
 
@@ -2089,8 +2240,11 @@ function leagueTournaments(leagueId = activeLeagueId) {
 }
 
 function leagueChatMessages(leagueId = activeLeagueId) {
+  const member = myLeagueMember(leagueId);
+  const joinedAt = member?.created_at ? new Date(member.created_at).getTime() : 0;
   return leagueChatCache
     .filter((message) => message.league_id === leagueId)
+    .filter((message) => !joinedAt || new Date(message.created_at).getTime() >= joinedAt)
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 }
 
@@ -2387,7 +2541,8 @@ async function registerServiceWorker() {
   }
 }
 
-async function enablePushNotifications() {
+async function enablePushNotifications(options = {}) {
+  const fromPrompt = Boolean(options.fromPrompt);
   if (!("Notification" in window)) {
     alert("Push notifications are not available in this browser.");
     return;
@@ -2410,7 +2565,7 @@ async function enablePushNotifications() {
   localStorage.setItem("sinkdPushEnabled", permission === "granted" ? "true" : "false");
   if (permission === "granted") await savePushSubscription();
   updatePushButton();
-  if (permission !== "granted") alert("Notifications were not enabled.");
+  if (permission !== "granted" && !fromPrompt) alert("Notifications were not enabled.");
 }
 
 function pushNotificationsEnabled() {
@@ -2887,7 +3042,7 @@ async function inviteFriendToLeague(requestId) {
   const league =
     leagues.length === 1
       ? leagues[0]
-      : chooseLeagueForInvite(leagues);
+      : await chooseLeagueForInvite(leagues);
   if (!league) return;
 
   if (leagueMembers(league.id).some((member) => member.user_id === friend.userId)) {
@@ -2915,10 +3070,30 @@ async function inviteFriendToLeague(requestId) {
   await loadLeagueData();
 }
 
+function setPreferredPartnerFromFriend(requestId) {
+  const request = friendRequestCache.find((item) => item.id === requestId);
+  const friend = request ? friendInfo(request) : null;
+  if (!friend?.name) return;
+  state.myProfile ||= {};
+  state.myProfile.preferredPartner = friend.name;
+  state.myProfile.updatedAt = new Date().toISOString();
+  if (!state.myProfile.nickname) state.myProfile.nickname = myProfileNickname();
+  saveCurrentProfileForUser();
+  saveState();
+  saveMyProfileToCloud();
+  renderProfiles();
+  renderFriends();
+}
+
 function chooseLeagueForInvite(leagues) {
-  const options = leagues.map((league, index) => `${index + 1}. ${league.name}`).join("\n");
-  const choice = Number(window.prompt(`Invite to which league?\n${options}`));
-  return leagues[choice - 1] || null;
+  return new Promise((resolve) => {
+    askAppChoice({
+      title: "Choose league",
+      message: "Invite this friend to which league?",
+      choices: leagues.map((league) => ({ label: league.name, value: league })),
+      onChoose: resolve,
+    });
+  });
 }
 
 async function acceptLeagueInvite(memberId) {
@@ -3438,6 +3613,21 @@ function resetLeagueGameForm() {
   els.cancelLeagueGameEditBtn.classList.add("hidden");
 }
 
+function resetLocalGames() {
+  const selectedPlayers = currentRegularPlayerSelections();
+  const preservedPlayers = collectAllPlayerNames(selectedPlayers);
+  state.regularGames = [];
+  state.bigGames = [];
+  state.tournaments = [];
+  state.players = preservedPlayers;
+  state.activeTournamentId = "";
+  saveState();
+  buildRegularPlayerCards();
+  buildBigGamePlayerCards();
+  restoreRegularPlayerSelections(selectedPlayers);
+  render();
+}
+
 function startLeagueGameEdit(gameId) {
   if (!canLogActiveLeagueGames()) return;
   const game = leagueGames().find((item) => item.id === gameId);
@@ -3918,6 +4108,7 @@ function renderNotifications() {
   });
   const rows = [...actionNotifications, ...passiveNotifications].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const unreadCount = notificationCache.filter((notification) => !notification.read_at).length + actionNotifications.length;
+  updateProfileTabBadge(unreadCount);
   const notificationsBadge = document.querySelector("#notificationsBadge");
   if (notificationsBadge) {
     notificationsBadge.textContent = unreadCount;
@@ -3928,6 +4119,13 @@ function renderNotifications() {
   els.notificationList.innerHTML = rows.length
     ? rows.map((item) => (item.actionType ? actionNotificationRow(item) : notificationRow(item))).join("")
     : '<p class="empty">No notifications yet.</p>';
+}
+
+function updateProfileTabBadge(count = 0) {
+  const profileBadge = document.querySelector("#profileTabBadge");
+  if (!profileBadge) return;
+  profileBadge.textContent = count > 99 ? "99+" : String(count);
+  profileBadge.classList.toggle("hidden", count === 0);
 }
 
 function actionNotificationRow(item) {
@@ -4077,8 +4275,8 @@ function friendRow(request) {
             </div>
             ${
               confirming
-                ? `<div class="friend-actions"><button class="text-button danger-text" type="button" data-unfriend-confirm="${request.id}">Yes</button><button class="text-button" type="button" data-unfriend-cancel="${request.id}">Cancel</button></div>`
-                : `<div class="friend-actions"><button class="text-button" type="button" data-invite-friend-league="${request.id}">Invite to League</button><button class="text-button danger-text" type="button" data-unfriend="${request.id}">Unfriend</button></div>`
+                ? `<div class="friend-confirm"><span>Are you sure?</span><div class="friend-actions"><button class="small-button danger-button" type="button" data-unfriend-confirm="${request.id}">Yes</button><button class="small-button secondary-button" type="button" data-unfriend-cancel="${request.id}">Cancel</button></div></div>`
+                : `<div class="friend-actions friend-actions-stacked"><button class="small-button secondary-button preferred-partner-button" type="button" data-preferred-partner="${request.id}">Preferred Partner</button><button class="small-button secondary-button" type="button" data-invite-friend-league="${request.id}">Invite to League</button><button class="small-button danger-button" type="button" data-unfriend="${request.id}">Unfriend</button></div>`
             }
           `
           : ""

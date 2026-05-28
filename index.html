@@ -41,9 +41,11 @@
       <div class="intro-sheet confirm-sheet">
         <h2 id="confirmTitle">Are you sure?</h2>
         <p class="intro-lead" id="confirmMessage"></p>
+        <input class="confirm-input hidden" id="confirmInput" type="text" />
+        <div class="confirm-choice-list hidden" id="confirmChoiceList"></div>
         <div class="age-gate-actions">
-          <button class="primary-button danger-confirm-button" id="confirmYesBtn" type="button">Yes</button>
-          <button class="small-button secondary-button" id="confirmCancelBtn" type="button">Cancel</button>
+          <button class="primary-button" id="confirmYesBtn" type="button">Yes</button>
+          <button class="small-button danger-button" id="confirmCancelBtn" type="button">Cancel</button>
         </div>
       </div>
     </section>
@@ -92,7 +94,10 @@
         <button class="tab" data-view="tournaments">Tournaments</button>
         <button class="tab" data-view="leagues">Leagues</button>
         <button class="tab" data-view="players">Player Stats</button>
-        <button class="tab" data-view="profiles">My Profile</button>
+        <button class="tab profile-tab-button" data-view="profiles">
+          My Profile
+          <span class="notification-badge profile-tab-badge hidden" id="profileTabBadge">0</span>
+        </button>
         <button class="tab" data-view="settings">Settings</button>
       </nav>
 
@@ -271,7 +276,7 @@
               <p>Achievements, invites, friend requests, and personal updates.</p>
             </div>
           </div>
-          <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromNotificationsBtn" type="button">Back to Leagues</button>
+          <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromNotificationsBtn" type="button">Back to My Profile</button>
           <section class="panel">
             <div class="notification-head">
               <h3>Inbox</h3>
@@ -291,7 +296,7 @@
               <p>Invite players, answer requests, and see your friends.</p>
             </div>
           </div>
-          <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromFriendsBtn" type="button">Back to Leagues</button>
+          <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromFriendsBtn" type="button">Back to My Profile</button>
 
           <section class="panel">
             <h3>Invite Friend</h3>

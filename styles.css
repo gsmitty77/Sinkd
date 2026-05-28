@@ -207,10 +207,19 @@ textarea {
   line-height: 1.35;
 }
 
-.danger-confirm-button {
-  background: var(--red);
-  border-color: var(--red);
-  color: #ffffff;
+.confirm-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+.confirm-choice-list {
+  display: grid;
+  gap: 8px;
 }
 
 @keyframes splashRise {
@@ -560,7 +569,11 @@ nav.tabs[aria-label="Primary sections"] .tab {
 
 .score-grid-bottom {
   margin-top: 8px;
-  margin-bottom: 0;
+  margin-bottom: 14px;
+}
+
+#leagueQuickRematchBtn + .score-helper {
+  margin-top: 8px;
 }
 
 label {
@@ -790,6 +803,10 @@ legend {
   position: relative;
 }
 
+.profile-tab-button {
+  position: relative;
+}
+
 .league-chat-tab {
   position: relative;
 }
@@ -816,6 +833,12 @@ legend {
   top: -6px;
   right: -5px;
   border-color: var(--navy);
+}
+
+.profile-tab-badge {
+  top: -5px;
+  right: -4px;
+  border-color: var(--bg);
 }
 
 .notification-toast-wrap {
@@ -1206,11 +1229,18 @@ legend {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  margin-top: 16px;
+  padding-top: 6px;
 }
 
 .profile-action-row .primary-button {
   width: 100%;
   min-width: 0;
+}
+
+#friendInviteForm button[type="submit"],
+#leagueInviteForm button[type="submit"] {
+  margin-top: 8px;
 }
 
 .profile-stat-grid {
@@ -1496,6 +1526,25 @@ legend {
 .friend-actions {
   grid-template-columns: repeat(2, minmax(0, max-content));
   justify-content: start;
+}
+
+.friend-actions-stacked {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.friend-actions-stacked .preferred-partner-button {
+  grid-column: 1 / -1;
+}
+
+.friend-confirm {
+  display: grid;
+  gap: 8px;
+}
+
+.friend-confirm > span {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 900;
 }
 
 .notification-head {
