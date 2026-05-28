@@ -316,13 +316,8 @@
 
           <section class="panel">
             <h3>Invite Friend</h3>
-            <section class="invite-share-card friend-qr-card">
-              <p>Have a friend scan this to send you a request.</p>
-              <button class="small-button secondary-button" id="toggleFriendQrBtn" type="button">Show QR Code</button>
-              <div class="league-qr-box hidden" id="friendQrBox"></div>
-            </section>
             <form class="friend-invite-form" id="friendInviteForm">
-              <label>Email <input name="email" type="email" placeholder="friend@email.com" required /></label>
+              <label>Player Code <input name="playerCode" type="text" placeholder="SINK-XXXX" maxlength="9" required /></label>
               <button class="primary-button compact-action-button" type="submit">Invite</button>
             </form>
           </section>
@@ -511,14 +506,9 @@
           </section>
 
           <section class="league-detail-panel" id="leagueInvitePanel">
-            <section class="panel invite-share-card">
-              <h3>Your Player Code</h3>
-              <p>Share your code with friends so they can invite you, or ask for theirs to invite them below.</p>
-              <p>Find your code in <strong>My Profile</strong>.</p>
-            </section>
             <form class="panel" id="leagueInviteForm">
-              <h3>Invite by Player Code</h3>
-              <label>Player Code <input name="playerCode" type="text" placeholder="SINK-XXXX" maxlength="9" autocomplete="off" required /></label>
+              <h3>Invite Members</h3>
+              <label>Player Code <input name="playerCode" type="text" placeholder="SINK-XXXX" maxlength="9" required /></label>
               <button class="primary-button" type="submit">Send Invite</button>
             </form>
             <section class="panel">

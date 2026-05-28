@@ -1180,6 +1180,20 @@ legend {
   font-size: 0.88rem;
 }
 
+.profile-card .player-code {
+  display: inline-grid;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(239, 191, 4, 0.42);
+  border-radius: 8px;
+  background: rgba(239, 191, 4, 0.12);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
 .profile-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1571,7 +1585,7 @@ legend {
 
 .league-card-button {
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   width: 100%;
@@ -1582,6 +1596,19 @@ legend {
   color: var(--ink);
   text-align: left;
   cursor: pointer;
+}
+
+.league-card-main {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
 .league-card-button strong,
@@ -1595,6 +1622,17 @@ legend {
   color: var(--muted);
   font-size: 0.82rem;
   font-style: normal;
+}
+
+.league-card-action {
+  min-width: 86px;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.pending-request-row {
+  border-color: rgba(239, 191, 4, 0.34);
+  background: rgba(239, 191, 4, 0.08);
 }
 
 .league-detail-hero {
@@ -2003,15 +2041,32 @@ legend {
 .league-chat-row {
   display: grid;
   gap: 5px;
+  width: min(88%, 340px);
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.06);
 }
 
+.league-chat-row.received {
+  justify-self: start;
+}
+
+.league-chat-row.sent {
+  justify-self: end;
+  border-color: rgba(239, 191, 4, 0.28);
+  background: rgba(239, 191, 4, 0.14);
+}
+
 .league-chat-row.system {
+  justify-self: center;
+  width: min(94%, 380px);
   border-color: rgba(239, 191, 4, 0.34);
   background: rgba(239, 191, 4, 0.08);
+}
+
+.join-request-chat-row {
+  border-style: solid;
 }
 
 .league-chat-row div {
@@ -2309,6 +2364,15 @@ td {
 
   .counter-row {
     grid-template-columns: 1fr;
+  }
+
+  .league-card-button {
+    grid-template-columns: 1fr;
+  }
+
+  .league-card-action {
+    width: 100%;
+    justify-self: stretch;
   }
 
   .panel {

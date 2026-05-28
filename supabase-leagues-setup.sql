@@ -44,7 +44,7 @@ begin
   alter table public.league_members drop constraint if exists league_members_role_check;
   alter table public.league_members
     add constraint league_members_role_check
-    check (role in ('owner', 'co_leader', 'ref', 'member'));
+    check (role in ('owner', 'co_leader', 'ref', 'member', 'pending'));
 end $$;
 
 create table if not exists public.league_games (
@@ -85,6 +85,14 @@ create table if not exists public.friend_requests (
 );
 
 alter table public.friend_requests alter column recipient_email drop not null;
+
+create table if not exists public.player_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  player_code text not null unique check (player_code ~ '^SINK-[A-Z0-9]{4}$'),
+  nickname text not null default '',
+  cup_color text default '#d71920',
+  updated_at timestamptz not null default now()
+);
 
 create unique index if not exists friend_requests_unique_active_email_invite
 on public.friend_requests (requester_id, lower(recipient_email))
@@ -152,6 +160,7 @@ alter table public.league_games enable row level security;
 alter table public.league_tournaments enable row level security;
 alter table public.league_chat_messages enable row level security;
 alter table public.friend_requests enable row level security;
+alter table public.player_profiles enable row level security;
 alter table public.notifications enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.feedback enable row level security;
@@ -168,6 +177,7 @@ as $$
     from public.league_members lm
     where lm.league_id = target_league_id
       and lm.user_id = auth.uid()
+      and lm.role <> 'pending'
   );
 $$;
 
@@ -218,6 +228,39 @@ as $$
   );
 $$;
 
+create or replace function public.invite_player_to_league(target_league_id uuid, target_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  target_email text;
+  target_name text;
+begin
+  if not public.is_league_member(target_league_id) then
+    raise exception 'You must be in this league to invite players.';
+  end if;
+
+  select email into target_email
+  from auth.users
+  where id = target_user_id;
+
+  if target_email is null then
+    raise exception 'Player not found.';
+  end if;
+
+  select coalesce(nullif(btrim(nickname), ''), player_code)
+    into target_name
+  from public.player_profiles
+  where user_id = target_user_id;
+
+  insert into public.league_members (league_id, user_id, email, display_name, nickname, role)
+  values (target_league_id, null, lower(target_email), coalesce(target_name, 'Invited Player'), '', 'member')
+  on conflict (league_id, email) do nothing;
+end;
+$$;
+
 create or replace function public.is_league_owner(target_league_id uuid)
 returns boolean
 language sql
@@ -243,16 +286,7 @@ on public.leagues
 for select
 to authenticated
 using (
-  public.is_open_league(id)
-  or owner_id = auth.uid()
-  or public.is_league_member(id)
-  or exists (
-    select 1
-    from public.league_members lm
-    where lm.league_id = id
-      and lm.user_id is null
-      and lower(lm.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-  )
+  true
 );
 
 drop policy if exists "authenticated users can create leagues" on public.leagues;
@@ -314,6 +348,7 @@ for select
 to authenticated
 using (
   public.is_league_member(league_id)
+  or user_id = auth.uid()
   or (
     user_id is null
     and lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
@@ -501,6 +536,28 @@ using (
   or lower(recipient_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 
+drop policy if exists "authenticated users can find player codes" on public.player_profiles;
+create policy "authenticated users can find player codes"
+on public.player_profiles
+for select
+to authenticated
+using (true);
+
+drop policy if exists "users can create their player profile" on public.player_profiles;
+create policy "users can create their player profile"
+on public.player_profiles
+for insert
+to authenticated
+with check (user_id = auth.uid());
+
+drop policy if exists "users can update their player profile" on public.player_profiles;
+create policy "users can update their player profile"
+on public.player_profiles
+for update
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
 drop policy if exists "users can send friend requests" on public.friend_requests;
 create policy "users can send friend requests"
 on public.friend_requests
@@ -668,81 +725,5 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.feedback;
-exception when duplicate_object then null;
-end $$;
-
--- Player codes
--- Each account gets a unique human-readable SINK-XXXX code on signup.
-
-create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  player_code text not null unique,
-  created_at timestamptz not null default now()
-);
-
-alter table public.profiles enable row level security;
-
-drop policy if exists "users can view all profiles" on public.profiles;
-create policy "users can view all profiles"
-on public.profiles
-for select
-to authenticated
-using (true);
-
-drop policy if exists "users can insert their own profile" on public.profiles;
-create policy "users can insert their own profile"
-on public.profiles
-for insert
-to authenticated
-with check (id = auth.uid());
-
-create or replace function public.generate_player_code()
-returns text
-language plpgsql
-as $$
-declare
-  chars text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  code text;
-  attempts int := 0;
-begin
-  loop
-    code := 'SINK-'
-      || substr(chars, floor(random() * length(chars))::int + 1, 1)
-      || substr(chars, floor(random() * length(chars))::int + 1, 1)
-      || substr(chars, floor(random() * length(chars))::int + 1, 1)
-      || substr(chars, floor(random() * length(chars))::int + 1, 1);
-    exit when not exists (select 1 from public.profiles where player_code = code);
-    attempts := attempts + 1;
-    if attempts > 20 then
-      raise exception 'Could not generate a unique player code after 20 attempts';
-    end if;
-  end loop;
-  return code;
-end;
-$$;
-
-create or replace function public.create_player_profile()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles (id, player_code)
-  values (new.id, public.generate_player_code())
-  on conflict (id) do nothing;
-  return new;
-end;
-$$;
-
-drop trigger if exists create_player_profile_trigger on auth.users;
-create trigger create_player_profile_trigger
-after insert on auth.users
-for each row
-execute function public.create_player_profile();
-
-do $$
-begin
-  alter publication supabase_realtime add table public.profiles;
 exception when duplicate_object then null;
 end $$;

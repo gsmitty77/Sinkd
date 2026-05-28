@@ -74,7 +74,6 @@ let confirmingLeaveLeague = false;
 let editingLeagueGameId = "";
 let passwordRecoveryMode = false;
 let pendingLeagueInviteId = "";
-let playerCode = "";
 let showingLeagueQr = false;
 let leagueDetailTab = "games";
 let editingMyProfile = false;
@@ -199,7 +198,10 @@ const els = {
   cancelLeaveLeagueBtn: document.querySelector("#cancelLeaveLeagueBtn"),
   deleteLeagueBtn: document.querySelector("#deleteLeagueBtn"),
   leagueInviteForm: document.querySelector("#leagueInviteForm"),
-  leagueInviteCodeInput: document.querySelector("#leagueInviteCodeInput"),
+  leagueInviteLink: document.querySelector("#leagueInviteLink"),
+  copyLeagueInviteBtn: document.querySelector("#copyLeagueInviteBtn"),
+  toggleLeagueQrBtn: document.querySelector("#toggleLeagueQrBtn"),
+  leagueQrBox: document.querySelector("#leagueQrBox"),
   leagueMemberList: document.querySelector("#leagueMemberList"),
   regularGamesList: document.querySelector("#regularGamesList"),
   bigGamesList: document.querySelector("#bigGamesList"),
@@ -378,10 +380,10 @@ function setAuthView(user) {
     loadLeagueData();
     loadFriendData();
     loadNotificationData();
-    loadPlayerCode();
     consumePendingFriendInvite();
     ensureSavedPushSubscription();
     syncMyLeagueProfile();
+    savePlayerProfileLookup();
     subscribeToLeagueChanges();
     subscribeToFriendChanges();
     subscribeToNotificationChanges();
@@ -542,6 +544,26 @@ function profileStorageKey(user = currentUser) {
   return user?.id || user?.email?.toLowerCase() || "";
 }
 
+function normalizePlayerCode(code) {
+  const value = cleanText(code).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const body = value.startsWith("SINK") ? value.slice(4) : value;
+  return body ? `SINK-${body.slice(0, 4)}` : "";
+}
+
+function generatePlayerCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let suffix = "";
+  for (let i = 0; i < 4; i += 1) suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return `SINK-${suffix}`;
+}
+
+function ensureMyPlayerCode() {
+  state.myProfile ||= {};
+  if (!normalizePlayerCode(state.myProfile.playerCode)) state.myProfile.playerCode = generatePlayerCode();
+  else state.myProfile.playerCode = normalizePlayerCode(state.myProfile.playerCode);
+  return state.myProfile.playerCode;
+}
+
 function applyProfileForUser(user) {
   const key = profileStorageKey(user);
   state.accountProfiles ||= {};
@@ -551,8 +573,14 @@ function applyProfileForUser(user) {
   const legacyEmail = cleanText(legacyProfile?.email).toLowerCase();
   if (!state.myProfile && legacyProfile?.nickname && legacyEmail && legacyEmail === user?.email?.toLowerCase()) {
     state.myProfile = { ...legacyProfile };
+    ensureMyPlayerCode();
     state.accountProfiles[key] = { ...state.myProfile };
     state.legacyMyProfile = null;
+    saveState();
+  }
+  if (state.myProfile?.nickname && !state.myProfile.playerCode) {
+    ensureMyPlayerCode();
+    saveCurrentProfileForUser(user);
     saveState();
   }
 }
@@ -576,6 +604,7 @@ function hydrateMyProfileFromUser(user) {
   state.myProfile = {
     name: cleanText(cloudProfile.name || cloudProfile.nickname),
     nickname: cleanText(cloudProfile.nickname || cloudProfile.name),
+    playerCode: normalizePlayerCode(cloudProfile.playerCode) || generatePlayerCode(),
     preferredPartner: cleanText(cloudProfile.preferredPartner),
     cupColor: cloudProfile.cupColor || "#d71920",
     notes: cleanText(cloudProfile.notes),
@@ -588,12 +617,57 @@ function hydrateMyProfileFromUser(user) {
 
 async function saveMyProfileToCloud() {
   if (!authClient || !currentUser || !state.myProfile?.nickname) return;
+  ensureMyPlayerCode();
   const { error } = await authClient.auth.updateUser({
     data: {
       sinkd_profile: state.myProfile,
     },
   });
   if (error) console.warn(error);
+  await savePlayerProfileLookup();
+}
+
+async function savePlayerProfileLookup() {
+  if (!authClient || !currentUser || !state.myProfile?.nickname) return;
+  ensureMyPlayerCode();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const { error } = await authClient.from("player_profiles").upsert({
+      user_id: currentUser.id,
+      player_code: state.myProfile.playerCode,
+      nickname: myProfileNickname(),
+      cup_color: state.myProfile.cupColor || "#d71920",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+    if (!error) return;
+    if (error.code !== "23505") {
+      console.warn(error);
+      return;
+    }
+    state.myProfile.playerCode = generatePlayerCode();
+    saveCurrentProfileForUser();
+    saveState();
+  }
+}
+
+async function findPlayerByCode(code) {
+  if (!authClient) return null;
+  const playerCode = normalizePlayerCode(code);
+  if (!/^SINK-[A-Z0-9]{4}$/.test(playerCode)) {
+    alert("Enter a player code like SINK-1234.");
+    return null;
+  }
+  const { data, error } = await authClient
+    .from("player_profiles")
+    .select("user_id, player_code, nickname, cup_color")
+    .eq("player_code", playerCode)
+    .limit(1);
+  if (error) {
+    alert(error.message);
+    return null;
+  }
+  const player = data?.[0];
+  if (!player) alert("No player found with that code.");
+  return player || null;
 }
 
 async function signInWithEmail() {
@@ -770,6 +844,7 @@ function bindEvents() {
     state.myProfile = {
       name: nickname,
       nickname,
+      playerCode: normalizePlayerCode(state.myProfile?.playerCode) || generatePlayerCode(),
       preferredPartner: cleanText(form.get("preferredPartner")),
       cupColor: form.get("cupColor") || "#d71920",
       notes: cleanText(form.get("notes")),
@@ -876,7 +951,7 @@ function bindEvents() {
     await sendFriendRequest(new FormData(els.friendInviteForm));
   });
 
-  els.toggleFriendQrBtn.addEventListener("click", () => {
+  els.toggleFriendQrBtn?.addEventListener("click", () => {
     showingFriendQr = !showingFriendQr;
     renderFriendInviteTools();
   });
@@ -930,10 +1005,15 @@ function bindEvents() {
     await createCloudLeague(new FormData(els.leagueForm));
   });
 
-  els.leagueList.addEventListener("click", async (event) => {
-    const joinBtn = event.target.closest("[data-request-join-league]");
-    if (joinBtn) {
-      await requestJoinLeague(joinBtn.dataset.requestJoinLeague);
+  els.leagueList.addEventListener("click", (event) => {
+    const join = event.target.closest("[data-join-league]");
+    const request = event.target.closest("[data-request-league]");
+    if (join) {
+      joinOpenLeague(join.dataset.joinLeague);
+      return;
+    }
+    if (request) {
+      requestInviteOnlyLeague(request.dataset.requestLeague);
       return;
     }
     const button = event.target.closest("[data-open-league]");
@@ -1030,6 +1110,13 @@ function bindEvents() {
     await loadLeagueData();
   });
 
+  els.leagueChatList.addEventListener("click", async (event) => {
+    const approve = event.target.closest("[data-league-request-approve]");
+    const denyRequest = event.target.closest("[data-league-request-deny]");
+    if (approve) await approveLeagueJoinRequest(approve.dataset.leagueRequestApprove);
+    if (denyRequest) await removeCloudLeagueMember(denyRequest.dataset.leagueRequestDeny);
+  });
+
   els.leagueSettingsForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await updateCloudLeagueSettings(new FormData(els.leagueSettingsForm));
@@ -1070,6 +1157,15 @@ function bindEvents() {
   els.leagueInviteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await addCloudLeagueMember(new FormData(els.leagueInviteForm));
+  });
+
+  els.copyLeagueInviteBtn?.addEventListener("click", async () => {
+    await copyLeagueInviteLink();
+  });
+
+  els.toggleLeagueQrBtn?.addEventListener("click", () => {
+    showingLeagueQr = !showingLeagueQr;
+    renderLeagueInviteTools();
   });
 
   els.leaguePlayerStats.addEventListener("click", (event) => {
@@ -2031,8 +2127,14 @@ function activeLeague() {
 
 function leagueMembers(leagueId = activeLeagueId) {
   return leagueMemberCache
-    .filter((member) => member.league_id === leagueId)
+    .filter((member) => member.league_id === leagueId && member.role !== "pending")
     .sort((a, b) => roleRank(a.role) - roleRank(b.role) || a.display_name.localeCompare(b.display_name));
+}
+
+function leagueJoinRequests(leagueId = activeLeagueId) {
+  return leagueMemberCache
+    .filter((member) => member.league_id === leagueId && member.role === "pending")
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 }
 
 function leagueGames(leagueId = activeLeagueId) {
@@ -2067,8 +2169,13 @@ function leagueChatLastSeen(leagueId = activeLeagueId) {
 
 function rememberLeagueChatSeen(leagueId = activeLeagueId) {
   if (!leagueId) return;
-  const messages = leagueChatMessages(leagueId);
-  const latest = messages.at(-1)?.created_at || new Date().toISOString();
+  const dates = [
+    ...leagueChatMessages(leagueId).map((message) => message.created_at),
+    ...leagueJoinRequests(leagueId).map((request) => request.created_at),
+  ].filter(Boolean);
+  const latest = dates.length
+    ? new Date(Math.max(...dates.map((date) => new Date(date).getTime()))).toISOString()
+    : new Date().toISOString();
   try {
     localStorage.setItem(leagueChatSeenKey(leagueId), latest);
   } catch (error) {
@@ -2080,10 +2187,14 @@ function leagueChatUnreadCount(leagueId = activeLeagueId) {
   if (!leagueId || !myLeagueMember(leagueId)) return 0;
   const lastSeen = leagueChatLastSeen(leagueId);
   const lastSeenTime = lastSeen ? new Date(lastSeen).getTime() : 0;
-  return leagueChatMessages(leagueId).filter((message) => {
+  const messageCount = leagueChatMessages(leagueId).filter((message) => {
     if (message.user_id && message.user_id === currentUser?.id) return false;
     return new Date(message.created_at).getTime() > lastSeenTime;
   }).length;
+  const requestCount = canManageActiveLeague() && leagueId === activeLeagueId
+    ? leagueJoinRequests(leagueId).filter((request) => new Date(request.created_at).getTime() > lastSeenTime).length
+    : 0;
+  return messageCount + requestCount;
 }
 
 function activeLeagueTournament() {
@@ -2114,7 +2225,11 @@ function leagueStatGames(leagueId = activeLeagueId) {
 }
 
 function myLeagueMember(leagueId = activeLeagueId) {
-  return leagueMemberCache.find((member) => member.league_id === leagueId && member.user_id === currentUser?.id);
+  return leagueMemberCache.find((member) => member.league_id === leagueId && member.user_id === currentUser?.id && member.role !== "pending");
+}
+
+function myLeagueJoinRequest(leagueId) {
+  return leagueMemberCache.find((member) => member.league_id === leagueId && member.user_id === currentUser?.id && member.role === "pending");
 }
 
 function canManageActiveLeague() {
@@ -2134,7 +2249,7 @@ function isActiveLeagueOwner() {
 }
 
 function roleRank(role) {
-  return role === "owner" ? 0 : role === "co_leader" ? 1 : role === "ref" ? 2 : 3;
+  return role === "owner" ? 0 : role === "co_leader" ? 1 : role === "ref" ? 2 : role === "pending" ? 4 : 3;
 }
 
 function friendInviteLink() {
@@ -2147,32 +2262,7 @@ function friendInviteLink() {
 }
 
 function displayRole(role) {
-  return role === "co_leader" ? "Co-Leader" : role === "owner" ? "Owner" : role === "ref" ? "Ref" : "Member";
-}
-
-async function loadPlayerCode() {
-  if (!authClient || !currentUser) { playerCode = ""; return; }
-  const { data, error } = await authClient.from("profiles").select("player_code").eq("id", currentUser.id).single();
-  if (error || !data) {
-    // Profile row might not exist yet (existing accounts pre-trigger). Create it.
-    const { data: inserted } = await authClient.from("profiles").insert({ id: currentUser.id, player_code: await generatePlayerCodeClient() }).select("player_code").single();
-    playerCode = inserted?.player_code || "";
-  } else {
-    playerCode = data.player_code || "";
-  }
-  renderProfiles();
-  renderLeagueMembers();
-}
-
-async function generatePlayerCodeClient() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const rand = () => chars[Math.floor(Math.random() * chars.length)];
-  for (let i = 0; i < 20; i++) {
-    const code = `SINK-${rand()}${rand()}${rand()}${rand()}`;
-    const { data } = await authClient.from("profiles").select("id").eq("player_code", code).maybeSingle();
-    if (!data) return code;
-  }
-  return `SINK-${rand()}${rand()}${rand()}${rand()}`;
+  return role === "co_leader" ? "Co-Leader" : role === "owner" ? "Owner" : role === "ref" ? "Ref" : role === "pending" ? "Pending" : "Member";
 }
 
 async function loadLeagueData() {
@@ -2188,15 +2278,18 @@ async function loadLeagueData() {
     return;
   }
 
-  const acceptedMemberships = (memberships || []).filter((member) => member.user_id === currentUser.id);
+  const acceptedMemberships = (memberships || []).filter((member) => member.user_id === currentUser.id && member.role !== "pending");
   const pendingInviteLeagueIds = (memberships || [])
     .filter((member) => !member.user_id && member.email?.toLowerCase() === email.toLowerCase())
     .map((member) => member.league_id);
+  const pendingRequestLeagueIds = (memberships || [])
+    .filter((member) => member.user_id === currentUser.id && member.role === "pending")
+    .map((member) => member.league_id);
   const memberLeagueIds = [...new Set(acceptedMemberships.map((member) => member.league_id))];
-  const { data: openLeagues, error: openLeagueError } = await authClient.from("leagues").select("*").eq("privacy", "open");
+  const { data: openLeagues, error: openLeagueError } = await authClient.from("leagues").select("*");
   if (openLeagueError) console.warn(openLeagueError);
   const openLeagueIds = (openLeagues || []).map((league) => league.id);
-  const leagueIds = [...new Set([...memberLeagueIds, ...pendingInviteLeagueIds, ...openLeagueIds])];
+  const leagueIds = [...new Set([...memberLeagueIds, ...pendingInviteLeagueIds, ...pendingRequestLeagueIds, ...openLeagueIds])];
   if (!leagueIds.length) {
     leagueCache = [];
     leagueMemberCache = [];
@@ -2737,37 +2830,15 @@ function saveDismissedActionNotifications(ids) {
 
 async function sendFriendRequest(form) {
   if (!authClient || !currentUser) return;
-  const recipientEmail = cleanText(form.get("email")).toLowerCase();
-  if (!recipientEmail) return;
-  if (recipientEmail === currentUser.email?.toLowerCase()) {
+  await savePlayerProfileLookup();
+  const player = await findPlayerByCode(form.get("playerCode"));
+  if (!player) return;
+  if (player.user_id === currentUser.id) {
     alert("You cannot invite yourself.");
     return;
   }
-  if (hasFriendConnectionByEmail(recipientEmail)) {
-    alert("That player already has a friend request or is already your friend.");
-    return;
-  }
-
-  const { error } = await authClient.from("friend_requests").insert({
-    requester_id: currentUser.id,
-    requester_email: currentUser.email,
-    requester_name: currentPublicName(),
-    recipient_email: recipientEmail,
-    status: "pending",
-  });
-  if (error) {
-    alert(error.message);
-    return;
-  }
+  await sendFriendRequestByUserId(player.user_id, player.nickname || player.player_code || "Friend");
   els.friendInviteForm.reset();
-  await createNotification({
-    recipientEmail,
-    type: "friend_request",
-    title: "New friend request",
-    message: `${currentPublicName()} sent you a friend request.`,
-    linkTarget: "friends",
-  });
-  await loadFriendData();
 }
 
 async function sendFriendRequestByUserId(recipientId, recipientName = "Friend") {
@@ -2863,7 +2934,10 @@ async function inviteFriendToLeague(requestId) {
   if (!authClient || !currentUser) return;
   const request = friendRequestCache.find((item) => item.id === requestId);
   const friend = request ? friendInfo(request) : null;
-  if (!friend?.email) return;
+  if (!friend?.userId) {
+    alert("That friend needs a player code before you can invite them to a league.");
+    return;
+  }
 
   const leagues = leagueCache.filter((league) => myLeagueMember(league.id));
   if (!leagues.length) {
@@ -2877,24 +2951,21 @@ async function inviteFriendToLeague(requestId) {
       : chooseLeagueForInvite(leagues);
   if (!league) return;
 
-  if (leagueMembers(league.id).some((member) => member.email?.toLowerCase() === friend.email.toLowerCase())) {
+  if (leagueMembers(league.id).some((member) => member.user_id === friend.userId)) {
     alert(`${friend.name} is already in ${league.name}.`);
     return;
   }
 
-  const { error } = await authClient.from("league_members").insert({
-    league_id: league.id,
-    email: friend.email.toLowerCase(),
-    display_name: friend.name,
-    nickname: "",
-    role: "member",
+  const { error } = await authClient.rpc("invite_player_to_league", {
+    target_league_id: league.id,
+    target_user_id: friend.userId,
   });
   if (error) {
     alert(error.message);
     return;
   }
   await createNotification({
-    recipientEmail: friend.email,
+    recipientId: friend.userId,
     leagueId: league.id,
     type: "league_invite",
     title: "League invite",
@@ -2941,36 +3012,6 @@ async function denyLeagueInvite(memberId) {
   const { error } = await authClient.from("league_members").delete().eq("id", memberId);
   if (error) alert(error.message);
   await loadLeagueData();
-}
-
-async function requestJoinLeague(leagueId) {
-  if (!authClient || !currentUser) return;
-  const league = leagueCache.find((l) => l.id === leagueId);
-  if (!league) return;
-  if (myLeagueMember(leagueId)) {
-    alert("You're already in this league.");
-    return;
-  }
-  const name = myProfileNickname() || currentUser.email?.split("@")[0] || "A player";
-  const chatMsg = `${name} requested to join the league.`;
-  await createLeagueChatMessage(leagueId, chatMsg, "system");
-  const managers = leagueMemberCache.filter(
-    (member) => member.league_id === leagueId && ["owner", "co_leader"].includes(member.role) && (member.user_id || member.email),
-  );
-  await Promise.all(
-    managers.map((manager) =>
-      createNotification({
-        recipientId: manager.user_id || null,
-        recipientEmail: manager.email || "",
-        leagueId,
-        type: "league_invite",
-        title: "Join Request",
-        message: `${name} wants to join ${league.name}. Go to the league's Invite tab to add them.`,
-        linkTarget: "leagues",
-      }),
-    ),
-  );
-  alert(`Request sent to the ${league.name} managers.`);
 }
 
 async function leaveCloudLeague() {
@@ -3031,6 +3072,93 @@ async function createCloudLeague(form) {
   openLeagueDetails(leagueId);
 }
 
+async function joinOpenLeague(leagueId) {
+  if (!authClient || !currentUser) return;
+  const league = leagueCache.find((item) => item.id === leagueId);
+  if (!league) return;
+  if (myLeagueMember(leagueId)) {
+    openLeagueDetails(leagueId);
+    return;
+  }
+  if (leagueMembers(leagueId).length >= 50) {
+    alert("This league is full. Leagues are capped at 50 members.");
+    return;
+  }
+  if (league.privacy !== "open") {
+    await requestInviteOnlyLeague(leagueId);
+    return;
+  }
+
+  const existingInvite = leagueMemberCache.find(
+    (member) => member.league_id === leagueId && !member.user_id && member.email?.toLowerCase() === currentUser.email?.toLowerCase(),
+  );
+  if (existingInvite) {
+    await acceptLeagueInvite(existingInvite.id);
+    return;
+  }
+
+  const nickname = myProfileNickname() || currentPublicName();
+  const { error } = await authClient.from("league_members").insert({
+    league_id: leagueId,
+    user_id: currentUser.id,
+    email: currentUser.email,
+    display_name: nickname,
+    nickname,
+    cup_color: state.myProfile?.cupColor || "#d71920",
+    role: "member",
+  });
+  if (error) {
+    alert(error.code === "23505" ? "You are already connected to this league." : error.message);
+    return;
+  }
+  await createLeagueChatMessage(leagueId, `${nickname || "A player"} joined the league.`, "system");
+  activeLeagueId = leagueId;
+  await loadLeagueData();
+  openLeagueDetails(leagueId);
+}
+
+async function requestInviteOnlyLeague(leagueId) {
+  if (!authClient || !currentUser) return;
+  const league = leagueCache.find((item) => item.id === leagueId);
+  if (!league) return;
+  if (myLeagueMember(leagueId)) {
+    openLeagueDetails(leagueId);
+    return;
+  }
+  if (myLeagueJoinRequest(leagueId)) {
+    alert("Your request is already pending.");
+    return;
+  }
+  if (leagueMembers(leagueId).length >= 50) {
+    alert("This league is full. Leagues are capped at 50 members.");
+    return;
+  }
+
+  const existingInvite = leagueMemberCache.find(
+    (member) => member.league_id === leagueId && !member.user_id && member.email?.toLowerCase() === currentUser.email?.toLowerCase(),
+  );
+  if (existingInvite) {
+    alert("You already have an invite for this league in Notifications.");
+    return;
+  }
+
+  const nickname = myProfileNickname() || currentPublicName();
+  const { error } = await authClient.from("league_members").insert({
+    league_id: leagueId,
+    user_id: currentUser.id,
+    email: currentUser.email,
+    display_name: nickname,
+    nickname,
+    cup_color: state.myProfile?.cupColor || "#d71920",
+    role: "pending",
+  });
+  if (error) {
+    alert(error.code === "23505" ? "Your request is already pending." : error.message);
+    return;
+  }
+  await loadLeagueData();
+}
+
 async function updateCloudLeagueSettings(form) {
   if (!canManageActiveLeague()) return;
   const leagueName = cleanText(form.get("name")) || "New League";
@@ -3079,52 +3207,34 @@ async function addCloudLeagueMember(form) {
     return;
   }
 
-  const code = cleanText(form.get("playerCode")).toUpperCase();
-  if (!code.startsWith("SINK-") || code.length !== 9) {
-    alert("Enter a valid player code (e.g. SINK-AB3X).");
-    return;
-  }
-
-  // Look up the player by code
-  const { data: profile, error: lookupError } = await authClient
-    .from("profiles")
-    .select("id")
-    .eq("player_code", code)
-    .single();
-
-  if (lookupError || !profile) {
-    alert("No player found with that code. Make sure they typed it correctly.");
-    return;
-  }
-
-  if (profile.id === currentUser?.id) {
+  await savePlayerProfileLookup();
+  const player = await findPlayerByCode(form.get("playerCode"));
+  if (!player) return;
+  if (player.user_id === currentUser?.id) {
     alert("You are already in this league.");
     return;
   }
-
-  // Get their email from auth via their user_id already in league_members, or use id
-  if (members.some((member) => member.user_id === profile.id)) {
-    alert("That player is already in this league.");
+  if (members.some((member) => member.user_id === player.user_id)) {
+    alert("That member is already in this league.");
     return;
   }
 
-  const { error } = await authClient.from("league_members").insert({
-    league_id: activeLeagueId,
-    user_id: profile.id,
-    display_name: "Invited Player",
-    nickname: "",
-    role: "member",
+  const { error } = await authClient.rpc("invite_player_to_league", {
+    target_league_id: activeLeagueId,
+    target_user_id: player.user_id,
   });
-  if (error) { alert(error.message); return; }
+  if (error) alert(error.message);
   els.leagueInviteForm.reset();
-  await createNotification({
-    recipientId: profile.id,
-    leagueId: activeLeagueId,
-    type: "league_invite",
-    title: "League invite",
-    message: `${currentPublicName()} invited you to ${activeLeague()?.name || "a league"}.`,
-    linkTarget: "friends",
-  });
+  if (!error) {
+    await createNotification({
+      recipientId: player.user_id,
+      leagueId: activeLeagueId,
+      type: "league_invite",
+      title: "League invite",
+      message: `${currentPublicName()} invited you to ${activeLeague()?.name || "a league"}.`,
+      linkTarget: "friends",
+    });
+  }
   await loadLeagueData();
 }
 
@@ -3205,6 +3315,27 @@ async function updateCloudLeagueMemberRole(memberId, role) {
   if (!isActiveLeagueOwner()) return;
   const { error } = await authClient.from("league_members").update({ role }).eq("id", memberId).neq("role", "owner");
   if (error) alert(error.message);
+  await loadLeagueData();
+}
+
+async function approveLeagueJoinRequest(memberId) {
+  if (!canManageActiveLeague()) return;
+  const request = leagueMemberCache.find((member) => member.id === memberId && member.role === "pending");
+  if (!request) return;
+  const { error } = await authClient.from("league_members").update({ role: "member" }).eq("id", memberId).eq("role", "pending");
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  await createNotification({
+    recipientId: request.user_id,
+    leagueId: request.league_id,
+    type: "league_invite",
+    title: "League request approved",
+    message: `You're in ${activeLeague()?.name || "the league"}.`,
+    linkTarget: "leagues",
+  });
+  await createLeagueChatMessage(request.league_id, `${request.nickname || request.display_name || "A player"} was accepted into the league.`, "system");
   await loadLeagueData();
 }
 
@@ -4024,6 +4155,7 @@ function friendInfo(request) {
   return {
     name: isSender ? cleanText(request.recipient_name) || "Friend" : cleanText(request.requester_name) || "Friend",
     email: isSender ? request.recipient_email : request.requester_email,
+    userId: isSender ? request.recipient_id : request.requester_id,
   };
 }
 
@@ -4035,19 +4167,27 @@ function leagueCard(league) {
   const members = leagueMembers(league.id);
   const role = myLeagueMember(league.id)?.role || "";
   const isMember = Boolean(role);
-  const canRequestJoin = !isMember && league.privacy === "open" && currentUser;
+  const requested = Boolean(myLeagueJoinRequest(league.id));
+  const isFull = members.length >= 50;
+  const action = isMember
+    ? `<button class="small-button secondary-button league-card-action" type="button" data-open-league="${league.id}">Open</button>`
+    : requested
+      ? `<button class="small-button secondary-button league-card-action" type="button" disabled>Requested</button>`
+      : league.privacy === "open"
+        ? `<button class="small-button league-card-action" type="button" data-join-league="${league.id}" ${isFull ? "disabled" : ""}>${isFull ? "Full" : "Join"}</button>`
+        : `<button class="small-button secondary-button league-card-action" type="button" data-request-league="${league.id}" ${isFull ? "disabled" : ""}>${isFull ? "Full" : "Request to Join"}</button>`;
   return `
-    <div class="league-card-wrap">
-      <button class="league-card-button" type="button" data-open-league="${league.id}">
+    <article class="league-card-button">
+      <button class="league-card-main" type="button" data-open-league="${league.id}">
         ${cubeBadge(league)}
         <span>
           <strong>${escapeHtml(league.name)}</strong>
           <small>${escapeHtml(league.description || "No description")} </small>
-          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/50` : "Join to view data"}${role ? ` - ${displayRole(role)}` : ""}</em>
+          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/50` : requested ? "Request pending" : "Join to view data"}${role ? ` - ${displayRole(role)}` : ""}</em>
         </span>
       </button>
-      ${canRequestJoin ? `<button class="small-button secondary-button league-join-request-btn" type="button" data-request-join-league="${league.id}">Request to Join</button>` : ""}
-    </div>
+      ${action}
+    </article>
   `;
 }
 
@@ -4331,8 +4471,13 @@ function renderLeagueChat() {
   const member = myLeagueMember();
   els.leagueChatForm.classList.toggle("hidden", !member);
   const messages = leagueChatMessages();
-  els.leagueChatList.innerHTML = messages.length
-    ? messages.map(leagueChatRow).join("")
+  const requests = member ? leagueJoinRequests().map((request) => ({ ...request, chatItemType: "join_request" })) : [];
+  const rows = [
+    ...messages.map((message) => ({ ...message, chatItemType: "message" })),
+    ...requests,
+  ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  els.leagueChatList.innerHTML = rows.length
+    ? rows.map((item) => (item.chatItemType === "join_request" ? leagueJoinRequestChatRow(item) : leagueChatRow(item))).join("")
     : '<p class="empty">No league chat yet.</p>';
   if (leagueDetailTab === "chat") rememberLeagueChatSeen();
 }
@@ -4346,13 +4491,34 @@ function renderLeagueChatBadge() {
 
 function leagueChatRow(message) {
   const isSystem = message.type !== "user";
+  const isSent = !isSystem && message.user_id === currentUser?.id;
+  const directionClass = isSystem ? "system" : isSent ? "sent" : "received";
   return `
-    <article class="league-chat-row ${isSystem ? "system" : ""}">
+    <article class="league-chat-row ${directionClass}">
       <div>
         <strong>${escapeHtml(isSystem ? "League Update" : message.author_name || "A player")}</strong>
         <span>${formatDate(message.created_at)}</span>
       </div>
       <p>${escapeHtml(message.message)}</p>
+    </article>
+  `;
+}
+
+function leagueJoinRequestChatRow(member) {
+  const actions = canManageActiveLeague()
+    ? `<div class="member-actions">
+        <button class="text-button" type="button" data-league-request-approve="${member.id}">Approve</button>
+        <button class="text-button danger-text" type="button" data-league-request-deny="${member.id}">Deny</button>
+      </div>`
+    : "";
+  return `
+    <article class="league-chat-row system join-request-chat-row">
+      <div>
+        <strong>Join Request</strong>
+        <span>${formatDate(member.created_at)}</span>
+      </div>
+      <p>${escapeHtml(member.nickname || member.display_name || "A player")} wants to join this league.</p>
+      ${actions}
     </article>
   `;
 }
@@ -4386,17 +4552,51 @@ function renderLeagueMembers() {
   const isOwner = isActiveLeagueOwner();
   els.leagueInviteForm.classList.toggle("hidden", !canInvite);
   const stats = computeLeagueStats();
-  els.leagueMemberList.innerHTML = leagueMembers()
+  const memberRows = leagueMembers()
     .map((member) => ({ ...member, stats: stats.players[member.display_name.toLowerCase()] || emptyBucket() }))
     .sort((a, b) => b.stats.wins - a.stats.wins || winPercent(b.stats) - winPercent(a.stats) || b.stats.sinks - a.stats.sinks)
     .map((member) => leagueMemberRow(member, canManage, isOwner))
     .join("");
+  els.leagueMemberList.innerHTML = memberRows || '<p class="empty">No league members yet.</p>';
 }
 
 function renderLeagueInviteTools() {
   const league = activeLeague();
   if (!league || !canInviteActiveLeague()) return;
-  // Nothing dynamic to render now — invite panel is static HTML with the code input
+  if (!els.leagueInviteLink || !els.toggleLeagueQrBtn || !els.leagueQrBox) return;
+  const link = leagueInviteLink(league.id);
+  els.leagueInviteLink.value = link;
+  els.toggleLeagueQrBtn.textContent = showingLeagueQr ? "Hide QR Code" : "Show QR Code";
+  els.leagueQrBox.classList.toggle("hidden", !showingLeagueQr);
+  els.leagueQrBox.innerHTML = showingLeagueQr
+    ? `<img src="${qrCodeUrl(link)}" alt="QR code for ${escapeHtml(league.name)} invite" /><span>Scan to join ${escapeHtml(league.name)}</span>`
+    : "";
+}
+
+function leagueInviteLink(leagueId) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("leagueInvite", leagueId);
+  return url.toString();
+}
+
+function qrCodeUrl(value) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=12&data=${encodeURIComponent(value)}`;
+}
+
+async function copyLeagueInviteLink() {
+  const link = els.leagueInviteLink.value || leagueInviteLink(activeLeagueId);
+  try {
+    await navigator.clipboard.writeText(link);
+    els.copyLeagueInviteBtn.textContent = "Copied";
+    window.setTimeout(() => {
+      els.copyLeagueInviteBtn.textContent = "Copy";
+    }, 1400);
+  } catch {
+    els.leagueInviteLink.select();
+    document.execCommand("copy");
+  }
 }
 
 function cubeBadge(league = {}) {
@@ -4459,12 +4659,11 @@ function leagueMemberRow(member, canManage, isOwner) {
   const canDemote = canManage && ["co_leader", "ref"].includes(member.role);
   const canTransfer = isOwner && member.role === "co_leader" && member.user_id;
   const canRemove = canManage && member.role !== "owner";
-  const isMe = member.user_id === currentUser?.id;
   return `
     <article class="league-member-row">
       <div>
         <strong>${escapeHtml(member.display_name)}</strong>
-        <span>${member.nickname ? `${escapeHtml(member.nickname)} - ` : ""}${displayRole(member.role)} - ${member.stats?.wins || 0}-${member.stats?.losses || 0}${isMe && playerCode ? ` · ${escapeHtml(playerCode)}` : ""}</span>
+        <span>${member.nickname ? `${escapeHtml(member.nickname)} - ` : ""}${displayRole(member.role)} - ${member.stats?.wins || 0}-${member.stats?.losses || 0}</span>
       </div>
       <div class="member-actions">
         ${canPromote ? `<button class="text-button" type="button" data-league-promote="${member.id}">Promote</button>` : ""}
@@ -4797,6 +4996,7 @@ function renderProfiles() {
   }
 
   const personalStats = computeMyLifetimeStats(nickname);
+  const playerCode = ensureMyPlayerCode();
   els.profileList.innerHTML = `
     <article class="profile-card">
       <div class="profile-identity">
@@ -4804,7 +5004,7 @@ function renderProfiles() {
         <div>
           <strong>${escapeHtml(nickname)}</strong>
           <span>${profile.preferredPartner ? `Preferred partner: ${escapeHtml(profile.preferredPartner)}` : "Preferred partner: -"}</span>
-          ${playerCode ? `<span class="player-code-display">Player Code: <strong>${escapeHtml(playerCode)}</strong></span>` : ""}
+          <span class="player-code">${escapeHtml(playerCode)}</span>
         </div>
       </div>
       ${profile.notes ? `<p>${escapeHtml(profile.notes)}</p>` : ""}
