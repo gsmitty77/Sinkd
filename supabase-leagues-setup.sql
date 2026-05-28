@@ -670,3 +670,79 @@ begin
   alter publication supabase_realtime add table public.feedback;
 exception when duplicate_object then null;
 end $$;
+
+-- Player codes
+-- Each account gets a unique human-readable SINK-XXXX code on signup.
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  player_code text not null unique,
+  created_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+drop policy if exists "users can view all profiles" on public.profiles;
+create policy "users can view all profiles"
+on public.profiles
+for select
+to authenticated
+using (true);
+
+drop policy if exists "users can insert their own profile" on public.profiles;
+create policy "users can insert their own profile"
+on public.profiles
+for insert
+to authenticated
+with check (id = auth.uid());
+
+create or replace function public.generate_player_code()
+returns text
+language plpgsql
+as $$
+declare
+  chars text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  code text;
+  attempts int := 0;
+begin
+  loop
+    code := 'SINK-'
+      || substr(chars, floor(random() * length(chars))::int + 1, 1)
+      || substr(chars, floor(random() * length(chars))::int + 1, 1)
+      || substr(chars, floor(random() * length(chars))::int + 1, 1)
+      || substr(chars, floor(random() * length(chars))::int + 1, 1);
+    exit when not exists (select 1 from public.profiles where player_code = code);
+    attempts := attempts + 1;
+    if attempts > 20 then
+      raise exception 'Could not generate a unique player code after 20 attempts';
+    end if;
+  end loop;
+  return code;
+end;
+$$;
+
+create or replace function public.create_player_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, player_code)
+  values (new.id, public.generate_player_code())
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists create_player_profile_trigger on auth.users;
+create trigger create_player_profile_trigger
+after insert on auth.users
+for each row
+execute function public.create_player_profile();
+
+do $$
+begin
+  alter publication supabase_realtime add table public.profiles;
+exception when duplicate_object then null;
+end $$;

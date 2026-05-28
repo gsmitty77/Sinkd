@@ -512,18 +512,13 @@
 
           <section class="league-detail-panel" id="leagueInvitePanel">
             <section class="panel invite-share-card">
-              <h3>Share League</h3>
-              <p>Send this to a friend so they can join from their phone.</p>
-              <div class="invite-link-box">
-                <input id="leagueInviteLink" type="text" readonly />
-                <button class="small-button secondary-button" id="copyLeagueInviteBtn" type="button">Copy</button>
-              </div>
-              <button class="small-button secondary-button" id="toggleLeagueQrBtn" type="button">Show QR Code</button>
-              <div class="league-qr-box hidden" id="leagueQrBox"></div>
+              <h3>Your Player Code</h3>
+              <p>Share your code with friends so they can invite you, or ask for theirs to invite them below.</p>
+              <p>Find your code in <strong>My Profile</strong>.</p>
             </section>
             <form class="panel" id="leagueInviteForm">
-              <h3>Invite Members</h3>
-              <label>Email <input name="email" type="email" placeholder="friend@email.com" required /></label>
+              <h3>Invite by Player Code</h3>
+              <label>Player Code <input name="playerCode" type="text" placeholder="SINK-XXXX" maxlength="9" autocomplete="off" required /></label>
               <button class="primary-button" type="submit">Send Invite</button>
             </form>
             <section class="panel">

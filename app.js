@@ -74,6 +74,7 @@ let confirmingLeaveLeague = false;
 let editingLeagueGameId = "";
 let passwordRecoveryMode = false;
 let pendingLeagueInviteId = "";
+let playerCode = "";
 let showingLeagueQr = false;
 let leagueDetailTab = "games";
 let editingMyProfile = false;
@@ -198,10 +199,7 @@ const els = {
   cancelLeaveLeagueBtn: document.querySelector("#cancelLeaveLeagueBtn"),
   deleteLeagueBtn: document.querySelector("#deleteLeagueBtn"),
   leagueInviteForm: document.querySelector("#leagueInviteForm"),
-  leagueInviteLink: document.querySelector("#leagueInviteLink"),
-  copyLeagueInviteBtn: document.querySelector("#copyLeagueInviteBtn"),
-  toggleLeagueQrBtn: document.querySelector("#toggleLeagueQrBtn"),
-  leagueQrBox: document.querySelector("#leagueQrBox"),
+  leagueInviteCodeInput: document.querySelector("#leagueInviteCodeInput"),
   leagueMemberList: document.querySelector("#leagueMemberList"),
   regularGamesList: document.querySelector("#regularGamesList"),
   bigGamesList: document.querySelector("#bigGamesList"),
@@ -380,6 +378,7 @@ function setAuthView(user) {
     loadLeagueData();
     loadFriendData();
     loadNotificationData();
+    loadPlayerCode();
     consumePendingFriendInvite();
     ensureSavedPushSubscription();
     syncMyLeagueProfile();
@@ -931,7 +930,12 @@ function bindEvents() {
     await createCloudLeague(new FormData(els.leagueForm));
   });
 
-  els.leagueList.addEventListener("click", (event) => {
+  els.leagueList.addEventListener("click", async (event) => {
+    const joinBtn = event.target.closest("[data-request-join-league]");
+    if (joinBtn) {
+      await requestJoinLeague(joinBtn.dataset.requestJoinLeague);
+      return;
+    }
     const button = event.target.closest("[data-open-league]");
     if (!button) return;
     openLeagueDetails(button.dataset.openLeague);
@@ -1066,15 +1070,6 @@ function bindEvents() {
   els.leagueInviteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await addCloudLeagueMember(new FormData(els.leagueInviteForm));
-  });
-
-  els.copyLeagueInviteBtn.addEventListener("click", async () => {
-    await copyLeagueInviteLink();
-  });
-
-  els.toggleLeagueQrBtn.addEventListener("click", () => {
-    showingLeagueQr = !showingLeagueQr;
-    renderLeagueInviteTools();
   });
 
   els.leaguePlayerStats.addEventListener("click", (event) => {
@@ -2155,6 +2150,31 @@ function displayRole(role) {
   return role === "co_leader" ? "Co-Leader" : role === "owner" ? "Owner" : role === "ref" ? "Ref" : "Member";
 }
 
+async function loadPlayerCode() {
+  if (!authClient || !currentUser) { playerCode = ""; return; }
+  const { data, error } = await authClient.from("profiles").select("player_code").eq("id", currentUser.id).single();
+  if (error || !data) {
+    // Profile row might not exist yet (existing accounts pre-trigger). Create it.
+    const { data: inserted } = await authClient.from("profiles").insert({ id: currentUser.id, player_code: await generatePlayerCodeClient() }).select("player_code").single();
+    playerCode = inserted?.player_code || "";
+  } else {
+    playerCode = data.player_code || "";
+  }
+  renderProfiles();
+  renderLeagueMembers();
+}
+
+async function generatePlayerCodeClient() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const rand = () => chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 20; i++) {
+    const code = `SINK-${rand()}${rand()}${rand()}${rand()}`;
+    const { data } = await authClient.from("profiles").select("id").eq("player_code", code).maybeSingle();
+    if (!data) return code;
+  }
+  return `SINK-${rand()}${rand()}${rand()}${rand()}`;
+}
+
 async function loadLeagueData() {
   if (!authClient || !currentUser) return;
   const email = currentUser.email || "";
@@ -2923,6 +2943,36 @@ async function denyLeagueInvite(memberId) {
   await loadLeagueData();
 }
 
+async function requestJoinLeague(leagueId) {
+  if (!authClient || !currentUser) return;
+  const league = leagueCache.find((l) => l.id === leagueId);
+  if (!league) return;
+  if (myLeagueMember(leagueId)) {
+    alert("You're already in this league.");
+    return;
+  }
+  const name = myProfileNickname() || currentUser.email?.split("@")[0] || "A player";
+  const chatMsg = `${name} requested to join the league.`;
+  await createLeagueChatMessage(leagueId, chatMsg, "system");
+  const managers = leagueMemberCache.filter(
+    (member) => member.league_id === leagueId && ["owner", "co_leader"].includes(member.role) && (member.user_id || member.email),
+  );
+  await Promise.all(
+    managers.map((manager) =>
+      createNotification({
+        recipientId: manager.user_id || null,
+        recipientEmail: manager.email || "",
+        leagueId,
+        type: "league_invite",
+        title: "Join Request",
+        message: `${name} wants to join ${league.name}. Go to the league's Invite tab to add them.`,
+        linkTarget: "leagues",
+      }),
+    ),
+  );
+  alert(`Request sent to the ${league.name} managers.`);
+}
+
 async function leaveCloudLeague() {
   const member = myLeagueMember();
   if (!authClient || !member || member.role === "owner") return;
@@ -3029,36 +3079,52 @@ async function addCloudLeagueMember(form) {
     return;
   }
 
-  const email = cleanText(form.get("email")).toLowerCase();
-  if (email === currentUser?.email?.toLowerCase()) {
+  const code = cleanText(form.get("playerCode")).toUpperCase();
+  if (!code.startsWith("SINK-") || code.length !== 9) {
+    alert("Enter a valid player code (e.g. SINK-AB3X).");
+    return;
+  }
+
+  // Look up the player by code
+  const { data: profile, error: lookupError } = await authClient
+    .from("profiles")
+    .select("id")
+    .eq("player_code", code)
+    .single();
+
+  if (lookupError || !profile) {
+    alert("No player found with that code. Make sure they typed it correctly.");
+    return;
+  }
+
+  if (profile.id === currentUser?.id) {
     alert("You are already in this league.");
     return;
   }
-  const displayName = "Invited Player";
-  if (members.some((member) => member.email?.toLowerCase() === email)) {
-    alert("That member is already in this league.");
+
+  // Get their email from auth via their user_id already in league_members, or use id
+  if (members.some((member) => member.user_id === profile.id)) {
+    alert("That player is already in this league.");
     return;
   }
 
   const { error } = await authClient.from("league_members").insert({
     league_id: activeLeagueId,
-    email,
-    display_name: displayName,
+    user_id: profile.id,
+    display_name: "Invited Player",
     nickname: "",
     role: "member",
   });
-  if (error) alert(error.message);
+  if (error) { alert(error.message); return; }
   els.leagueInviteForm.reset();
-  if (!error) {
-    await createNotification({
-      recipientEmail: email,
-      leagueId: activeLeagueId,
-      type: "league_invite",
-      title: "League invite",
-      message: `${currentPublicName()} invited you to ${activeLeague()?.name || "a league"}.`,
-      linkTarget: "friends",
-    });
-  }
+  await createNotification({
+    recipientId: profile.id,
+    leagueId: activeLeagueId,
+    type: "league_invite",
+    title: "League invite",
+    message: `${currentPublicName()} invited you to ${activeLeague()?.name || "a league"}.`,
+    linkTarget: "friends",
+  });
   await loadLeagueData();
 }
 
@@ -3969,15 +4035,19 @@ function leagueCard(league) {
   const members = leagueMembers(league.id);
   const role = myLeagueMember(league.id)?.role || "";
   const isMember = Boolean(role);
+  const canRequestJoin = !isMember && league.privacy === "open" && currentUser;
   return `
-    <button class="league-card-button" type="button" data-open-league="${league.id}">
-      ${cubeBadge(league)}
-      <span>
-        <strong>${escapeHtml(league.name)}</strong>
-        <small>${escapeHtml(league.description || "No description")} </small>
-        <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/50` : "Join to view data"}${role ? ` - ${displayRole(role)}` : ""}</em>
-      </span>
-    </button>
+    <div class="league-card-wrap">
+      <button class="league-card-button" type="button" data-open-league="${league.id}">
+        ${cubeBadge(league)}
+        <span>
+          <strong>${escapeHtml(league.name)}</strong>
+          <small>${escapeHtml(league.description || "No description")} </small>
+          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/50` : "Join to view data"}${role ? ` - ${displayRole(role)}` : ""}</em>
+        </span>
+      </button>
+      ${canRequestJoin ? `<button class="small-button secondary-button league-join-request-btn" type="button" data-request-join-league="${league.id}">Request to Join</button>` : ""}
+    </div>
   `;
 }
 
@@ -4326,39 +4396,7 @@ function renderLeagueMembers() {
 function renderLeagueInviteTools() {
   const league = activeLeague();
   if (!league || !canInviteActiveLeague()) return;
-  const link = leagueInviteLink(league.id);
-  els.leagueInviteLink.value = link;
-  els.toggleLeagueQrBtn.textContent = showingLeagueQr ? "Hide QR Code" : "Show QR Code";
-  els.leagueQrBox.classList.toggle("hidden", !showingLeagueQr);
-  els.leagueQrBox.innerHTML = showingLeagueQr
-    ? `<img src="${qrCodeUrl(link)}" alt="QR code for ${escapeHtml(league.name)} invite" /><span>Scan to join ${escapeHtml(league.name)}</span>`
-    : "";
-}
-
-function leagueInviteLink(leagueId) {
-  const url = new URL(window.location.href);
-  url.search = "";
-  url.hash = "";
-  url.searchParams.set("leagueInvite", leagueId);
-  return url.toString();
-}
-
-function qrCodeUrl(value) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=12&data=${encodeURIComponent(value)}`;
-}
-
-async function copyLeagueInviteLink() {
-  const link = els.leagueInviteLink.value || leagueInviteLink(activeLeagueId);
-  try {
-    await navigator.clipboard.writeText(link);
-    els.copyLeagueInviteBtn.textContent = "Copied";
-    window.setTimeout(() => {
-      els.copyLeagueInviteBtn.textContent = "Copy";
-    }, 1400);
-  } catch {
-    els.leagueInviteLink.select();
-    document.execCommand("copy");
-  }
+  // Nothing dynamic to render now — invite panel is static HTML with the code input
 }
 
 function cubeBadge(league = {}) {
@@ -4421,11 +4459,12 @@ function leagueMemberRow(member, canManage, isOwner) {
   const canDemote = canManage && ["co_leader", "ref"].includes(member.role);
   const canTransfer = isOwner && member.role === "co_leader" && member.user_id;
   const canRemove = canManage && member.role !== "owner";
+  const isMe = member.user_id === currentUser?.id;
   return `
     <article class="league-member-row">
       <div>
         <strong>${escapeHtml(member.display_name)}</strong>
-        <span>${member.nickname ? `${escapeHtml(member.nickname)} - ` : ""}${displayRole(member.role)} - ${member.stats?.wins || 0}-${member.stats?.losses || 0}</span>
+        <span>${member.nickname ? `${escapeHtml(member.nickname)} - ` : ""}${displayRole(member.role)} - ${member.stats?.wins || 0}-${member.stats?.losses || 0}${isMe && playerCode ? ` · ${escapeHtml(playerCode)}` : ""}</span>
       </div>
       <div class="member-actions">
         ${canPromote ? `<button class="text-button" type="button" data-league-promote="${member.id}">Promote</button>` : ""}
@@ -4765,6 +4804,7 @@ function renderProfiles() {
         <div>
           <strong>${escapeHtml(nickname)}</strong>
           <span>${profile.preferredPartner ? `Preferred partner: ${escapeHtml(profile.preferredPartner)}` : "Preferred partner: -"}</span>
+          ${playerCode ? `<span class="player-code-display">Player Code: <strong>${escapeHtml(playerCode)}</strong></span>` : ""}
         </div>
       </div>
       ${profile.notes ? `<p>${escapeHtml(profile.notes)}</p>` : ""}
