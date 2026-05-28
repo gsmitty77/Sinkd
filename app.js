@@ -92,16 +92,9 @@ let notificationsInitialized = false;
 let showingFriendQr = false;
 let pendingConfirmAction = null;
 const state = loadState();
-const INTRO_VERSION = "tab-tour-v2";
-const AGE_GATE_KEY = "sinkdAgeVerified21";
 
 const els = {
   splashScreen: document.querySelector("#splashScreen"),
-  ageGateModal: document.querySelector("#ageGateModal"),
-  ageGateYesBtn: document.querySelector("#ageGateYesBtn"),
-  ageGateNoBtn: document.querySelector("#ageGateNoBtn"),
-  ageGateActions: document.querySelector("#ageGateActions"),
-  ageGateMessage: document.querySelector("#ageGateMessage"),
   introModal: document.querySelector("#introModal"),
   closeIntroBtn: document.querySelector("#closeIntroBtn"),
   confirmModal: document.querySelector("#confirmModal"),
@@ -394,62 +387,18 @@ function setAuthView(user) {
   }
   render();
   if (isSignedIn) consumeNotificationHashTarget();
-  if (isSignedIn) window.setTimeout(maybeShowEntryFlow, 250);
-}
-
-function hasPassedAgeGate() {
-  try {
-    return localStorage.getItem(AGE_GATE_KEY) === "true";
-  } catch (error) {
-    return false;
-  }
-}
-
-function rememberAgeGatePassed() {
-  try {
-    localStorage.setItem(AGE_GATE_KEY, "true");
-  } catch (error) {
-    console.warn(error);
-  }
-}
-
-function maybeShowEntryFlow() {
-  if (!hasPassedAgeGate()) {
-    showAgeGate();
-    return;
-  }
-  maybeShowIntro();
-}
-
-function showAgeGate() {
-  if (!els.ageGateModal) return;
-  els.ageGateActions?.classList.remove("hidden");
-  els.ageGateMessage?.classList.add("hidden");
-  els.ageGateModal.classList.remove("hidden");
-  els.ageGateModal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
-}
-
-function closeAgeGate() {
-  els.ageGateModal.classList.add("hidden");
-  els.ageGateModal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
-}
-
-async function rejectAgeGate() {
-  els.ageGateActions?.classList.add("hidden");
-  els.ageGateMessage?.classList.remove("hidden");
-  await signOut();
+  if (isSignedIn) window.setTimeout(maybeShowIntro, 250);
 }
 
 function introStorageKey(user = currentUser) {
   const key = profileStorageKey(user) || "guest";
-  return `sinkdIntroSeen:${INTRO_VERSION}:${key}`;
+  return `sinkdIntroSeen:${key}`;
 }
 
 function hasSeenIntro() {
   try {
-    return localStorage.getItem(introStorageKey()) === "true";
+    const accountKey = introStorageKey();
+    return localStorage.getItem(accountKey) === "true" || localStorage.getItem(`sinkdIntroSeen:tab-tour-v2:${profileStorageKey() || "guest"}`) === "true";
   } catch (error) {
     return false;
   }
@@ -769,15 +718,6 @@ function showAuthMessage(message) {
 }
 
 function bindEvents() {
-  els.ageGateYesBtn.addEventListener("click", () => {
-    rememberAgeGatePassed();
-    closeAgeGate();
-    maybeShowIntro();
-  });
-  els.ageGateNoBtn.addEventListener("click", rejectAgeGate);
-  els.ageGateModal.addEventListener("click", (event) => {
-    if (event.target === els.ageGateModal) event.stopPropagation();
-  });
   els.closeIntroBtn.addEventListener("click", closeIntro);
   els.introModal.addEventListener("click", (event) => {
     if (event.target === els.introModal) event.stopPropagation();
@@ -908,16 +848,15 @@ function bindEvents() {
     els.leagueForm.classList.toggle("hidden");
   });
 
-  els.showFriendsBtn.addEventListener("click", () => {
-    switchView("friends");
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("#showFriendsBtn")) switchView("friends");
+    if (event.target.closest("#showNotificationsBtn")) {
+      switchView("notifications");
+      renderNotifications();
+    }
   });
 
   els.backToLeaguesFromFriendsBtn.addEventListener("click", () => switchView("leagues"));
-
-  els.showNotificationsBtn.addEventListener("click", () => {
-    switchView("notifications");
-    renderNotifications();
-  });
 
   els.backToLeaguesFromNotificationsBtn.addEventListener("click", () => switchView("leagues"));
 
@@ -3842,7 +3781,13 @@ function matchCard(tournament, match) {
 function tournamentMatchForm(match) {
   return `
     <form class="match-form tournament-big-form" data-match-id="${match.id}">
-      <div class="score-grid">
+      <p class="score-helper">Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
+      <div class="match-player-stats">
+        ${tournamentPlayerStatsForm(match)}
+      </div>
+      <input type="hidden" name="selfSinkPlayer" value="" />
+      <input type="hidden" name="selfSinkTeam" value="" />
+      <div class="score-grid score-grid-bottom">
         <label>
           ${escapeHtml(match.teamA.name)} Score
           <input name="teamAScore" type="number" min="0" value="0" required />
@@ -3852,11 +3797,6 @@ function tournamentMatchForm(match) {
           <input name="teamBScore" type="number" min="0" value="0" required />
         </label>
       </div>
-      <div class="match-player-stats">
-        ${tournamentPlayerStatsForm(match)}
-      </div>
-      <input type="hidden" name="selfSinkPlayer" value="" />
-      <input type="hidden" name="selfSinkTeam" value="" />
       <button class="primary-button" type="submit">Log Tournament Game</button>
     </form>
   `;
@@ -3948,7 +3888,7 @@ function renderLeagues() {
 
 function renderFriends() {
   const friends = acceptedFriends();
-  els.friendsBadge.classList.add("hidden");
+  document.querySelector("#friendsBadge")?.classList.add("hidden");
   renderFriendInviteTools();
 
   els.friendsList.innerHTML = friends.length
@@ -3978,9 +3918,10 @@ function renderNotifications() {
   });
   const rows = [...actionNotifications, ...passiveNotifications].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const unreadCount = notificationCache.filter((notification) => !notification.read_at).length + actionNotifications.length;
-  if (els.notificationsBadge) {
-    els.notificationsBadge.textContent = unreadCount;
-    els.notificationsBadge.classList.toggle("hidden", unreadCount === 0);
+  const notificationsBadge = document.querySelector("#notificationsBadge");
+  if (notificationsBadge) {
+    notificationsBadge.textContent = unreadCount;
+    notificationsBadge.classList.toggle("hidden", unreadCount === 0);
   }
   updatePushButton();
   if (!els.notificationList) return;
@@ -5020,9 +4961,20 @@ function renderProfiles() {
         <div><b>${personalStats.selfSinks}</b><span>Self Sinks</span></div>
         <div><b>${personalStats.fifas}</b><span>FIFAs</span></div>
       </div>
+      <div class="profile-action-row">
+        <button class="primary-button notification-button" id="showNotificationsBtn" type="button">
+          Notifications
+          <span class="notification-badge hidden" id="notificationsBadge">0</span>
+        </button>
+        <button class="primary-button notification-button" id="showFriendsBtn" type="button">
+          Friends
+          <span class="notification-badge hidden" id="friendsBadge">0</span>
+        </button>
+      </div>
       ${achievementSection(personalStats, "Achievements")}
     </article>
   `;
+  renderNotifications();
 }
 
 function achievementSection(stats, title) {

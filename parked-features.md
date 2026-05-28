@@ -85,3 +85,17 @@ League+:
 Notes:
 - Charge per league instead of per user so friends can join without each person needing to pay.
 - Keep this parked until the app has real league usage and the paid features feel obvious.
+
+## 21+ Entrance Gate
+
+Concept: a quick full-screen gate before the intro screen asking whether the user is at least 21 years old.
+
+Original behavior:
+- Navy modal using the Sinkd logo.
+- Question: "Are you at least 21 years old?"
+- Yes continued into the app intro.
+- No signed the user out and showed a short message.
+
+Reason parked:
+- Removed from the live app for now so the first-run flow only shows the Sinkd intro once per account.
+- Can be restored later if store review, legal guidance, or responsible-use positioning calls for it.

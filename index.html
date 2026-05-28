@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#0f766e" />
     <title>Sinkd</title>
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
@@ -18,19 +18,6 @@
       </div>
     </section>
     <div class="notification-toast-wrap" id="notificationToastWrap" aria-live="polite"></div>
-
-    <section class="intro-modal hidden" id="ageGateModal" aria-hidden="true">
-      <div class="intro-sheet age-gate-sheet">
-        <img class="intro-logo" src="assets/splash-logo.svg" alt="" />
-        <h2>Before You Enter</h2>
-        <p class="intro-lead">Are you at least 21 years old?</p>
-        <div class="age-gate-actions" id="ageGateActions">
-          <button class="primary-button" id="ageGateYesBtn" type="button">Yes</button>
-          <button class="small-button secondary-button" id="ageGateNoBtn" type="button">No</button>
-        </div>
-        <p class="age-gate-message hidden" id="ageGateMessage">Sinkd is intended for users who are 21 or older.</p>
-      </div>
-    </section>
 
     <section class="intro-modal hidden" id="introModal" aria-hidden="true">
       <div class="intro-sheet">
@@ -163,7 +150,11 @@
           <button class="small-button secondary-button back-nav-button" id="backToRegularBtn" type="button">Back to Quick Log</button>
 
           <form class="panel stat-form" id="bigGameForm">
-            <div class="score-grid">
+            <p class="score-helper">Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
+            <div class="regular-player-grid" id="bigGamePlayerGrid"></div>
+            <input type="hidden" name="selfSinkPlayer" value="" />
+            <input type="hidden" name="selfSinkTeam" value="" />
+            <div class="score-grid score-grid-bottom">
               <label>
                 Team 1 Final Score
                 <input name="teamAScore" type="number" min="0" value="0" required />
@@ -173,10 +164,6 @@
                 <input name="teamBScore" type="number" min="0" value="0" required />
               </label>
             </div>
-            <p class="score-helper">Plus and minus buttons update the score automatically. You can still type the score manually.</p>
-            <div class="regular-player-grid" id="bigGamePlayerGrid"></div>
-            <input type="hidden" name="selfSinkPlayer" value="" />
-            <input type="hidden" name="selfSinkTeam" value="" />
             <button class="primary-button" type="submit">Log Big Game</button>
           </form>
 
@@ -248,14 +235,6 @@
           </div>
 
           <section class="panel league-create-card">
-            <button class="primary-button notification-button" id="showNotificationsBtn" type="button">
-              Notifications
-              <span class="notification-badge hidden" id="notificationsBadge">0</span>
-            </button>
-            <button class="primary-button notification-button" id="showFriendsBtn" type="button">
-              Friends
-              <span class="notification-badge hidden" id="friendsBadge">0</span>
-            </button>
             <button class="primary-button" id="showLeagueCreateBtn" type="button">Create League</button>
             <form class="league-create-form hidden" id="leagueForm">
               <label>
@@ -350,15 +329,15 @@
             <form class="panel stat-form" id="leagueGameForm">
               <h3 id="leagueGameFormTitle">Log League Game</h3>
               <button class="small-button export-button" id="leagueQuickRematchBtn" type="button">Quick Rematch</button>
-              <div class="score-grid">
-                <label>Team 1 Score <input name="teamAScore" type="number" min="0" value="0" required /></label>
-                <label>Team 2 Score <input name="teamBScore" type="number" min="0" value="0" required /></label>
-              </div>
-              <p class="score-helper">Plus and minus buttons update the score automatically. You can still type the score manually.</p>
+              <p class="score-helper">Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
               <div class="regular-player-grid" id="leagueGamePlayerGrid"></div>
               <input type="hidden" name="selfSinkPlayer" value="" />
               <input type="hidden" name="selfSinkTeam" value="" />
               <input type="hidden" name="editingLeagueGameId" value="" />
+              <div class="score-grid score-grid-bottom">
+                <label>Team 1 Score <input name="teamAScore" type="number" min="0" value="0" required /></label>
+                <label>Team 2 Score <input name="teamBScore" type="number" min="0" value="0" required /></label>
+              </div>
               <div class="form-actions">
                 <button class="primary-button" id="leagueGameSubmitBtn" type="submit">Log League Game</button>
                 <button class="small-button secondary-button hidden" id="cancelLeagueGameEditBtn" type="button">Cancel Edit</button>
