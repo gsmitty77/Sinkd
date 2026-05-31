@@ -57,6 +57,12 @@ const secretAchievementDefinitions = [
 const achievementTiers = ["Copper", "Silver", "Gold", "Diamond"];
 
 const playerRosterKey = "beerDiePlayers";
+const defaultTheme = {
+  background: "#002147",
+  panel: "#002147",
+  accent: "#efbf04",
+  text: "#ffffff",
+};
 const supabaseUrl = "https://egkdplyqrkoqgysgossd.supabase.co";
 const supabaseKey = "sb_publishable_0tPe5tBwnSAsBf_8OgB68g_362B5XPV";
 const vapidPublicKey = "BKu6165rw3XPcgaASzQ2lfauLSALUx9NP6I5Q718K45iCkDLoix74gylYXYr_saA8NwzKbSOZS0NrsCZb_YyBzc";
@@ -227,6 +233,7 @@ const els = {
   openAboutBtn: document.querySelector("#openAboutBtn"),
   closeAboutBtn: document.querySelector("#closeAboutBtn"),
   aboutModal: document.querySelector("#aboutModal"),
+  themeForm: document.querySelector("#themeForm"),
   deleteTournamentBtn: document.querySelector("#deleteTournamentBtn"),
   quickRematchBtn: document.querySelector("#quickRematchBtn"),
   openBigGameBtn: document.querySelector("#openBigGameBtn"),
@@ -234,6 +241,8 @@ const els = {
   exportBtn: document.querySelector("#exportBtn"),
   resetBtn: document.querySelector("#resetBtn"),
 };
+
+applyTheme();
 
 window.addEventListener("load", () => {
   window.setTimeout(() => {
@@ -275,6 +284,7 @@ function loadState() {
       playerProfiles: parsed.playerProfiles || {},
       legacyMyProfile: parsed.legacyMyProfile || parsed.myProfile || null,
       accountProfiles: parsed.accountProfiles || {},
+      appTheme: normalizeTheme(parsed.appTheme),
       myProfile: null,
       players: mergePlayerNames([...(parsed.players || []), ...savedRoster]),
     };
@@ -289,6 +299,7 @@ function loadState() {
     myProfile: null,
     legacyMyProfile: null,
     accountProfiles: {},
+    appTheme: { ...defaultTheme },
     activeTournamentId: "",
   };
 }
@@ -306,6 +317,50 @@ function loadSavedPlayerRoster() {
   } catch {
     return [];
   }
+}
+
+function normalizeTheme(theme = {}) {
+  return {
+    background: cleanHexColor(theme.background, defaultTheme.background),
+    panel: cleanHexColor(theme.panel, defaultTheme.panel),
+    accent: cleanHexColor(theme.accent, defaultTheme.accent),
+    text: cleanHexColor(theme.text, defaultTheme.text),
+  };
+}
+
+function cleanHexColor(value, fallback) {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+}
+
+function applyTheme(theme = state.appTheme) {
+  const nextTheme = normalizeTheme(theme);
+  const root = document.documentElement;
+  root.style.setProperty("--bg", nextTheme.background);
+  root.style.setProperty("--panel", nextTheme.panel);
+  root.style.setProperty("--accent", nextTheme.accent);
+  root.style.setProperty("--accent-strong", nextTheme.accent);
+  root.style.setProperty("--gold", nextTheme.accent);
+  root.style.setProperty("--ink", nextTheme.text);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", nextTheme.background);
+}
+
+function themeFromForm() {
+  return normalizeTheme({
+    background: els.themeForm.elements.background.value,
+    panel: els.themeForm.elements.panel.value,
+    accent: els.themeForm.elements.accent.value,
+    text: els.themeForm.elements.text.value,
+  });
+}
+
+function syncThemeForm() {
+  if (!els.themeForm) return;
+  const theme = normalizeTheme(state.appTheme);
+  els.themeForm.elements.background.value = theme.background;
+  els.themeForm.elements.panel.value = theme.panel;
+  els.themeForm.elements.accent.value = theme.accent;
+  els.themeForm.elements.text.value = theme.text;
 }
 
 async function setupAuth() {
@@ -782,6 +837,10 @@ async function findPlayerByCode(code) {
 
 async function signInWithEmail() {
   if (authBusy) return;
+  if (!authClient) {
+    showAuthMessage("Login is not connected. Refresh and try again.");
+    return;
+  }
   if (passwordRecoveryMode) {
     await completePasswordReset();
     return;
@@ -802,11 +861,15 @@ async function signInWithEmail() {
     return;
   }
   if (data.session?.user) setAuthView(data.session.user);
-  showAuthMessage("");
+  else showAuthMessage("Signed in. Loading your account...");
 }
 
 async function completePasswordReset() {
   if (authBusy) return;
+  if (!authClient) {
+    showAuthMessage("Login is not connected. Refresh and try again.");
+    return;
+  }
   const password = els.authPassword.value;
   if (!password || password.length < 6) {
     showAuthMessage("Enter a new password with at least 6 characters.");
@@ -829,6 +892,10 @@ async function completePasswordReset() {
 
 async function signUpWithEmail() {
   if (authBusy) return;
+  if (!authClient) {
+    showAuthMessage("Login is not connected. Refresh and try again.");
+    return;
+  }
   const email = cleanText(els.authEmail.value);
   const password = els.authPassword.value;
   if (!email || !password) {
@@ -864,6 +931,10 @@ async function signUpWithEmail() {
 
 async function sendPasswordReset() {
   if (authBusy) return;
+  if (!authClient) {
+    showAuthMessage("Login is not connected. Refresh and try again.");
+    return;
+  }
   const email = cleanText(els.authEmail.value);
   if (!email) {
     showAuthMessage("Enter your email first.");
@@ -880,6 +951,10 @@ async function sendPasswordReset() {
 
 async function signInWithGoogle() {
   if (authBusy) return;
+  if (!authClient) {
+    showAuthMessage("Google login is not connected. Refresh and try again.");
+    return;
+  }
   setAuthBusy(true, "Opening Google...");
   const { error } = await authClient.auth.signInWithOAuth({
     provider: "google",
@@ -1229,6 +1304,17 @@ function bindEvents() {
   });
 
   els.leagueGameHistory.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("[data-delete-league-game]");
+    if (deleteButton) {
+      showAppConfirm({
+        title: "Delete league game?",
+        message: "This removes the game from league history and updates league stats.",
+        confirmLabel: "Delete",
+        onConfirm: () => deleteCloudLeagueGame(deleteButton.dataset.deleteLeagueGame),
+      });
+      return;
+    }
+
     const gameCardButton = event.target.closest("[data-view-league-game]");
     if (!gameCardButton) return;
     openLeagueGameDetail(gameCardButton.dataset.viewLeagueGame);
@@ -1271,6 +1357,17 @@ function bindEvents() {
   });
 
   els.leagueGameDetail.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("[data-detail-delete-league-game]");
+    if (deleteButton) {
+      showAppConfirm({
+        title: "Delete league game?",
+        message: "This removes the game from league history and updates league stats.",
+        confirmLabel: "Delete",
+        onConfirm: () => deleteCloudLeagueGame(deleteButton.dataset.detailDeleteLeagueGame),
+      });
+      return;
+    }
+
     const editButton = event.target.closest("[data-detail-edit-league-game]");
     if (!editButton) return;
     backToLeagueGames();
@@ -1417,6 +1514,22 @@ function bindEvents() {
 
   els.exportBtn.addEventListener("click", exportData);
   els.leagueExportBtn.addEventListener("click", exportLeagueStats);
+  els.themeForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.appTheme = themeFromForm();
+    applyTheme();
+    saveState();
+  });
+  els.themeForm.addEventListener("input", () => {
+    applyTheme(themeFromForm());
+  });
+  els.themeForm.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-reset-theme]")) return;
+    state.appTheme = { ...defaultTheme };
+    syncThemeForm();
+    applyTheme();
+    saveState();
+  });
   els.resetBtn.addEventListener("click", () => {
     showAppConfirm({
       title: "Reset games?",
@@ -3859,6 +3972,24 @@ async function deleteCloudLeagueTournament(tournamentId) {
   await loadLeagueData();
 }
 
+async function deleteCloudLeagueGame(gameId) {
+  if (!isActiveLeagueOwner()) return;
+  const { error } = await authClient.from("league_games").delete().eq("id", gameId).eq("league_id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  if (activeLeagueGameDetailId === gameId) {
+    activeLeagueGameDetailId = "";
+    backToLeagueGames();
+  }
+  if (editingLeagueGameId === gameId) {
+    resetLeagueGameForm();
+  }
+  await loadLeagueData();
+}
+
 function leagueTournamentPayload(tournament) {
   return {
     name: tournament.name,
@@ -4023,6 +4154,8 @@ function normalizeLeagueGame(row) {
     source: "league",
     leagueId: row.league_id,
     league_id: row.league_id,
+    loggedBy: row.logged_by || "",
+    logged_by: row.logged_by || "",
     teams: [
       {
         name: teamAPlayers.join(" / "),
@@ -4074,6 +4207,15 @@ function profileNameFromEmail(email) {
 
 function currentPublicName() {
   return myProfileNickname() || "A player";
+}
+
+function leagueGameLoggerName(game) {
+  const loggerId = game?.loggedBy || game?.logged_by;
+  if (!loggerId) return "Unknown";
+  const member = leagueMemberCache.find((item) => item.league_id === game.leagueId && item.user_id === loggerId);
+  if (member?.display_name) return member.display_name;
+  if (loggerId === currentUser?.id) return currentPublicName();
+  return "League member";
 }
 
 function requireMyProfile(action = "use leagues") {
@@ -4175,7 +4317,9 @@ function gameCard(game) {
       ? `<button class="text-button danger-text" type="button" data-delete-regular="${game.id}">Remove</button>`
       : game.source === "big"
         ? `<button class="text-button danger-text" type="button" data-delete-big="${game.id}">Remove</button>`
-        : "";
+        : game.source === "league" && isActiveLeagueOwner()
+          ? `<button class="text-button danger-text" type="button" data-delete-league-game="${game.id}">Delete</button>`
+          : "";
   const leagueDetailTarget = game.source === "league" ? ` data-view-league-game="${game.id}" tabindex="0" role="button"` : "";
   return `
     <article class="game-card"${leagueDetailTarget}>
@@ -4855,6 +4999,12 @@ function renderLeagueGameDetail() {
   const editButton = canLogActiveLeagueGames()
     ? `<button class="primary-button compact-action-button" type="button" data-detail-edit-league-game="${game.id}">Edit Game</button>`
     : "";
+  const deleteButton = isActiveLeagueOwner()
+    ? `<button class="danger-button compact-action-button" type="button" data-detail-delete-league-game="${game.id}">Delete Game</button>`
+    : "";
+  const detailActions = editButton || deleteButton
+    ? `<div class="match-detail-actions">${editButton}${deleteButton}</div>`
+    : "";
   const selfSinkNote = game.selfSinkPlayer
     ? `<div class="meta-line self-sink-note">${escapeHtml(game.selfSinkPlayer)} self sank. ${escapeHtml(winner.name)} wins.</div>`
     : "";
@@ -4864,8 +5014,9 @@ function renderLeagueGameDetail() {
       <div>
         <h2>${escapeHtml(game.teams[0].name)} vs ${escapeHtml(game.teams[1].name)}</h2>
         <p>${formatDate(game.createdAt || game.created_at)}</p>
+        <p>Logged by ${escapeHtml(leagueGameLoggerName(game))}</p>
       </div>
-      ${editButton}
+      ${detailActions}
     </div>
     <div class="summary-grid">
       <div class="summary-item"><b>${game.teams[0].score}</b><span>${escapeHtml(game.teams[0].name)}</span></div>
@@ -5779,6 +5930,7 @@ async function notifyLeagueRankingChanges(beforeLeaders, afterLeaders) {
 
 function renderSettings() {
   updatePushButton();
+  syncThemeForm();
   const players = collectLocalPlayerNames();
   els.settingsPlayersList.innerHTML = players.length
     ? players

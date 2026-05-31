@@ -532,11 +532,12 @@ using (public.can_log_league_games(league_id))
 with check (public.can_log_league_games(league_id));
 
 drop policy if exists "managers can delete league games" on public.league_games;
-create policy "managers can delete league games"
+drop policy if exists "owners can delete league games" on public.league_games;
+create policy "owners can delete league games"
 on public.league_games
 for delete
 to authenticated
-using (public.can_manage_league(league_id));
+using (public.is_league_owner(league_id));
 
 drop policy if exists "members can view league tournaments" on public.league_tournaments;
 create policy "members can view league tournaments"

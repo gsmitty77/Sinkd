@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#0f766e" />
+    <meta name="theme-color" content="#002147" />
     <title>Sinkd</title>
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
@@ -60,6 +60,8 @@
           <h1>Welcome Back</h1>
           <p>Sign in or create an account to sync leagues, friends, rankings, and stats.</p>
         </div>
+        <button class="small-button google-button auth-google-primary" id="googleBtn" type="button">Sign in / create with Google</button>
+        <div class="auth-divider"><span></span><b>or use email</b><span></span></div>
         <form id="authForm">
           <label>
             <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Email" required />
@@ -69,7 +71,6 @@
           </label>
           <div class="auth-actions">
             <button class="primary-button" id="signInBtn" type="button">Sign In</button>
-            <button class="small-button google-button" id="googleBtn" type="button">Sign in / create with Google</button>
           </div>
         </form>
         <div class="auth-secondary-actions">
@@ -607,6 +608,31 @@
               <button class="small-button secondary-button" id="openFeedbackBtn" type="button">Send Feedback</button>
               <button class="small-button secondary-button" id="openAboutBtn" type="button">About Sinkd</button>
             </div>
+          </section>
+          <section class="panel">
+            <h3>Theme</h3>
+            <form class="theme-form" id="themeForm">
+              <label>
+                Background
+                <input name="background" type="color" value="#002147" />
+              </label>
+              <label>
+                Panels
+                <input name="panel" type="color" value="#002147" />
+              </label>
+              <label>
+                Accent
+                <input name="accent" type="color" value="#efbf04" />
+              </label>
+              <label>
+                Text
+                <input name="text" type="color" value="#ffffff" />
+              </label>
+              <div class="theme-actions">
+                <button class="small-button export-button" type="submit">Save Theme</button>
+                <button class="small-button secondary-button" type="button" data-reset-theme>Reset</button>
+              </div>
+            </form>
           </section>
           <section class="panel">
             <h3>Players</h3>
