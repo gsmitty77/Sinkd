@@ -31,6 +31,7 @@ create table if not exists public.league_members (
   display_name text not null,
   nickname text default '',
   cup_color text default '#d71920',
+  player_code text,
   role text not null default 'member' check (role in ('owner', 'co_leader', 'ref', 'member')),
   created_at timestamptz not null default now(),
   unique (league_id, email)
@@ -38,6 +39,7 @@ create table if not exists public.league_members (
 
 alter table public.league_members add column if not exists nickname text default '';
 alter table public.league_members add column if not exists cup_color text default '#d71920';
+alter table public.league_members add column if not exists player_code text;
 
 do $$
 begin
@@ -93,6 +95,39 @@ create table if not exists public.player_profiles (
   cup_color text default '#d71920',
   updated_at timestamptz not null default now()
 );
+
+create or replace function public.find_player_by_code(target_player_code text)
+returns table(user_id uuid, player_code text, nickname text, cup_color text)
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  with normalized as (
+    select upper(regexp_replace(coalesce(target_player_code, ''), '[^A-Za-z0-9]', '', 'g')) as code
+  ),
+  profile_matches as (
+    select pp.user_id, pp.player_code, pp.nickname, pp.cup_color
+    from public.player_profiles pp, normalized n
+    where replace(upper(pp.player_code), '-', '') = n.code
+    limit 1
+  ),
+  metadata_matches as (
+    select
+      u.id as user_id,
+      upper(coalesce(u.raw_user_meta_data #>> '{sinkd_profile,playerCode}', '')) as player_code,
+      coalesce(nullif(btrim(u.raw_user_meta_data #>> '{sinkd_profile,nickname}'), ''), 'Friend') as nickname,
+      coalesce(nullif(u.raw_user_meta_data #>> '{sinkd_profile,cupColor}', ''), '#d71920') as cup_color
+    from auth.users u, normalized n
+    where replace(upper(coalesce(u.raw_user_meta_data #>> '{sinkd_profile,playerCode}', '')), '-', '') = n.code
+    limit 1
+  )
+  select * from profile_matches
+  union all
+  select * from metadata_matches
+  where not exists (select 1 from profile_matches)
+  limit 1;
+$$;
 
 create unique index if not exists friend_requests_unique_active_email_invite
 on public.friend_requests (requester_id, lower(recipient_email))
@@ -223,7 +258,7 @@ as $$
     select 1
     from public.league_members lm
     where lm.league_id = target_league_id
-      and lm.role in ('owner', 'co_leader', 'ref')
+      and lm.role in ('owner', 'co_leader', 'ref', 'member')
       and lm.user_id = auth.uid()
   );
 $$;
@@ -250,13 +285,32 @@ begin
     raise exception 'Player not found.';
   end if;
 
-  select coalesce(nullif(btrim(nickname), ''), player_code)
+  select coalesce(
+      nullif(btrim(pp.nickname), ''),
+      nullif(btrim(u.raw_user_meta_data #>> '{sinkd_profile,nickname}'), ''),
+      pp.player_code,
+      nullif(btrim(u.raw_user_meta_data #>> '{sinkd_profile,playerCode}'), '')
+    )
     into target_name
-  from public.player_profiles
-  where user_id = target_user_id;
+  from auth.users u
+  left join public.player_profiles pp on pp.user_id = u.id
+  where u.id = target_user_id;
 
-  insert into public.league_members (league_id, user_id, email, display_name, nickname, role)
-  values (target_league_id, null, lower(target_email), coalesce(target_name, 'Invited Player'), '', 'member')
+  insert into public.league_members (league_id, user_id, email, display_name, nickname, player_code, role)
+  values (
+    target_league_id,
+    null,
+    lower(target_email),
+    coalesce(target_name, 'Invited Player'),
+    '',
+    (
+      select coalesce(pp.player_code, u.raw_user_meta_data #>> '{sinkd_profile,playerCode}')
+      from auth.users u
+      left join public.player_profiles pp on pp.user_id = u.id
+      where u.id = target_user_id
+    ),
+    'member'
+  )
   on conflict (league_id, email) do nothing;
 end;
 $$;
@@ -403,7 +457,8 @@ with check (
   and lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
 );
 
-create or replace function public.update_my_league_profile(profile_name text, profile_cup_color text default '#d71920')
+drop function if exists public.update_my_league_profile(text, text);
+create or replace function public.update_my_league_profile(profile_name text, profile_cup_color text default '#d71920', profile_player_code text default '')
 returns void
 language plpgsql
 security definer
@@ -415,6 +470,7 @@ begin
     display_name = coalesce(nullif(btrim(profile_name), ''), display_name),
     nickname = coalesce(nullif(btrim(profile_name), ''), nickname),
     cup_color = coalesce(nullif(profile_cup_color, ''), cup_color),
+    player_code = coalesce(nullif(profile_player_code, ''), player_code),
     user_id = auth.uid(),
     email = lower(coalesce(auth.jwt() ->> 'email', email))
   where user_id = auth.uid();

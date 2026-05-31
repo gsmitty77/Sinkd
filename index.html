@@ -203,6 +203,10 @@
                 Teams
                 <textarea name="teams" rows="8" placeholder="Red Cups: Alex, Jordan&#10;Blue Dies: Casey, Morgan&#10;Table Kings: Sam, Riley&#10;Last Call: Taylor, Drew" required></textarea>
               </label>
+              <label>
+                Games to Win Each Matchup
+                <input name="gamesToWin" type="number" min="1" max="7" value="1" required />
+              </label>
               <button class="primary-button compact-action-button" type="submit">Create Bracket</button>
             </form>
 
@@ -327,7 +331,7 @@
               <span class="notification-badge chat-badge hidden" id="leagueChatBadge">0</span>
             </button>
             <button class="tab" data-league-detail-tab="settings" type="button">Settings</button>
-            <button class="tab" data-league-detail-tab="invite" type="button">Invite</button>
+            <button class="tab" data-league-detail-tab="invite" type="button">Roles/Invite</button>
           </nav>
 
           <section class="league-detail-panel active" id="leagueGamesPanel">
@@ -362,6 +366,10 @@
                 <label>
                   Teams
                   <textarea name="teams" rows="6" placeholder="Gold Team: Alex / Jordan&#10;Navy Team: Casey / Taylor&#10;White Team: Morgan / Riley&#10;Black Team: Drew / Quinn" required></textarea>
+                </label>
+                <label>
+                  Games to Win Each Matchup
+                  <input name="gamesToWin" type="number" min="1" max="7" value="1" required />
                 </label>
                 <button class="primary-button compact-action-button" type="submit">Create Bracket</button>
               </form>
@@ -476,6 +484,7 @@
                 <label>Left <input name="logoLeft" type="color" /></label>
                 <label>Right <input name="logoRight" type="color" /></label>
               </div>
+              <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
               <button class="primary-button compact-action-button manager-setting" type="submit">Save Settings</button>
               <button class="small-button secondary-button" id="leaveLeagueBtn" type="button">Leave League</button>
               <div class="leave-confirm hidden" id="leaveLeagueConfirm">
@@ -485,7 +494,6 @@
                   <button class="text-button" id="cancelLeaveLeagueBtn" type="button">Cancel</button>
                 </div>
               </div>
-              <button class="small-button danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
             </form>
           </section>
 
@@ -561,6 +569,7 @@
               Preferred Partner
               <input name="preferredPartner" placeholder="Optional" />
             </label>
+            <h3 class="field-heading">Customize Cup</h3>
             <label>
               <input name="cupColor" type="color" value="#d71920" />
             </label>
@@ -727,7 +736,7 @@
 
         <section class="rules-card">
           <h3>The Vibe</h3>
-          <p>Built for friendly competition, late-night matchups, house rules, and the kind of stat lines that keep a group chat alive.</p>
+          <p>Built for friendly competition, day time matchups, house rules, and the kind of stat lines that keep a group chat alive.</p>
           <p>Have fun, keep it responsible, and let the numbers do the talking.</p>
         </section>
       </div>

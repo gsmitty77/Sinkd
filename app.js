@@ -726,6 +726,9 @@ async function findPlayerByCode(code) {
     });
     return null;
   }
+  const rpcResult = await authClient.rpc("find_player_by_code", { target_player_code: playerCode });
+  if (!rpcResult.error && rpcResult.data?.length) return rpcResult.data[0];
+  if (rpcResult.error && rpcResult.error.code !== "42883") console.warn(rpcResult.error);
   const { data, error } = await authClient
     .from("player_profiles")
     .select("user_id, player_code, nickname, cup_color")
@@ -965,7 +968,7 @@ function bindEvents() {
       return;
     }
 
-    const tournament = createTournament(form.get("name").trim(), teams);
+    const tournament = createTournament(form.get("name").trim(), teams, form.get("gamesToWin"));
     rememberPlayers(teams.flatMap((team) => team.players));
     state.tournaments.unshift(tournament);
     state.activeTournamentId = tournament.id;
@@ -1131,6 +1134,7 @@ function bindEvents() {
       leagueDetailTab = tab.dataset.leagueDetailTab;
       if (leagueDetailTab === "chat") rememberLeagueChatSeen();
       renderLeagueDetails();
+      scrollAppToTop();
     });
   });
 
@@ -1275,9 +1279,12 @@ function bindEvents() {
   els.leaguePlayerStats.addEventListener("click", (event) => {
     const addFriend = event.target.closest("[data-add-friend]");
     if (addFriend) {
-      const member = leagueMembers().find((item) => item.id === addFriend.dataset.addFriend);
-      if (member?.user_id === currentUser?.id) return;
-      alert("Friend requests are coming when we build the Friends page.");
+      addLeagueMemberAsFriend(addFriend.dataset.addFriend);
+      return;
+    }
+    const preferredPartner = event.target.closest("[data-roster-preferred-partner]");
+    if (preferredPartner) {
+      setPreferredPartnerFromLeagueMember(preferredPartner.dataset.rosterPreferredPartner);
       return;
     }
     const achievementsButton = event.target.closest("[data-roster-achievements]");
@@ -1296,10 +1303,12 @@ function bindEvents() {
 
   els.leagueRosterDetail.addEventListener("click", (event) => {
     const addFriend = event.target.closest("[data-add-friend]");
-    if (!addFriend) return;
-    const member = leagueMembers().find((item) => item.id === addFriend.dataset.addFriend);
-    if (member?.user_id === currentUser?.id) return;
-    alert("Friend requests are coming when we build the Friends page.");
+    if (addFriend) {
+      addLeagueMemberAsFriend(addFriend.dataset.addFriend);
+      return;
+    }
+    const preferredPartner = event.target.closest("[data-roster-preferred-partner]");
+    if (preferredPartner) setPreferredPartnerFromLeagueMember(preferredPartner.dataset.rosterPreferredPartner);
   });
 
   els.leagueMemberList.addEventListener("click", async (event) => {
@@ -1449,12 +1458,14 @@ function bindEvents() {
 function switchView(viewName) {
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === viewName));
   els.views.forEach((view) => view.classList.toggle("active", view.id === `${viewName}View`));
+  scrollAppToTop();
 }
 
 function openBigGamePage() {
   buildBigGamePlayerCards();
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === "regular"));
   els.views.forEach((view) => view.classList.toggle("active", view.id === "bigView"));
+  scrollAppToTop();
 }
 
 function openLeagueDetails(leagueId) {
@@ -1467,6 +1478,7 @@ function openLeagueDetails(leagueId) {
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === "leagues"));
   els.views.forEach((view) => view.classList.toggle("active", view.id === "leagueDetailsView"));
   renderLeagueDetails();
+  scrollAppToTop();
 }
 
 function openLeagueGameDetail(gameId) {
@@ -1474,6 +1486,7 @@ function openLeagueGameDetail(gameId) {
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === "leagues"));
   els.views.forEach((view) => view.classList.toggle("active", view.id === "leagueGameDetailView"));
   renderLeagueGameDetail();
+  scrollAppToTop();
 }
 
 function backToLeagueGames() {
@@ -1481,6 +1494,11 @@ function backToLeagueGames() {
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === "leagues"));
   els.views.forEach((view) => view.classList.toggle("active", view.id === "leagueDetailsView"));
   renderLeagueDetails();
+  scrollAppToTop();
+}
+
+function scrollAppToTop() {
+  window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
 }
 
 function loadQuickRematch() {
@@ -1526,6 +1544,7 @@ function buildStatInputs(container, prefix) {
 }
 
 function buildRegularPlayerCards() {
+  const draft = captureFormDraft(els.regularForm);
   const teams = [
     ["Team 1", [1, 2]],
     ["Team 2", [3, 4]],
@@ -1541,9 +1560,11 @@ function buildRegularPlayerCards() {
       `,
     )
     .join("");
+  restoreFormDraft(els.regularForm, draft);
 }
 
 function buildBigGamePlayerCards() {
+  const draft = captureFormDraft(els.bigGameForm);
   const teams = [
     ["Team 1", [1, 2]],
     ["Team 2", [3, 4]],
@@ -1559,9 +1580,11 @@ function buildBigGamePlayerCards() {
       `,
     )
     .join("");
+  restoreFormDraft(els.bigGameForm, draft);
 }
 
 function buildLeagueGamePlayerCards() {
+  const draft = captureFormDraft(els.leagueGameForm);
   const teams = [
     ["Team 1", [1, 2]],
     ["Team 2", [3, 4]],
@@ -1577,6 +1600,34 @@ function buildLeagueGamePlayerCards() {
       `,
     )
     .join("");
+  restoreFormDraft(els.leagueGameForm, draft);
+}
+
+function captureFormDraft(form) {
+  if (!form) return {};
+  const draft = {};
+  form.querySelectorAll("input, select, textarea").forEach((field) => {
+    if (!field.name) return;
+    draft[field.name] = field.value;
+  });
+  return draft;
+}
+
+function restoreFormDraft(form, draft = {}) {
+  if (!form || !Object.keys(draft).length) return;
+  Object.entries(draft).forEach(([name, value]) => {
+    const field = form.elements[name];
+    if (!field) return;
+    field.value = value;
+  });
+  refreshSelfSinkButtons(form);
+}
+
+function refreshSelfSinkButtons(form) {
+  if (!form?.selfSinkPlayer) return;
+  form.querySelectorAll("[data-self-sink]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.playerNumber === form.selfSinkPlayer.value);
+  });
 }
 
 function playerStatCard(number, label) {
@@ -1699,7 +1750,7 @@ function collectLocalPlayerNames(extraNames = []) {
         if (match.teamA) addNames(names, match.teamA.players);
         if (match.teamB) addNames(names, match.teamB.players);
         if (match.winner) addNames(names, match.winner.players);
-        if (match.game) addGamePlayerNames(names, match.game);
+        matchLoggedGames(match).forEach((game) => addGamePlayerNames(names, game));
       });
     });
   });
@@ -1804,13 +1855,14 @@ function deletePlayer(playerName) {
         if (match.teamA) removePlayerFromTeam(match.teamA, target);
         if (match.teamB) removePlayerFromTeam(match.teamB, target);
         if (match.winner) removePlayerFromTeam(match.winner, target);
-        if (match.game) {
-          removePlayerFromGame(match.game, target);
-          if (!gameHasPlayers(match.game)) {
-            match.game = null;
-            match.winner = null;
-          }
-        }
+        match.games = matchLoggedGames(match)
+          .map((game) => {
+            removePlayerFromGame(game, target);
+            return game;
+          })
+          .filter(gameHasPlayers);
+        match.game = match.games.at(-1) || null;
+        if (!match.game) match.winner = null;
       });
     });
   });
@@ -2155,11 +2207,12 @@ function parseTeams(value) {
     .filter((team) => team.players.length);
 }
 
-function createTournament(name, teams) {
+function createTournament(name, teams, gamesToWin = 1) {
   const bracketSize = nextPowerOfTwo(teams.length);
   const entries = [...teams, ...Array(bracketSize - teams.length).fill(null)];
   const rounds = [];
   const roundCount = Math.log2(bracketSize);
+  const winsRequired = Math.min(7, Math.max(1, Number(gamesToWin) || 1));
 
   rounds.push({
     name: roundName(0, roundCount),
@@ -2170,6 +2223,7 @@ function createTournament(name, teams) {
       teamA,
       teamB,
       game: null,
+      games: [],
       winner: teamB ? null : teamA,
     })),
   });
@@ -2184,6 +2238,7 @@ function createTournament(name, teams) {
         teamA: null,
         teamB: null,
         game: null,
+        games: [],
         winner: null,
       })),
     });
@@ -2193,6 +2248,7 @@ function createTournament(name, teams) {
     id: crypto.randomUUID(),
     name: cleanText(name) || "Sinkd Tournament",
     createdAt: new Date().toISOString(),
+    winsRequired,
     teams,
     rounds,
   };
@@ -2227,18 +2283,32 @@ function tournamentMatches(tournament) {
   return tournament?.rounds.flatMap((round) => round.matches) || [];
 }
 
+function matchLoggedGames(match = {}) {
+  return Array.isArray(match.games) && match.games.length ? match.games : match.game ? [match.game] : [];
+}
+
+function matchSeriesWins(match = {}) {
+  return matchLoggedGames(match).reduce(
+    (wins, game) => {
+      wins[game.winnerIndex || 0] += 1;
+      return wins;
+    },
+    [0, 0],
+  );
+}
+
 function readyTournamentMatches(tournament) {
   return tournamentMatches(tournament).filter((match) => match.teamA && match.teamB);
 }
 
 function playableTournamentMatches(tournament) {
-  return readyTournamentMatches(tournament).filter((match) => !match.game);
+  return readyTournamentMatches(tournament).filter((match) => !match.winner);
 }
 
 function ensureActiveTournamentMatch(tournament) {
   if (!tournament) return null;
   const readyMatches = readyTournamentMatches(tournament);
-  const activeMatch = readyMatches.find((match) => match.id === tournament.activeMatchId);
+  const activeMatch = readyMatches.find((match) => match.id === tournament.activeMatchId && !match.winner);
   if (activeMatch) return activeMatch;
 
   const nextMatch = playableTournamentMatches(tournament)[0] || readyMatches[0] || null;
@@ -2343,8 +2413,7 @@ function leagueTournamentGames(leagueId = activeLeagueId) {
     .flatMap((tournament) =>
       tournament.rounds.flatMap((round) =>
         round.matches
-          .map((match) => match.game)
-          .filter(Boolean)
+          .flatMap(matchLoggedGames)
           .map((game) => ({ ...game, source: "league_tournament", leagueId, leagueTournamentId: tournament.id })),
       ),
     )
@@ -2365,12 +2434,30 @@ function myLeagueJoinRequest(leagueId) {
   return leagueMemberCache.find((member) => member.league_id === leagueId && member.user_id === currentUser?.id && member.role === "pending");
 }
 
+function myActiveLeagueMemberships() {
+  return leagueMemberCache.filter((member) => member.user_id === currentUser?.id && member.role !== "pending");
+}
+
+function blocksAnotherLeagueJoin(leagueId = "") {
+  const otherLeague = myActiveLeagueMemberships().find((member) => member.league_id !== leagueId);
+  if (!otherLeague) return false;
+  const league = leagueCache.find((item) => item.id === otherLeague.league_id);
+  showAppConfirm({
+    title: "Leave your league first",
+    message: `You are already in ${league?.name || "another league"}. Leave that league before joining or creating another one.`,
+    confirmLabel: "OK",
+    cancelLabel: "Close",
+    onConfirm: () => {},
+  });
+  return true;
+}
+
 function canManageActiveLeague() {
   return ["owner", "co_leader"].includes(myLeagueMember()?.role);
 }
 
 function canLogActiveLeagueGames() {
-  return ["owner", "co_leader", "ref"].includes(myLeagueMember()?.role);
+  return Boolean(myLeagueMember());
 }
 
 function canInviteActiveLeague() {
@@ -3114,15 +3201,34 @@ function setPreferredPartnerFromFriend(requestId) {
   const request = friendRequestCache.find((item) => item.id === requestId);
   const friend = request ? friendInfo(request) : null;
   if (!friend?.name) return;
+  savePreferredPartner(friend.name);
+  renderFriends();
+}
+
+async function addLeagueMemberAsFriend(memberId) {
+  const member = leagueMembers().find((item) => item.id === memberId);
+  if (!member?.user_id || member.user_id === currentUser?.id) return;
+  await sendFriendRequestByUserId(member.user_id, member.nickname || member.display_name || "Friend");
+}
+
+function setPreferredPartnerFromLeagueMember(memberId) {
+  const member = leagueMembers().find((item) => item.id === memberId);
+  if (!member || member.user_id === currentUser?.id) return;
+  savePreferredPartner(member.nickname || member.display_name);
+  renderLeagueStats();
+}
+
+function savePreferredPartner(name) {
+  const partnerName = cleanText(name);
+  if (!partnerName) return;
   state.myProfile ||= {};
-  state.myProfile.preferredPartner = friend.name;
+  state.myProfile.preferredPartner = partnerName;
   state.myProfile.updatedAt = new Date().toISOString();
   if (!state.myProfile.nickname) state.myProfile.nickname = myProfileNickname();
   saveCurrentProfileForUser();
   saveState();
   saveMyProfileToCloud();
   renderProfiles();
-  renderFriends();
 }
 
 function chooseLeagueForInvite(leagues) {
@@ -3137,8 +3243,10 @@ function chooseLeagueForInvite(leagues) {
 }
 
 async function acceptLeagueInvite(memberId) {
+  if (!requireMyProfile("accept a league invite")) return;
   const invite = leagueMemberCache.find((member) => member.id === memberId);
   if (!invite) return;
+  if (blocksAnotherLeagueJoin(invite.league_id)) return;
   const nickname = myProfileNickname();
   const { error } = await authClient
     .from("league_members")
@@ -3148,6 +3256,7 @@ async function acceptLeagueInvite(memberId) {
       display_name: nickname || "A player",
       nickname,
       cup_color: state.myProfile?.cupColor || "#d71920",
+      player_code: normalizePlayerCode(state.myProfile?.playerCode),
     })
     .eq("id", memberId);
   if (error) {
@@ -3187,6 +3296,8 @@ async function leaveCloudLeague() {
 
 async function createCloudLeague(form) {
   if (!currentUser) return;
+  if (!requireMyProfile("create a league")) return;
+  if (blocksAnotherLeagueJoin()) return;
   const leagueName = cleanText(form.get("name")) || "New League";
   if (leagueNameExists(leagueName)) {
     alert("A league with that name already exists. Pick a different name.");
@@ -3215,7 +3326,7 @@ async function createCloudLeague(form) {
   const cupColor = state.myProfile?.cupColor || "#d71920";
   await authClient
     .from("league_members")
-    .update({ display_name: ownerName, nickname: ownerName, cup_color: cupColor, email: currentUser.email, user_id: currentUser.id })
+    .update({ display_name: ownerName, nickname: ownerName, cup_color: cupColor, player_code: normalizePlayerCode(state.myProfile?.playerCode), email: currentUser.email, user_id: currentUser.id })
     .eq("league_id", leagueId)
     .eq("role", "owner");
 
@@ -3228,12 +3339,14 @@ async function createCloudLeague(form) {
 
 async function joinOpenLeague(leagueId) {
   if (!authClient || !currentUser) return;
+  if (!requireMyProfile("join a league")) return;
   const league = leagueCache.find((item) => item.id === leagueId);
   if (!league) return;
   if (myLeagueMember(leagueId)) {
     openLeagueDetails(leagueId);
     return;
   }
+  if (blocksAnotherLeagueJoin(leagueId)) return;
   if (leagueMembers(leagueId).length >= 50) {
     alert("This league is full. Leagues are capped at 50 members.");
     return;
@@ -3259,6 +3372,7 @@ async function joinOpenLeague(leagueId) {
     display_name: nickname,
     nickname,
     cup_color: state.myProfile?.cupColor || "#d71920",
+    player_code: normalizePlayerCode(state.myProfile?.playerCode),
     role: "member",
   });
   if (error) {
@@ -3273,12 +3387,14 @@ async function joinOpenLeague(leagueId) {
 
 async function requestInviteOnlyLeague(leagueId) {
   if (!authClient || !currentUser) return;
+  if (!requireMyProfile("request to join a league")) return;
   const league = leagueCache.find((item) => item.id === leagueId);
   if (!league) return;
   if (myLeagueMember(leagueId)) {
     openLeagueDetails(leagueId);
     return;
   }
+  if (blocksAnotherLeagueJoin(leagueId)) return;
   if (myLeagueJoinRequest(leagueId)) {
     alert("Your request is already pending.");
     return;
@@ -3304,6 +3420,7 @@ async function requestInviteOnlyLeague(leagueId) {
     display_name: nickname,
     nickname,
     cup_color: state.myProfile?.cupColor || "#d71920",
+    player_code: normalizePlayerCode(state.myProfile?.playerCode),
     role: "pending",
   });
   if (error) {
@@ -3405,6 +3522,7 @@ async function consumePendingLeagueInvite() {
       email: currentUser.email,
       display_name: nickname || "A player",
       nickname: "",
+      player_code: normalizePlayerCode(state.myProfile?.playerCode),
       role: "member",
     });
     if (error && error.code !== "23505") {
@@ -3437,6 +3555,7 @@ async function syncMyLeagueProfile() {
   const { error: rpcError } = await authClient.rpc("update_my_league_profile", {
     profile_name: nickname,
     profile_cup_color: cupColor,
+    profile_player_code: normalizePlayerCode(state.myProfile?.playerCode),
   });
   if (!rpcError) {
     await loadLeagueData();
@@ -3454,6 +3573,7 @@ async function syncMyLeagueProfile() {
             display_name: nickname,
             nickname,
             cup_color: cupColor,
+            player_code: normalizePlayerCode(state.myProfile?.playerCode),
             user_id: currentUser.id,
             email: currentUser.email,
           })
@@ -3571,7 +3691,7 @@ async function createCloudLeagueTournament(form) {
     return;
   }
 
-  const tournament = createTournament(name, teams);
+  const tournament = createTournament(name, teams, form.get("gamesToWin"));
   const payload = {
     league_id: activeLeagueId,
     created_by: currentUser.id,
@@ -3610,6 +3730,7 @@ async function deleteCloudLeagueTournament(tournamentId) {
 function leagueTournamentPayload(tournament) {
   return {
     name: tournament.name,
+    winsRequired: tournament.winsRequired || 1,
     teams: tournament.teams,
     rounds: tournament.rounds,
     activeMatchId: tournament.activeMatchId || "",
@@ -3620,7 +3741,7 @@ async function logLeagueTournamentMatch(tournamentId, matchId, form) {
   if (!canLogActiveLeagueGames()) return;
   const tournament = leagueTournaments().find((item) => item.id === tournamentId);
   const match = tournament?.rounds.flatMap((round) => round.matches).find((item) => item.id === matchId);
-  if (!tournament || !match || match.game) return;
+  if (!tournament || !match || match.winner) return;
 
   const beforeStats = computeLeagueStats();
   const beforeAchievementRanks = leagueAchievementRanks(beforeStats);
@@ -3629,15 +3750,16 @@ async function logLeagueTournamentMatch(tournamentId, matchId, form) {
   game.source = "league_tournament";
   game.leagueId = activeLeagueId;
   game.leagueTournamentId = tournament.id;
-  match.game = game;
-  match.winner = game.winnerIndex === 0 ? match.teamA : match.teamB;
-  advanceWinner(tournament, match);
-  advanceByes(tournament);
+  const seriesComplete = addTournamentGameToMatch(tournament, match, game);
+  if (seriesComplete) {
+    advanceWinner(tournament, match);
+    advanceByes(tournament);
+  }
   tournament.activeMatchId = playableTournamentMatches(tournament)[0]?.id || match.id;
   await saveCloudLeagueTournament(tournament);
   await loadLeagueData();
   const afterStats = computeLeagueStats();
-  await createLeagueChatMessage(activeLeagueId, `${match.winner.name} advanced in ${tournament.name}.`, "system");
+  await createLeagueChatMessage(activeLeagueId, `${match.winner?.name || game.teams[game.winnerIndex].name} ${seriesComplete ? "advanced" : "won a game"} in ${tournament.name}.`, "system");
   await notifyLeagueAchievementUnlocks(beforeAchievementRanks, afterStats);
   await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
 }
@@ -3803,6 +3925,7 @@ function normalizeLeagueTournament(row) {
     createdBy: row.created_by,
     teams: data.teams || [],
     rounds: data.rounds || [],
+    winsRequired: Number(data.winsRequired) || 1,
     activeMatchId: data.activeMatchId || "",
   };
 }
@@ -3817,6 +3940,18 @@ function profileNameFromEmail(email) {
 
 function currentPublicName() {
   return myProfileNickname() || "A player";
+}
+
+function requireMyProfile(action = "use leagues") {
+  if (myProfileNickname()) return true;
+  showAppConfirm({
+    title: "Set up My Profile first",
+    message: `Add your nickname before you ${action}. That keeps league rosters and invites clean.`,
+    confirmLabel: "My Profile",
+    cancelLabel: "Cancel",
+    onConfirm: () => switchView("profiles"),
+  });
+  return false;
 }
 
 function render() {
@@ -3934,7 +4069,7 @@ function renderBracket() {
   }
 
   const champion = tournament.rounds.at(-1).matches[0]?.winner;
-  const completedMatches = tournament.rounds.flatMap((round) => round.matches).filter((match) => match.game).length;
+  const completedMatches = tournament.rounds.flatMap((round) => round.matches).filter((match) => match.winner && match.teamA && match.teamB).length;
   els.tournamentSummary.innerHTML = `
     <div class="summary-item"><b>${tournament.teams.length}</b><span>Teams</span></div>
     <div class="summary-item"><b>${completedMatches}</b><span>Matches</span></div>
@@ -3943,6 +4078,8 @@ function renderBracket() {
 
   const readyMatches = readyTournamentMatches(tournament);
   const match = selectedTournamentMatch(tournament);
+  const currentForm = els.bracket.querySelector(".match-form");
+  const currentDraft = currentForm?.dataset.matchId === match?.id ? captureFormDraft(currentForm) : {};
   if (!readyMatches.length || !match) {
     els.bracket.innerHTML = '<section class="panel"><p class="empty">Waiting for the next matchup.</p></section>';
     return;
@@ -3961,6 +4098,7 @@ function renderBracket() {
   `;
 
   const form = els.bracket.querySelector(".match-form");
+  restoreFormDraft(form, currentDraft);
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
     logTournamentMatch(tournament.id, form.dataset.matchId, new FormData(form));
@@ -3970,7 +4108,7 @@ function renderBracket() {
 function tournamentMatchOption(tournament, match, activeMatchId) {
   return `
     <option value="${match.id}" ${match.id === activeMatchId ? "selected" : ""}>
-      ${escapeHtml(tournamentMatchLabel(tournament, match))}${match.game ? " - Logged" : ""}
+      ${escapeHtml(tournamentMatchLabel(tournament, match))}${match.winner ? " - Complete" : matchLoggedGames(match).length ? " - In Progress" : ""}
     </option>
   `;
 }
@@ -3981,14 +4119,16 @@ function tournamentMatchLabel(tournament, match) {
 }
 
 function matchCard(tournament, match) {
-  const canLog = match.teamA && match.teamB && !match.game;
+  const canLog = match.teamA && match.teamB && !match.winner;
   const pending = !match.teamA || !match.teamB;
+  const seriesWins = matchSeriesWins(match);
+  const winsRequired = Math.max(1, Number(tournament.winsRequired) || 1);
   const teamsHtml = [match.teamA, match.teamB]
     .map((team) => {
       const isWinner = match.winner?.id === team?.id;
       return `<div class="team-line ${isWinner ? "winner" : ""}">
         <span>${escapeHtml(team?.name || "TBD")}</span>
-        <span>${match.game ? match.game.teams[team?.id === match.teamA?.id ? 0 : 1].score : ""}</span>
+        <span>${matchLoggedGames(match).length ? `${seriesWins[team?.id === match.teamA?.id ? 0 : 1]} / ${winsRequired}` : ""}</span>
       </div>`;
     })
     .join("");
@@ -4002,7 +4142,7 @@ function matchCard(tournament, match) {
     <article class="match-card ${pending ? "pending" : ""}">
       <strong>${escapeHtml(tournamentMatchLabel(tournament, match))}</strong>
       ${teamsHtml}
-      ${match.game ? `<div class="meta-line">Logged ${formatDate(match.game.createdAt)}</div>` : ""}
+      ${matchLoggedGames(match).length ? `<div class="meta-line">${seriesWins[0]}-${seriesWins[1]} series${match.winner ? ` - ${escapeHtml(match.winner.name)} advances` : ""}</div>` : ""}
       ${formHtml}
     </article>
   `;
@@ -4056,16 +4196,30 @@ function tournamentPlayerStatsForm(match) {
 function logTournamentMatch(tournamentId, matchId, form) {
   const tournament = state.tournaments.find((item) => item.id === tournamentId);
   const match = tournament.rounds.flatMap((round) => round.matches).find((item) => item.id === matchId);
-  if (!match || match.game) return;
+  if (!match || match.winner) return;
 
   const game = readTournamentGameForm(form, match, tournament.id);
-  match.game = game;
-  match.winner = game.winnerIndex === 0 ? match.teamA : match.teamB;
-  advanceWinner(tournament, match);
-  advanceByes(tournament);
+  const seriesComplete = addTournamentGameToMatch(tournament, match, game);
+  if (seriesComplete) {
+    advanceWinner(tournament, match);
+    advanceByes(tournament);
+  }
   tournament.activeMatchId = playableTournamentMatches(tournament)[0]?.id || match.id;
   saveState();
   render();
+}
+
+function addTournamentGameToMatch(tournament, match, game) {
+  match.games = matchLoggedGames(match);
+  match.games.push(game);
+  match.game = game;
+  const seriesWins = matchSeriesWins(match);
+  const winsRequired = Math.max(1, Number(tournament.winsRequired) || 1);
+  if (seriesWins[game.winnerIndex] >= winsRequired) {
+    match.winner = game.winnerIndex === 0 ? match.teamA : match.teamB;
+    return true;
+  }
+  return false;
 }
 
 function advanceWinner(tournament, match) {
@@ -4092,7 +4246,7 @@ function renderMatchHistory() {
     return;
   }
 
-  const games = tournament.rounds.flatMap((round) => round.matches.map((match) => match.game).filter(Boolean));
+  const games = tournament.rounds.flatMap((round) => round.matches.flatMap(matchLoggedGames));
   if (!games.length) {
     els.tournamentMatchesList.innerHTML = '<p class="empty">No tournament matches logged yet.</p>';
     return;
@@ -4208,7 +4362,10 @@ function notificationTypeLabel(type) {
 function pendingIncomingFriendRequests() {
   const email = currentUser?.email?.toLowerCase();
   return friendRequestCache.filter(
-    (request) => request.status === "pending" && request.requester_id !== currentUser?.id && request.recipient_email?.toLowerCase() === email,
+    (request) =>
+      request.status === "pending" &&
+      request.requester_id !== currentUser?.id &&
+      (request.recipient_id === currentUser?.id || request.recipient_email?.toLowerCase() === email),
   );
 }
 
@@ -4354,7 +4511,7 @@ function leagueCard(league) {
       ? `<button class="small-button secondary-button league-card-action" type="button" disabled>Requested</button>`
       : league.privacy === "open"
         ? `<button class="small-button league-card-action" type="button" data-join-league="${league.id}" ${isFull ? "disabled" : ""}>${isFull ? "Full" : "Join"}</button>`
-        : `<button class="small-button secondary-button league-card-action" type="button" data-request-league="${league.id}" ${isFull ? "disabled" : ""}>${isFull ? "Full" : "Request to Join"}</button>`;
+        : `<button class="small-button secondary-button league-card-action" type="button" data-request-league="${league.id}" ${isFull ? "disabled" : ""}>${isFull ? "Full" : "Request to Join?"}</button>`;
   return `
     <article class="league-card-button">
       <button class="league-card-main" type="button" data-open-league="${league.id}">
@@ -4467,7 +4624,7 @@ function renderLeagueTournaments() {
     .join("");
 
   const champion = tournament.rounds.at(-1).matches[0]?.winner;
-  const completedMatches = tournament.rounds.flatMap((round) => round.matches).filter((match) => match.game).length;
+  const completedMatches = tournament.rounds.flatMap((round) => round.matches).filter((match) => match.winner && match.teamA && match.teamB).length;
   els.leagueTournamentSummary.innerHTML = `
     <div class="summary-item"><b>${tournament.teams.length}</b><span>Teams</span></div>
     <div class="summary-item"><b>${completedMatches}</b><span>Matches</span></div>
@@ -4476,6 +4633,11 @@ function renderLeagueTournaments() {
 
   const readyMatches = readyTournamentMatches(tournament);
   const match = selectedTournamentMatch(tournament);
+  const currentForm = els.leagueTournamentBracket.querySelector(".league-tournament-match-form");
+  const currentDraft =
+    currentForm?.dataset.tournamentId === tournament.id && currentForm?.dataset.matchId === match?.id
+      ? captureFormDraft(currentForm)
+      : {};
   if (!readyMatches.length || !match) {
     els.leagueTournamentBracket.innerHTML = '<p class="empty">Waiting for the next matchup.</p>';
   } else {
@@ -4490,9 +4652,10 @@ function renderLeagueTournaments() {
       </section>
       ${leagueTournamentMatchCard(tournament, match, canLog)}
     `;
+    restoreFormDraft(els.leagueTournamentBracket.querySelector(".league-tournament-match-form"), currentDraft);
   }
 
-  const games = tournament.rounds.flatMap((round) => round.matches.map((item) => item.game).filter(Boolean));
+  const games = tournament.rounds.flatMap((round) => round.matches.flatMap(matchLoggedGames));
   els.leagueTournamentMatchesList.innerHTML = games.length
     ? games
         .slice()
@@ -4503,14 +4666,16 @@ function renderLeagueTournaments() {
 }
 
 function leagueTournamentMatchCard(tournament, match, canLog) {
-  const canLogMatch = canLog && match.teamA && match.teamB && !match.game;
+  const canLogMatch = canLog && match.teamA && match.teamB && !match.winner;
   const pending = !match.teamA || !match.teamB;
+  const seriesWins = matchSeriesWins(match);
+  const winsRequired = Math.max(1, Number(tournament.winsRequired) || 1);
   const teamsHtml = [match.teamA, match.teamB]
     .map((team) => {
       const isWinner = match.winner?.id === team?.id;
       return `<div class="team-line ${isWinner ? "winner" : ""}">
         <span>${escapeHtml(team?.name || "TBD")}</span>
-        <span>${match.game ? match.game.teams[team?.id === match.teamA?.id ? 0 : 1].score : ""}</span>
+        <span>${matchLoggedGames(match).length ? `${seriesWins[team?.id === match.teamA?.id ? 0 : 1]} / ${winsRequired}` : ""}</span>
       </div>`;
     })
     .join("");
@@ -4519,7 +4684,7 @@ function leagueTournamentMatchCard(tournament, match, canLog) {
     <article class="match-card ${pending ? "pending" : ""}">
       <strong>${escapeHtml(tournamentMatchLabel(tournament, match))}</strong>
       ${teamsHtml}
-      ${match.game ? `<div class="meta-line">Logged ${formatDate(match.game.createdAt)}</div>` : ""}
+      ${matchLoggedGames(match).length ? `<div class="meta-line">${seriesWins[0]}-${seriesWins[1]} series${match.winner ? ` - ${escapeHtml(match.winner.name)} advances` : ""}</div>` : ""}
       ${canLogMatch ? leagueTournamentMatchForm(tournament, match) : ""}
     </article>
   `;
@@ -4858,6 +5023,7 @@ function leagueMemberRow(member, canManage, isOwner) {
 function leagueRosterCard(member) {
   const stats = member.stats || emptyBucket();
   const isSelected = member.id === selectedLeagueRosterMemberId;
+  const code = normalizePlayerCode(member.player_code);
   return `
     <article class="league-roster-item">
       <button class="league-roster-card ${isSelected ? "selected" : ""}" type="button" data-roster-member="${escapeHtml(member.id)}">
@@ -4866,6 +5032,7 @@ function leagueRosterCard(member) {
           <div>
             <strong>${escapeHtml(member.nickname || member.display_name)}</strong>
             <span>${member.nickname ? escapeHtml(member.display_name) : "No nickname"} - ${displayRole(member.role)}</span>
+            ${code ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
           </div>
         </div>
         <div class="league-roster-stats">
@@ -4960,6 +5127,7 @@ function leagueRosterDetailCard(selected) {
   const stats = selected.stats || emptyBucket();
   const achievementsOpen = selectedLeagueAchievementsMemberId === selected.id;
   const isSelf = selected.user_id === currentUser?.id;
+  const code = normalizePlayerCode(selected.player_code);
   const statItems = [
     ["Games", stats.games],
     ["Record", `${stats.wins}-${stats.losses}`],
@@ -4982,6 +5150,7 @@ function leagueRosterDetailCard(selected) {
         <div>
           <strong>${escapeHtml(selected.nickname || selected.display_name)}</strong>
           <span>${displayRole(selected.role)}</span>
+          ${code ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
         </div>
       </div>
       <div class="profile-stat-grid">
@@ -4991,7 +5160,12 @@ function leagueRosterDetailCard(selected) {
         <button class="small-button secondary-button" type="button" data-roster-achievements="${escapeHtml(selected.id)}">
           ${achievementsOpen ? "Hide League Badges" : "See League Badges"}
         </button>
-        ${isSelf ? "" : `<button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(selected.id)}">Add Friend</button>`}
+        ${
+          isSelf
+            ? ""
+            : `<button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(selected.id)}">Add Friend</button>
+               <button class="small-button secondary-button" type="button" data-roster-preferred-partner="${escapeHtml(selected.id)}">Preferred Partner</button>`
+        }
       </div>
       ${achievementsOpen ? leagueBadgeSection(stats) : ""}
     </article>
@@ -5477,7 +5651,7 @@ function computePlayerStats(tournamentId = "") {
     ...state.regularGames,
     ...state.bigGames,
     ...state.tournaments.flatMap((tournament) =>
-      tournament.rounds.flatMap((round) => round.matches.map((match) => match.game).filter(Boolean)),
+      tournament.rounds.flatMap((round) => round.matches.flatMap(matchLoggedGames)),
     ),
   ].filter((game) => !tournamentId || game.tournamentId === tournamentId);
 
@@ -5780,7 +5954,7 @@ function statReportRecord(buckets) {
 
 function statReportGameRecord() {
   const tournament = state.tournaments.flatMap((item) =>
-    item.rounds.flatMap((round) => round.matches.map((match) => match.game).filter(Boolean)),
+    item.rounds.flatMap((round) => round.matches.flatMap(matchLoggedGames)),
   ).length;
   return {
     games: state.regularGames.length + state.bigGames.length + tournament,

@@ -199,6 +199,16 @@ textarea {
   gap: 10px;
 }
 
+.confirm-sheet .age-gate-actions .primary-button,
+.confirm-sheet .age-gate-actions .danger-button {
+  width: 100%;
+  min-height: 42px;
+  margin: 0;
+  padding: 0 14px;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
 .age-gate-message {
   margin: 0;
   color: var(--accent);
@@ -955,6 +965,18 @@ legend {
   color: #ffffff;
 }
 
+.compact-danger-button {
+  justify-self: end;
+  width: auto;
+  min-width: 0;
+  max-width: max-content;
+  min-height: 27px;
+  margin: 4px 0 6px;
+  padding: 0 10px;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
 .text-button {
   display: inline-flex;
   align-items: center;
@@ -1241,6 +1263,15 @@ legend {
 #friendInviteForm button[type="submit"],
 #leagueInviteForm button[type="submit"] {
   margin-top: 8px;
+}
+
+.field-heading {
+  margin: 8px 0 -2px;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .profile-stat-grid {
