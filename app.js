@@ -72,6 +72,7 @@ let selectedFriendRequestId = "";
 let confirmingUnfriendRequestId = "";
 let confirmingLeaveLeague = false;
 let editingLeagueGameId = "";
+let rosterActionFeedback = null;
 let passwordRecoveryMode = false;
 let pendingLeagueInviteId = "";
 let showingLeagueQr = false;
@@ -2212,7 +2213,8 @@ function createTournament(name, teams, gamesToWin = 1) {
   const entries = [...teams, ...Array(bracketSize - teams.length).fill(null)];
   const rounds = [];
   const roundCount = Math.log2(bracketSize);
-  const winsRequired = Math.min(7, Math.max(1, Number(gamesToWin) || 1));
+  const winsByRound = normalizeWinsByRound(gamesToWin, roundCount);
+  const winsRequired = winsByRound[0] || 1;
 
   rounds.push({
     name: roundName(0, roundCount),
@@ -2249,12 +2251,33 @@ function createTournament(name, teams, gamesToWin = 1) {
     name: cleanText(name) || "Sinkd Tournament",
     createdAt: new Date().toISOString(),
     winsRequired,
+    winsByRound,
     teams,
     rounds,
   };
 
   advanceByes(tournament);
   return tournament;
+}
+
+function normalizeWinsByRound(value, roundCount = 1) {
+  if (typeof value === "string") {
+    const parts = value
+      .split(",")
+      .map((part) => Math.min(7, Math.max(1, Number(part.trim()) || 1)))
+      .filter(Boolean);
+    return Array.from({ length: roundCount }, (_, index) => parts[index] || parts.at(-1) || 1);
+  }
+  if (Array.isArray(value)) {
+    return Array.from({ length: roundCount }, (_, index) => Math.min(7, Math.max(1, Number(value[index] ?? value.at(-1)) || 1)));
+  }
+  const single = Math.min(7, Math.max(1, Number(value) || 1));
+  return Array.from({ length: roundCount }, () => single);
+}
+
+function winsRequiredForMatch(tournament, match) {
+  const byRound = normalizeWinsByRound(tournament?.winsByRound || tournament?.winsRequired || 1, tournament?.rounds?.length || 1);
+  return byRound[match?.roundIndex || 0] || 1;
 }
 
 function pairTeams(entries) {
@@ -2530,6 +2553,7 @@ async function loadLeagueData() {
 
   leagueCache = [...new Map([...(openLeagues || []), ...(memberLeagues || [])].map((league) => [league.id, league])).values()];
   leagueMemberCache = [...new Map([...(members || []), ...(memberships || [])].map((member) => [member.id, member])).values()];
+  await hydrateLeagueMemberPlayerCodes();
   leagueGameCache = (games || []).map(normalizeLeagueGame);
   leagueTournamentCache = (leagueTournaments || []).map(normalizeLeagueTournament);
   leagueChatCache = chatMessages || [];
@@ -2537,6 +2561,30 @@ async function loadLeagueData() {
   if (activeLeagueTournamentId && !leagueTournamentCache.some((tournament) => tournament.id === activeLeagueTournamentId)) activeLeagueTournamentId = "";
   buildLeagueGamePlayerCards();
   render();
+}
+
+async function hydrateLeagueMemberPlayerCodes() {
+  const userIds = [...new Set(leagueMemberCache.map((member) => member.user_id).filter(Boolean))];
+  if (!authClient || !userIds.length) return;
+  const { data, error } = await authClient
+    .from("player_profiles")
+    .select("user_id, player_code, nickname, cup_color")
+    .in("user_id", userIds);
+  if (error) {
+    console.warn(error);
+    return;
+  }
+  const profilesByUserId = new Map((data || []).map((profile) => [profile.user_id, profile]));
+  leagueMemberCache = leagueMemberCache.map((member) => {
+    const profile = profilesByUserId.get(member.user_id);
+    if (!profile) return member;
+    return {
+      ...member,
+      player_code: normalizePlayerCode(member.player_code) || normalizePlayerCode(profile.player_code),
+      nickname: member.nickname || profile.nickname,
+      cup_color: member.cup_color || profile.cup_color,
+    };
+  });
 }
 
 function subscribeToLeagueChanges() {
@@ -3063,10 +3111,10 @@ async function sendFriendRequest(form) {
 }
 
 async function sendFriendRequestByUserId(recipientId, recipientName = "Friend") {
-  if (!authClient || !currentUser || !recipientId || recipientId === currentUser.id) return;
+  if (!authClient || !currentUser || !recipientId || recipientId === currentUser.id) return false;
   if (hasFriendConnectionByUserId(recipientId)) {
     alert("That player already has a friend request or is already your friend.");
-    return;
+    return false;
   }
 
   const { error } = await authClient.from("friend_requests").insert({
@@ -3080,7 +3128,7 @@ async function sendFriendRequestByUserId(recipientId, recipientName = "Friend") 
   });
   if (error) {
     alert(error.message);
-    return;
+    return false;
   }
   await createNotification({
     recipientId,
@@ -3090,6 +3138,7 @@ async function sendFriendRequestByUserId(recipientId, recipientName = "Friend") 
     linkTarget: "friends",
   });
   await loadFriendData();
+  return true;
 }
 
 function hasFriendConnectionByEmail(email) {
@@ -3208,13 +3257,18 @@ function setPreferredPartnerFromFriend(requestId) {
 async function addLeagueMemberAsFriend(memberId) {
   const member = leagueMembers().find((item) => item.id === memberId);
   if (!member?.user_id || member.user_id === currentUser?.id) return;
-  await sendFriendRequestByUserId(member.user_id, member.nickname || member.display_name || "Friend");
+  const sent = await sendFriendRequestByUserId(member.user_id, member.nickname || member.display_name || "Friend");
+  if (sent) {
+    rosterActionFeedback = { memberId, action: "friend" };
+    renderLeagueStats();
+  }
 }
 
 function setPreferredPartnerFromLeagueMember(memberId) {
   const member = leagueMembers().find((item) => item.id === memberId);
   if (!member || member.user_id === currentUser?.id) return;
   savePreferredPartner(member.nickname || member.display_name);
+  rosterActionFeedback = { memberId, action: "partner" };
   renderLeagueStats();
 }
 
@@ -3731,6 +3785,7 @@ function leagueTournamentPayload(tournament) {
   return {
     name: tournament.name,
     winsRequired: tournament.winsRequired || 1,
+    winsByRound: tournament.winsByRound || [tournament.winsRequired || 1],
     teams: tournament.teams,
     rounds: tournament.rounds,
     activeMatchId: tournament.activeMatchId || "",
@@ -3926,6 +3981,7 @@ function normalizeLeagueTournament(row) {
     teams: data.teams || [],
     rounds: data.rounds || [],
     winsRequired: Number(data.winsRequired) || 1,
+    winsByRound: data.winsByRound || [Number(data.winsRequired) || 1],
     activeMatchId: data.activeMatchId || "",
   };
 }
@@ -4122,7 +4178,7 @@ function matchCard(tournament, match) {
   const canLog = match.teamA && match.teamB && !match.winner;
   const pending = !match.teamA || !match.teamB;
   const seriesWins = matchSeriesWins(match);
-  const winsRequired = Math.max(1, Number(tournament.winsRequired) || 1);
+  const winsRequired = winsRequiredForMatch(tournament, match);
   const teamsHtml = [match.teamA, match.teamB]
     .map((team) => {
       const isWinner = match.winner?.id === team?.id;
@@ -4214,7 +4270,7 @@ function addTournamentGameToMatch(tournament, match, game) {
   match.games.push(game);
   match.game = game;
   const seriesWins = matchSeriesWins(match);
-  const winsRequired = Math.max(1, Number(tournament.winsRequired) || 1);
+  const winsRequired = winsRequiredForMatch(tournament, match);
   if (seriesWins[game.winnerIndex] >= winsRequired) {
     match.winner = game.winnerIndex === 0 ? match.teamA : match.teamB;
     return true;
@@ -4669,7 +4725,7 @@ function leagueTournamentMatchCard(tournament, match, canLog) {
   const canLogMatch = canLog && match.teamA && match.teamB && !match.winner;
   const pending = !match.teamA || !match.teamB;
   const seriesWins = matchSeriesWins(match);
-  const winsRequired = Math.max(1, Number(tournament.winsRequired) || 1);
+  const winsRequired = winsRequiredForMatch(tournament, match);
   const teamsHtml = [match.teamA, match.teamB]
     .map((team) => {
       const isWinner = match.winner?.id === team?.id;
@@ -4814,6 +4870,10 @@ function renderLeagueRankings() {
 function renderLeagueChat() {
   const member = myLeagueMember();
   els.leagueChatForm.classList.toggle("hidden", !member);
+  const shouldStickToBottom =
+    leagueDetailTab === "chat" &&
+    (els.leagueChatList.scrollHeight - els.leagueChatList.scrollTop - els.leagueChatList.clientHeight < 80 ||
+      !els.leagueChatList.dataset.hasRendered);
   const messages = leagueChatMessages();
   const requests = member ? leagueJoinRequests().map((request) => ({ ...request, chatItemType: "join_request" })) : [];
   const rows = [
@@ -4823,6 +4883,12 @@ function renderLeagueChat() {
   els.leagueChatList.innerHTML = rows.length
     ? rows.map((item) => (item.chatItemType === "join_request" ? leagueJoinRequestChatRow(item) : leagueChatRow(item))).join("")
     : '<p class="empty">No league chat yet.</p>';
+  els.leagueChatList.dataset.hasRendered = "true";
+  if (shouldStickToBottom) {
+    window.requestAnimationFrame(() => {
+      els.leagueChatList.scrollTop = els.leagueChatList.scrollHeight;
+    });
+  }
   if (leagueDetailTab === "chat") rememberLeagueChatSeen();
 }
 
@@ -5024,6 +5090,7 @@ function leagueRosterCard(member) {
   const stats = member.stats || emptyBucket();
   const isSelected = member.id === selectedLeagueRosterMemberId;
   const code = normalizePlayerCode(member.player_code);
+  const isSelf = member.user_id === currentUser?.id;
   return `
     <article class="league-roster-item">
       <button class="league-roster-card ${isSelected ? "selected" : ""}" type="button" data-roster-member="${escapeHtml(member.id)}">
@@ -5032,7 +5099,7 @@ function leagueRosterCard(member) {
           <div>
             <strong>${escapeHtml(member.nickname || member.display_name)}</strong>
             <span>${member.nickname ? escapeHtml(member.display_name) : "No nickname"} - ${displayRole(member.role)}</span>
-            ${code ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
+            ${code && !isSelf ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
           </div>
         </div>
         <div class="league-roster-stats">
@@ -5128,6 +5195,8 @@ function leagueRosterDetailCard(selected) {
   const achievementsOpen = selectedLeagueAchievementsMemberId === selected.id;
   const isSelf = selected.user_id === currentUser?.id;
   const code = normalizePlayerCode(selected.player_code);
+  const friendSent = rosterActionFeedback?.memberId === selected.id && rosterActionFeedback.action === "friend";
+  const partnerSent = rosterActionFeedback?.memberId === selected.id && rosterActionFeedback.action === "partner";
   const statItems = [
     ["Games", stats.games],
     ["Record", `${stats.wins}-${stats.losses}`],
@@ -5150,7 +5219,7 @@ function leagueRosterDetailCard(selected) {
         <div>
           <strong>${escapeHtml(selected.nickname || selected.display_name)}</strong>
           <span>${displayRole(selected.role)}</span>
-          ${code ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
+          ${code && !isSelf ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
         </div>
       </div>
       <div class="profile-stat-grid">
@@ -5163,8 +5232,8 @@ function leagueRosterDetailCard(selected) {
         ${
           isSelf
             ? ""
-            : `<button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(selected.id)}">Add Friend</button>
-               <button class="small-button secondary-button" type="button" data-roster-preferred-partner="${escapeHtml(selected.id)}">Preferred Partner</button>`
+            : `<button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(selected.id)}">${friendSent ? "Sent" : "Add Friend"}</button>
+               <button class="small-button secondary-button" type="button" data-roster-preferred-partner="${escapeHtml(selected.id)}">${partnerSent ? "Sent" : "Preferred Partner"}</button>`
         }
       </div>
       ${achievementsOpen ? leagueBadgeSection(stats) : ""}

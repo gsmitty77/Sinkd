@@ -204,9 +204,10 @@
                 <textarea name="teams" rows="8" placeholder="Red Cups: Alex, Jordan&#10;Blue Dies: Casey, Morgan&#10;Table Kings: Sam, Riley&#10;Last Call: Taylor, Drew" required></textarea>
               </label>
               <label>
-                Games to Win Each Matchup
-                <input name="gamesToWin" type="number" min="1" max="7" value="1" required />
+                Games to Win by Round
+                <input name="gamesToWin" type="text" value="1" placeholder="1, 1, 2" required />
               </label>
+              <p class="form-help">Separate rounds with commas. Example: 1, 1, 2 means early rounds are one game and the final is best of 3.</p>
               <button class="primary-button compact-action-button" type="submit">Create Bracket</button>
             </form>
 
@@ -368,9 +369,10 @@
                   <textarea name="teams" rows="6" placeholder="Gold Team: Alex / Jordan&#10;Navy Team: Casey / Taylor&#10;White Team: Morgan / Riley&#10;Black Team: Drew / Quinn" required></textarea>
                 </label>
                 <label>
-                  Games to Win Each Matchup
-                  <input name="gamesToWin" type="number" min="1" max="7" value="1" required />
+                  Games to Win by Round
+                  <input name="gamesToWin" type="text" value="1" placeholder="1, 1, 2" required />
                 </label>
+                <p class="form-help">Separate rounds with commas. The last number repeats if the bracket has more rounds.</p>
                 <button class="primary-button compact-action-button" type="submit">Create Bracket</button>
               </form>
 
@@ -484,9 +486,9 @@
                 <label>Left <input name="logoLeft" type="color" /></label>
                 <label>Right <input name="logoRight" type="color" /></label>
               </div>
-              <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
+              <button class="small-button secondary-button compact-action-button leave-league-compact" id="leaveLeagueBtn" type="button">Leave League</button>
               <button class="primary-button compact-action-button manager-setting" type="submit">Save Settings</button>
-              <button class="small-button secondary-button" id="leaveLeagueBtn" type="button">Leave League</button>
+              <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
               <div class="leave-confirm hidden" id="leaveLeagueConfirm">
                 <span>Are you sure?</span>
                 <div class="friend-actions">
@@ -569,7 +571,7 @@
               Preferred Partner
               <input name="preferredPartner" placeholder="Optional" />
             </label>
-            <h3 class="field-heading">Customize Cup</h3>
+            <label class="field-heading">Customize Cup</label>
             <label>
               <input name="cupColor" type="color" value="#d71920" />
             </label>

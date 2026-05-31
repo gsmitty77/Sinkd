@@ -1236,13 +1236,13 @@ legend {
 .profile-card .player-code {
   display: inline-grid;
   width: fit-content;
-  margin-top: 6px;
-  padding: 5px 8px;
+  margin-top: 4px;
+  padding: 3px 6px;
   border: 1px solid rgba(239, 191, 4, 0.42);
   border-radius: 8px;
   background: rgba(239, 191, 4, 0.12);
   color: var(--accent);
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 950;
   letter-spacing: 0.08em;
 }
@@ -1266,12 +1266,20 @@ legend {
 }
 
 .field-heading {
-  margin: 8px 0 -2px;
-  color: var(--accent);
-  font-size: 0.82rem;
-  font-weight: 950;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.form-help {
+  margin: -4px 0 2px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.35;
 }
 
 .profile-stat-grid {
@@ -1674,8 +1682,9 @@ legend {
   font-weight: 900;
 }
 
-#leaveLeagueBtn {
-  margin-top: 22px;
+.leave-league-compact {
+  justify-self: end;
+  margin: 4px 0 6px;
 }
 
 .league-detail-panel {
@@ -2036,6 +2045,20 @@ legend {
   font-weight: 750;
 }
 
+.league-roster-card .roster-player-code,
+.league-player-detail-card .roster-player-code {
+  width: fit-content;
+  margin-top: 3px;
+  padding: 2px 5px;
+  border: 1px solid rgba(239, 191, 4, 0.34);
+  border-radius: 7px;
+  background: rgba(239, 191, 4, 0.1);
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+}
+
 .league-roster-player {
   display: flex;
   align-items: center;
@@ -2131,8 +2154,10 @@ legend {
 
 .league-chat-list {
   display: grid;
+  align-content: end;
   gap: 10px;
   max-height: 440px;
+  min-height: 320px;
   overflow-y: auto;
   padding-right: 2px;
 }
