@@ -78,6 +78,7 @@ let pendingLeagueInviteId = "";
 let showingLeagueQr = false;
 let leagueDetailTab = "games";
 let editingMyProfile = false;
+let authBusy = false;
 let leagueCache = [];
 let leagueMemberCache = [];
 let leagueGameCache = [];
@@ -323,6 +324,7 @@ async function setupAuth() {
     return;
   }
 
+  handleAuthRedirectError();
   await finishOAuthRedirect();
 
   const { data, error } = await authClient.auth.getSession();
@@ -355,6 +357,19 @@ async function finishOAuthRedirect() {
   }
 
   url.searchParams.delete("code");
+  window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+}
+
+function handleAuthRedirectError() {
+  const url = new URL(window.location.href);
+  const params = new URLSearchParams(url.search || window.location.hash.replace(/^#/, ""));
+  const error = cleanText(params.get("error_description") || params.get("error"));
+  if (!error) return;
+  showAuthMessage(authFriendlyError(error));
+  ["error", "error_code", "error_description"].forEach((key) => {
+    url.searchParams.delete(key);
+  });
+  if (window.location.hash.includes("error")) url.hash = "";
   window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -584,7 +599,8 @@ function showPasswordRecoveryForm(user) {
   els.authEmail.closest("label").classList.add("hidden");
   els.authPassword.value = "";
   els.authPassword.placeholder = "New password";
-  showAuthMessage("Enter your new password, then save it.");
+    showAuthMessage("Enter your new password, then save it.");
+  els.authPassword.autocomplete = "new-password";
 }
 
 function restoreAuthButtons() {
@@ -595,6 +611,7 @@ function restoreAuthButtons() {
   els.forgotPasswordBtn.classList.remove("hidden");
   els.authEmail.closest("label").classList.remove("hidden");
   els.authPassword.placeholder = "Password";
+  els.authPassword.autocomplete = "current-password";
 }
 
 function profileStorageKey(user = currentUser) {
@@ -764,6 +781,7 @@ async function findPlayerByCode(code) {
 }
 
 async function signInWithEmail() {
+  if (authBusy) return;
   if (passwordRecoveryMode) {
     await completePasswordReset();
     return;
@@ -776,22 +794,30 @@ async function signInWithEmail() {
     return;
   }
 
-  showAuthMessage("Signing in...");
-  const { error } = await authClient.auth.signInWithPassword({ email, password });
-  showAuthMessage(error ? error.message : "");
+  setAuthBusy(true, "Signing in...");
+  const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+  setAuthBusy(false);
+  if (error) {
+    showAuthMessage(authFriendlyError(error.message));
+    return;
+  }
+  if (data.session?.user) setAuthView(data.session.user);
+  showAuthMessage("");
 }
 
 async function completePasswordReset() {
+  if (authBusy) return;
   const password = els.authPassword.value;
   if (!password || password.length < 6) {
     showAuthMessage("Enter a new password with at least 6 characters.");
     return;
   }
 
-  showAuthMessage("Saving new password...");
+  setAuthBusy(true, "Saving new password...");
   const { error } = await authClient.auth.updateUser({ password });
+  setAuthBusy(false);
   if (error) {
-    showAuthMessage(error.message);
+    showAuthMessage(authFriendlyError(error.message));
     return;
   }
 
@@ -802,6 +828,7 @@ async function completePasswordReset() {
 }
 
 async function signUpWithEmail() {
+  if (authBusy) return;
   const email = cleanText(els.authEmail.value);
   const password = els.authPassword.value;
   if (!email || !password) {
@@ -809,18 +836,34 @@ async function signUpWithEmail() {
     return;
   }
 
-  showAuthMessage("Creating account...");
-  const { error } = await authClient.auth.signUp({
+  if (password.length < 6) {
+    showAuthMessage("Use a password with at least 6 characters.");
+    return;
+  }
+
+  setAuthBusy(true, "Creating account...");
+  const { data, error } = await authClient.auth.signUp({
     email,
     password,
     options: {
       emailRedirectTo: authRedirectUrl(),
     },
   });
-  showAuthMessage(error ? error.message : "Account created. Check your email if confirmation is required.");
+  setAuthBusy(false);
+  if (error) {
+    showAuthMessage(authFriendlyError(error.message));
+    return;
+  }
+  if (data.session?.user) {
+    setAuthView(data.session.user);
+    showAuthMessage("");
+    return;
+  }
+  showAuthMessage("Account created. If Supabase asks for email confirmation, open that email, then come back and sign in.");
 }
 
 async function sendPasswordReset() {
+  if (authBusy) return;
   const email = cleanText(els.authEmail.value);
   if (!email) {
     showAuthMessage("Enter your email first.");
@@ -828,21 +871,35 @@ async function sendPasswordReset() {
     return;
   }
 
-  showAuthMessage("Sending reset email...");
+  setAuthBusy(true, "Sending reset email...");
   const options = window.location.protocol === "file:" ? {} : { redirectTo: authRedirectUrl() };
   const { error } = await authClient.auth.resetPasswordForEmail(email, options);
-  showAuthMessage(error ? error.message : "Password reset email sent. Check your inbox.");
+  setAuthBusy(false);
+  showAuthMessage(error ? authFriendlyError(error.message) : "Password reset email sent. Check your inbox.");
 }
 
 async function signInWithGoogle() {
-  showAuthMessage("Opening Google...");
+  if (authBusy) return;
+  setAuthBusy(true, "Opening Google...");
   const { error } = await authClient.auth.signInWithOAuth({
     provider: "google",
     options: {
       redirectTo: authRedirectUrl(),
+      queryParams: {
+        prompt: "select_account",
+      },
     },
   });
-  if (error) showAuthMessage(error.message);
+  if (error) {
+    setAuthBusy(false);
+    showAuthMessage(authFriendlyError(error.message));
+    return;
+  }
+  window.setTimeout(() => {
+    if (!authBusy) return;
+    setAuthBusy(false);
+    showAuthMessage("If Google did not open, try again or create an account with email and password.");
+  }, 5000);
 }
 
 async function signOut() {
@@ -859,6 +916,27 @@ function authRedirectUrl() {
 
 function showAuthMessage(message) {
   els.authMessage.textContent = message;
+}
+
+function setAuthBusy(isBusy, message = "") {
+  authBusy = isBusy;
+  [els.signInBtn, els.signUpBtn, els.googleBtn, els.forgotPasswordBtn].forEach((button) => {
+    if (button) button.disabled = isBusy;
+  });
+  els.authEmail.disabled = isBusy && !passwordRecoveryMode;
+  els.authPassword.disabled = isBusy;
+  if (message) showAuthMessage(message);
+}
+
+function authFriendlyError(message = "") {
+  const text = String(message || "");
+  if (/invalid login credentials/i.test(text)) return "Email or password is wrong. Try again or reset your password.";
+  if (/email not confirmed/i.test(text)) return "Confirm your email first, then sign in.";
+  if (/user already registered|already registered/i.test(text)) return "That email already has an account. Use Sign In or Forgot password.";
+  if (/password should be at least/i.test(text)) return "Use a password with at least 6 characters.";
+  if (/provider.*disabled|unsupported provider|google/i.test(text)) return "Google sign-in could not finish. Try again and choose the right Google account, or use email and password.";
+  if (/signup.*disabled|signups.*disabled/i.test(text)) return "New account creation is paused in Supabase. Signups need to be turned back on.";
+  return text || "Something went wrong. Try again.";
 }
 
 function bindEvents() {
@@ -4509,6 +4587,12 @@ function friendRow(request) {
   const stats = localStatsForPlayer(friend.name);
   const selected = selectedFriendRequestId === request.id;
   const confirming = confirmingUnfriendRequestId === request.id;
+  const inviteableLeagues = friend.userId
+    ? leagueCache.filter((league) => myLeagueMember(league.id) && !leagueMembers(league.id).some((member) => member.user_id === friend.userId))
+    : [];
+  const inviteButton = inviteableLeagues.length
+    ? `<button class="small-button secondary-button" type="button" data-invite-friend-league="${request.id}">Invite to League</button>`
+    : "";
   return `
     <button class="friend-row friend-card ${selected ? "selected" : ""}" type="button" data-friend-card="${request.id}">
       <div>
@@ -4529,7 +4613,7 @@ function friendRow(request) {
             ${
               confirming
                 ? `<div class="friend-confirm"><span>Are you sure?</span><div class="friend-actions"><button class="small-button danger-button" type="button" data-unfriend-confirm="${request.id}">Yes</button><button class="small-button secondary-button" type="button" data-unfriend-cancel="${request.id}">Cancel</button></div></div>`
-                : `<div class="friend-actions friend-actions-stacked"><button class="small-button secondary-button preferred-partner-button" type="button" data-preferred-partner="${request.id}">Preferred Partner</button><button class="small-button secondary-button" type="button" data-invite-friend-league="${request.id}">Invite to League</button><button class="small-button danger-button" type="button" data-unfriend="${request.id}">Unfriend</button></div>`
+                : `<div class="friend-actions friend-actions-stacked"><button class="small-button secondary-button preferred-partner-button" type="button" data-preferred-partner="${request.id}">Preferred Partner</button>${inviteButton}<button class="small-button danger-button" type="button" data-unfriend="${request.id}">Unfriend</button></div>`
             }
           `
           : ""
@@ -4559,23 +4643,26 @@ function leagueCard(league) {
   const members = leagueMembers(league.id);
   const role = myLeagueMember(league.id)?.role || "";
   const isMember = Boolean(role);
+  const isInAnotherLeague = myActiveLeagueMemberships().some((member) => member.league_id !== league.id);
   const requested = Boolean(myLeagueJoinRequest(league.id));
   const isFull = members.length >= 50;
   const action = isMember
-    ? `<button class="small-button secondary-button league-card-action" type="button" data-open-league="${league.id}">Open</button>`
+    ? ""
+    : isInAnotherLeague
+      ? ""
     : requested
       ? `<button class="small-button secondary-button league-card-action" type="button" disabled>Requested</button>`
       : league.privacy === "open"
         ? `<button class="small-button league-card-action" type="button" data-join-league="${league.id}" ${isFull ? "disabled" : ""}>${isFull ? "Full" : "Join"}</button>`
         : `<button class="small-button secondary-button league-card-action" type="button" data-request-league="${league.id}" ${isFull ? "disabled" : ""}>${isFull ? "Full" : "Request to Join?"}</button>`;
   return `
-    <article class="league-card-button">
+    <article class="league-card-button ${isMember ? "league-card-member" : ""}">
       <button class="league-card-main" type="button" data-open-league="${league.id}">
         ${cubeBadge(league)}
         <span>
           <strong>${escapeHtml(league.name)}</strong>
           <small>${escapeHtml(league.description || "No description")} </small>
-          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/50` : requested ? "Request pending" : "Join to view data"}${role ? ` - ${displayRole(role)}` : ""}</em>
+          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/50 - Tap to enter` : requested ? "Request pending" : isInAnotherLeague ? "Leave your league to join" : "Join to view data"}${role ? ` - ${displayRole(role)}` : ""}</em>
         </span>
       </button>
       ${action}

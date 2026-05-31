@@ -56,21 +56,27 @@
           <img class="auth-icon" src="assets/sinkr-logo.svg" alt="" onerror="this.style.display='none'" />
           <div class="auth-wordmark">Sinkd</div>
         </div>
-          <h1>Sign In</h1>
-          <form id="authForm">
-            <label>
+        <div class="auth-copy">
+          <h1>Welcome Back</h1>
+          <p>Sign in or create an account to sync leagues, friends, rankings, and stats.</p>
+        </div>
+        <form id="authForm">
+          <label>
             <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Email" required />
           </label>
           <label>
             <input id="authPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required />
           </label>
-          <button class="text-button auth-link-button" id="signUpBtn" type="button">Create account</button>
           <div class="auth-actions">
             <button class="primary-button" id="signInBtn" type="button">Sign In</button>
+            <button class="small-button google-button" id="googleBtn" type="button">Sign in / create with Google</button>
           </div>
         </form>
-        <button class="text-button auth-link-button" id="forgotPasswordBtn" type="button">Forgot password?</button>
-        <button class="small-button google-button" id="googleBtn" type="button">Continue with Google</button>
+        <div class="auth-secondary-actions">
+          <button class="text-button auth-link-button" id="signUpBtn" type="button">Create account</button>
+          <span></span>
+          <button class="text-button auth-link-button" id="forgotPasswordBtn" type="button">Forgot password?</button>
+        </div>
         <p class="auth-message" id="authMessage"></p>
       </div>
     </section>
