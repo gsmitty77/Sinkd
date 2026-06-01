@@ -6319,7 +6319,6 @@ function leagueWeeklyReportHtml() {
   const biggestRiser = [...weeklyPlayers].sort((a, b) => b.wins - a.wins || b.points - a.points || b.sinks - a.sinks).at(0);
   const achievement = topLeagueAchievement(weeklyPlayers);
   const match = matchOfTheWeek(weeklyGames);
-  const reportDate = new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" }).format(new Date());
   const weekRange = leagueWeeklyReportDateRange();
   const logo = weeklyReportLogoSvg(theme);
 
@@ -6398,7 +6397,7 @@ function leagueWeeklyReportHtml() {
               <h1 class="title">SINKD</h1>
               <div class="subtitle">Weekly Report</div>
               <div class="league-name">${escapeHtml(league.name)}</div>
-              <div class="date">${escapeHtml(weekRange)} - Generated ${escapeHtml(reportDate)}</div>
+              <div class="date">${escapeHtml(weekRange)}</div>
             </div>
           </header>
 
@@ -6489,14 +6488,14 @@ function weeklyReportLogoSvg(theme) {
       <path d="M15 27 60 45 60 102 18 82C14 80 12 76 12 72V34C12 30 13 28 15 27Z" fill="${fill}" stroke="${stroke}" stroke-width="7" stroke-linejoin="round"/>
       <path d="M105 27 60 45 60 102 102 82C106 80 108 76 108 72V34C108 30 107 28 105 27Z" fill="${fill}" stroke="${stroke}" stroke-width="7" stroke-linejoin="round"/>
       <ellipse cx="60" cy="27" rx="8" ry="5" fill="${stroke}"/>
-      <ellipse cx="33" cy="47" rx="5" ry="8" fill="${stroke}" transform="rotate(-15 33 47)"/>
-      <ellipse cx="43" cy="68" rx="5" ry="8" fill="${stroke}" transform="rotate(-15 43 68)"/>
-      <ellipse cx="53" cy="90" rx="5" ry="8" fill="${stroke}" transform="rotate(-15 53 90)"/>
-      <ellipse cx="88" cy="47" rx="5" ry="8" fill="${stroke}" transform="rotate(15 88 47)"/>
-      <ellipse cx="73" cy="56" rx="5" ry="8" fill="${stroke}" transform="rotate(15 73 56)"/>
-      <ellipse cx="91" cy="69" rx="5" ry="8" fill="${stroke}" transform="rotate(15 91 69)"/>
-      <ellipse cx="73" cy="89" rx="5" ry="8" fill="${stroke}" transform="rotate(15 73 89)"/>
-      <ellipse cx="94" cy="90" rx="5" ry="8" fill="${stroke}" transform="rotate(15 94 90)"/>
+      <ellipse cx="28" cy="46" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(-15 28 46)"/>
+      <ellipse cx="38" cy="64" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(-15 38 64)"/>
+      <ellipse cx="48" cy="82" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(-15 48 82)"/>
+      <ellipse cx="72" cy="54" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(15 72 54)"/>
+      <ellipse cx="92" cy="46" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(15 92 46)"/>
+      <ellipse cx="82" cy="64" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(15 82 64)"/>
+      <ellipse cx="72" cy="82" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(15 72 82)"/>
+      <ellipse cx="91" cy="74" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(15 91 74)"/>
     </svg>
   `;
 }
