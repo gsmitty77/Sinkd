@@ -3,6 +3,8 @@ const statFields = [
   ["tinks", "Tinks"],
 ];
 
+document.documentElement.dataset.sinkdApp = "loaded";
+
 const bigGameStatFields = [
   ["points", "Score"],
   ["tableHits", "Table Hits"],
@@ -295,13 +297,25 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-buildRegularPlayerCards();
-buildBigGamePlayerCards();
-buildLeagueGamePlayerCards();
-bindEvents();
-setupAuth();
-registerServiceWorker();
-render();
+bootApp();
+
+function bootApp() {
+  try {
+    buildRegularPlayerCards();
+    buildBigGamePlayerCards();
+    buildLeagueGamePlayerCards();
+    bindEvents();
+    setupAuth();
+    registerServiceWorker();
+    render();
+  } catch (error) {
+    console.error("Sinkd startup failed", error);
+    hideSplashScreen();
+    els.authShell?.classList.remove("hidden");
+    els.appShell?.classList.add("auth-locked");
+    showAuthMessage(`Startup failed: ${error?.message || "Unknown error"}`);
+  }
+}
 
 function loadState() {
   let saved = null;
