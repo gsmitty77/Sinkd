@@ -65,15 +65,15 @@ const defaultTheme = {
   text: "#ffffff",
 };
 const themePresets = [
-  { name: "Sinkd Classic", background: "#002147", panel: "#002147", accent: "#efbf04", text: "#ffffff" },
+  { name: "Sinkd Classic", background: "#111827", panel: "#1f2937", accent: "#93c5fd", text: "#ffffff" },
   { name: "Sandstone", background: "#2b241c", panel: "#4a3827", accent: "#e7c27a", text: "#ffffff" },
   { name: "Stadium Lights", background: "#07111f", panel: "#10243d", accent: "#35d0ff", text: "#ffffff" },
   { name: "Chalkboard", background: "#10231d", panel: "#18382d", accent: "#f4d35e", text: "#ffffff" },
   { name: "Maroon Night", background: "#2a0712", panel: "#3a0d1b", accent: "#ffc857", text: "#ffffff" },
   { name: "Slate Ice", background: "#111827", panel: "#1f2937", accent: "#93c5fd", text: "#ffffff" },
   { name: "Forest Gold", background: "#071b14", panel: "#123527", accent: "#d4af37", text: "#ffffff" },
-  { name: "Royal", background: "#10104a", panel: "#1d1b6b", accent: "#f8d66d", text: "#ffffff" },
-  { name: "Plum Gold", background: "#241124", panel: "#341a34", accent: "#f5c542", text: "#ffffff" },
+  { name: "Royal", background: "#002147", panel: "#002147", accent: "#efbf04", text: "#ffffff" },
+  { name: "Redline", background: "#2a0508", panel: "#4a0b10", accent: "#ffffff", text: "#ffffff" },
   { name: "Blacktop", background: "#050505", panel: "#171717", accent: "#efbf04", text: "#ffffff" },
 ];
 const supabaseUrl = "https://egkdplyqrkoqgysgossd.supabase.co";
@@ -112,6 +112,7 @@ let knownNotificationIds = new Set();
 let notificationsInitialized = false;
 let showingFriendQr = false;
 let sentFriendLeagueInviteKeys = new Set();
+const sentFriendLeagueInviteTimers = new Map();
 let pendingConfirmAction = null;
 let pendingCancelAction = null;
 let lastPlayerProfileLookupSyncKey = "";
@@ -262,6 +263,7 @@ const els = {
   backToRegularBtn: document.querySelector("#backToRegularBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   resetBtn: document.querySelector("#resetBtn"),
+  deleteAccountBtn: document.querySelector("#deleteAccountBtn"),
 };
 
 applyTheme();
@@ -1055,6 +1057,24 @@ async function signOut() {
   setAuthView(null);
 }
 
+async function deleteAccount() {
+  if (!authClient || !currentUser) {
+    showAuthMessage("Sign in before deleting your account.");
+    return;
+  }
+
+  const { error } = await authClient.functions.invoke("delete-account");
+  if (error) {
+    showAuthMessage("Account deletion needs the secure delete-account function added in Supabase first.");
+    return;
+  }
+
+  localStorage.removeItem(introStorageKey(currentUser));
+  await authClient.auth.signOut();
+  setAuthView(null);
+  showAuthMessage("Account deleted.");
+}
+
 function authRedirectUrl() {
   if (window.location.origin && window.location.origin !== "null") {
     return `${window.location.origin}${window.location.pathname}`;
@@ -1269,7 +1289,8 @@ function bindEvents() {
 
   els.friendInviteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await sendFriendRequest(new FormData(els.friendInviteForm));
+    const sent = await sendFriendRequest(new FormData(els.friendInviteForm));
+    if (sent) flashSubmitButton(els.friendInviteForm, "Sent", 2300);
   });
 
   els.toggleFriendQrBtn?.addEventListener("click", () => {
@@ -1639,6 +1660,14 @@ function bindEvents() {
       onConfirm: resetLocalGames,
     });
   });
+  els.deleteAccountBtn.addEventListener("click", () => {
+    showAppConfirm({
+      title: "Delete account?",
+      message: "This will permanently delete your Sinkd account if account deletion is enabled. Local games on this device will stay unless you reset them.",
+      confirmLabel: "Delete",
+      onConfirm: deleteAccount,
+    });
+  });
 
   els.deleteTournamentBtn.addEventListener("click", () => {
     const tournament = activeTournament();
@@ -1752,6 +1781,8 @@ function bindEvents() {
 function switchView(viewName) {
   if (document.querySelector("#friendsView")?.classList.contains("active") && viewName !== "friends") {
     sentFriendLeagueInviteKeys.clear();
+    sentFriendLeagueInviteTimers.forEach((timer) => window.clearTimeout(timer));
+    sentFriendLeagueInviteTimers.clear();
   }
   if (viewName === "leagues") {
     const membership = myActiveLeagueMemberships()[0];
@@ -3431,16 +3462,18 @@ function saveDismissedActionNotifications(ids) {
 }
 
 async function sendFriendRequest(form) {
-  if (!authClient || !currentUser) return;
+  if (!authClient || !currentUser) return false;
   await savePlayerProfileLookup();
   const player = await findPlayerByCode(form.get("playerCode"));
-  if (!player) return;
+  if (!player) return false;
   if (player.user_id === currentUser.id) {
     alert("You cannot invite yourself.");
-    return;
+    return false;
   }
-  await sendFriendRequestByUserId(player.user_id, player.nickname || player.player_code || "Friend");
+  const sent = await sendFriendRequestByUserId(player.user_id, player.nickname || player.player_code || "Friend");
+  if (!sent) return false;
   els.friendInviteForm.reset();
+  return true;
 }
 
 async function sendFriendRequestByUserId(recipientId, recipientName = "Friend") {
@@ -3575,9 +3608,36 @@ async function inviteFriendToLeague(requestId) {
     message: `${currentPublicName()} invited you to ${league.name}.`,
     linkTarget: "friends",
   });
-  sentFriendLeagueInviteKeys.add(friendLeagueInviteKey(requestId, league.id));
+  flashFriendLeagueInvite(requestId, league.id);
   await loadLeagueData();
   renderFriends();
+}
+
+function flashFriendLeagueInvite(requestId, leagueId) {
+  const key = friendLeagueInviteKey(requestId, leagueId);
+  const previousTimer = sentFriendLeagueInviteTimers.get(key);
+  if (previousTimer) window.clearTimeout(previousTimer);
+  sentFriendLeagueInviteKeys.add(key);
+  sentFriendLeagueInviteTimers.set(
+    key,
+    window.setTimeout(() => {
+      sentFriendLeagueInviteKeys.delete(key);
+      sentFriendLeagueInviteTimers.delete(key);
+      if (document.querySelector("#friendsView")?.classList.contains("active")) renderFriends();
+    }, 2300),
+  );
+}
+
+function flashSubmitButton(form, message, duration = 2300) {
+  const button = form?.querySelector('button[type="submit"]');
+  if (!button) return;
+  const originalText = button.textContent;
+  button.textContent = message;
+  button.disabled = true;
+  window.setTimeout(() => {
+    button.textContent = originalText;
+    button.disabled = false;
+  }, duration);
 }
 
 function setPreferredPartnerFromFriend(requestId) {
@@ -6347,11 +6407,11 @@ function leagueWeeklyReportHtml() {
           @page{size:9in 16in;margin:0}
           *{box-sizing:border-box}
           :root{--bg:${theme.background};--panel:${theme.panel};--accent:${theme.accent};--ink:${theme.text};--line:color-mix(in srgb,var(--accent) 42%,transparent)}
-          body{margin:0;background:#07111f;color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+          body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif}
           .report-actions{display:flex;justify-content:space-between;gap:8px;width:min(100%,540px);margin:0 auto 12px}
           .report-actions button{min-height:34px;padding:0 12px;border:1px solid var(--accent);border-radius:5px;background:var(--accent);color:var(--bg);font-weight:900}
           .report-actions .back-button{background:transparent;color:var(--ink)}
-          .sheet{width:min(100%,540px);aspect-ratio:9/16;margin:auto;padding:14px;background:linear-gradient(180deg,var(--bg),#07111f);border:2px solid var(--accent);border-radius:16px;display:flex;flex-direction:column;overflow:hidden}
+          .sheet{width:min(100%,540px);aspect-ratio:9/16;margin:auto;padding:14px;background:var(--bg);border:2px solid var(--accent);border-radius:16px;display:flex;flex-direction:column;overflow:hidden}
           .hero{display:grid;grid-template-columns:70px 1fr;gap:12px;align-items:center;padding-bottom:11px;border-bottom:1px solid var(--line)}
           .mark{display:grid;place-items:center;width:70px;height:70px;border:2px solid var(--accent);border-radius:13px;background:${theme.background};overflow:hidden}
           .report-logo{display:block;width:64px;height:64px}
@@ -6360,11 +6420,11 @@ function leagueWeeklyReportHtml() {
           .league-name{margin:7px 0 0;font-size:19px;font-weight:1000;letter-spacing:1px;text-transform:uppercase}
           .date{margin-top:3px;color:rgba(255,255,255,.72);font-size:10px;text-transform:uppercase;letter-spacing:.8px}
           .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:9px;margin-top:9px;flex:1}
-          .panel{border:1px solid var(--line);border-radius:9px;background:rgba(0,0,0,.2);padding:9px;min-width:0}
+          .panel{border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:9px;min-width:0}
           .panel-title{display:inline-block;margin:0 0 8px;padding:4px 8px;border-radius:5px;background:var(--accent);color:var(--bg);font-size:13px;font-weight:1000;text-transform:uppercase}
-          .blue-title{background:rgba(255,255,255,.08);color:var(--ink);border-left:5px solid var(--accent)}
+          .blue-title{background:var(--panel);color:var(--ink);border-left:5px solid var(--accent)}
           .mvp-layout{display:grid;grid-template-columns:88px 1fr;gap:10px;align-items:center}
-          .trophy-box{display:grid;place-items:center;aspect-ratio:1;border:2px solid var(--accent);border-radius:9px;color:var(--accent);font-size:42px;font-weight:1000;background:rgba(239,191,4,.08)}
+          .trophy-box{display:grid;place-items:center;aspect-ratio:1;border:2px solid var(--accent);border-radius:9px;color:var(--accent);font-size:42px;font-weight:1000;background:var(--panel)}
           .mvp-name{font-size:34px;line-height:1;font-weight:1000;text-transform:uppercase}
           .mvp-lines{display:grid;gap:5px;margin-top:9px}
           .metric-line{display:flex;align-items:baseline;gap:7px;border-top:1px solid rgba(255,255,255,.12);padding-top:5px;font-weight:900}
@@ -6396,7 +6456,7 @@ function leagueWeeklyReportHtml() {
           .score{margin-top:9px;text-align:center;color:var(--accent);font-size:36px;font-weight:1000}
           .footer{display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:8px;border-top:1px solid var(--line);font-weight:1000;letter-spacing:1px;text-transform:uppercase}
           .footer .brand{font-size:19px}.footer .tag{color:var(--accent);font-size:12px}
-          @media screen{body{padding:14px}.sheet{box-shadow:0 18px 60px rgba(0,0,0,.35)}}
+          @media screen{body{padding:14px}.sheet{box-shadow:none}}
           @media print{body{background:var(--bg);padding:0}.report-actions{display:none}.sheet{width:9in;height:16in;border-radius:0;border:0}}
           @media (max-width:560px){body{padding:10px}.sheet{width:100%;min-height:auto}.title{font-size:34px}.subtitle{font-size:21px}.league-name{font-size:16px}.mvp-name{font-size:28px}.footer .tag{font-size:10px}}
         </style>
