@@ -269,6 +269,14 @@
                   <option value="invite">Invite Only</option>
                 </select>
               </label>
+              <label class="checkbox-row">
+                <input name="useAppRules" type="checkbox" checked />
+                Use app rules
+              </label>
+              <label class="league-custom-rules hidden">
+                League Rules
+                <textarea name="rules" rows="7" placeholder="Type your league rules here if your group plays different."></textarea>
+              </label>
               <div class="cube-color-grid">
                 <label>Top <input name="logoTop" type="color" value="#EFBF04" /></label>
                 <label>Left <input name="logoLeft" type="color" value="#ffffff" /></label>
@@ -471,14 +479,13 @@
             <section class="panel">
               <h3>League Rules</h3>
               <p class="meta-line" id="leagueRulesSummary">Use the default house rules or save custom rules for this league.</p>
-              <button class="small-button export-button" id="openLeagueRulesBtn" type="button">League Rules</button>
+              <div class="league-rule-actions">
+                <button class="small-button export-button" id="openLeagueRulesBtn" type="button">View Rules</button>
+                <button class="small-button secondary-button manager-setting" id="editLeagueRulesBtn" type="button">Edit Rules</button>
+              </div>
             </section>
             <form class="panel" id="leagueSettingsForm">
               <h3>League Settings</h3>
-              <label class="manager-setting">
-                League Rules
-                <textarea name="rules" rows="7" placeholder="Leave blank to use the default House Rules We Play With."></textarea>
-              </label>
               <label class="manager-setting">League Name <input name="name" maxlength="32" required /></label>
               <label class="manager-setting">Description <textarea name="description" rows="3"></textarea></label>
               <label class="manager-setting">
@@ -504,6 +511,28 @@
                 </div>
               </div>
             </form>
+          </section>
+
+          <section class="league-detail-panel" id="leagueRulesEditPanel">
+            <section class="panel">
+              <h3>Edit League Rules</h3>
+              <p class="meta-line">Use Sinkd's app rules, or disable them and write exactly how your league plays.</p>
+              <form class="league-rules-edit-form" id="leagueRulesEditForm">
+                <label class="checkbox-row">
+                  <input name="useAppRules" type="checkbox" checked />
+                  Use app rules
+                </label>
+                <button class="small-button secondary-button" id="disableAppRulesBtn" type="button">Disable App Rules</button>
+                <label class="league-custom-rules hidden">
+                  Custom League Rules
+                  <textarea name="rules" rows="14" placeholder="Type your league rules here. Example: table rules, scoring notes, house penalties, toss-back rules, and anything your group argues about."></textarea>
+                </label>
+                <div class="theme-actions">
+                  <button class="small-button export-button" type="submit">Save Rules</button>
+                  <button class="small-button secondary-button" id="backToLeagueSettingsBtn" type="button">Back to Settings</button>
+                </div>
+              </form>
+            </section>
           </section>
 
           <section class="league-detail-panel" id="leagueInvitePanel">
@@ -607,32 +636,8 @@
               <button class="small-button secondary-button" id="openRulesBtn" type="button">Rules</button>
               <button class="small-button secondary-button" id="openFeedbackBtn" type="button">Send Feedback</button>
               <button class="small-button secondary-button" id="openAboutBtn" type="button">About Sinkd</button>
+              <button class="small-button secondary-button" id="openThemeBtn" type="button">Customize Theme</button>
             </div>
-          </section>
-          <section class="panel">
-            <h3>Theme</h3>
-            <form class="theme-form" id="themeForm">
-              <label>
-                Background
-                <input name="background" type="color" value="#002147" />
-              </label>
-              <label>
-                Panels
-                <input name="panel" type="color" value="#002147" />
-              </label>
-              <label>
-                Accent
-                <input name="accent" type="color" value="#efbf04" />
-              </label>
-              <label>
-                Text
-                <input name="text" type="color" value="#ffffff" />
-              </label>
-              <div class="theme-actions">
-                <button class="small-button export-button" type="submit">Save Theme</button>
-                <button class="small-button secondary-button" type="button" data-reset-theme>Reset</button>
-              </div>
-            </form>
           </section>
           <section class="panel">
             <h3>Players</h3>
@@ -644,6 +649,26 @@
               <button class="small-button export-button" id="exportBtn" type="button">Export PDF</button>
               <button class="small-button danger-button" id="resetBtn" type="button">Reset Games</button>
             </div>
+          </section>
+        </section>
+
+        <section class="view" id="themeView">
+          <div class="section-head">
+            <div>
+              <h2>Themes</h2>
+              <p>Pick a clean preset for this device only.</p>
+            </div>
+          </div>
+          <button class="small-button secondary-button back-nav-button" id="backToSettingsBtn" type="button">Back to Settings</button>
+
+          <section class="panel">
+            <form class="theme-form" id="themeForm">
+              <div class="theme-preset-grid" id="themePresetGrid"></div>
+              <div class="theme-actions">
+                <button class="small-button export-button" type="submit">Save Theme</button>
+                <button class="small-button secondary-button" type="button" data-reset-theme>Reset</button>
+              </div>
+            </form>
           </section>
         </section>
 

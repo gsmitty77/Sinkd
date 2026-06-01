@@ -63,6 +63,18 @@ const defaultTheme = {
   accent: "#efbf04",
   text: "#ffffff",
 };
+const themePresets = [
+  { name: "Sinkd Classic", background: "#002147", panel: "#002147", accent: "#efbf04", text: "#ffffff" },
+  { name: "Midnight Gold", background: "#00142f", panel: "#082a55", accent: "#f2c94c", text: "#ffffff" },
+  { name: "Stadium Lights", background: "#07111f", panel: "#10243d", accent: "#35d0ff", text: "#ffffff" },
+  { name: "Chalkboard", background: "#10231d", panel: "#18382d", accent: "#f4d35e", text: "#ffffff" },
+  { name: "Maroon Night", background: "#2a0712", panel: "#3a0d1b", accent: "#ffc857", text: "#ffffff" },
+  { name: "Slate Ice", background: "#111827", panel: "#1f2937", accent: "#93c5fd", text: "#ffffff" },
+  { name: "Forest Gold", background: "#071b14", panel: "#123527", accent: "#d4af37", text: "#ffffff" },
+  { name: "Royal", background: "#10104a", panel: "#1d1b6b", accent: "#f8d66d", text: "#ffffff" },
+  { name: "Clean Court", background: "#f7f9fc", panel: "#ffffff", accent: "#002147", text: "#0b172a" },
+  { name: "Blacktop", background: "#050505", panel: "#171717", accent: "#efbf04", text: "#ffffff" },
+];
 const supabaseUrl = "https://egkdplyqrkoqgysgossd.supabase.co";
 const supabaseKey = "sb_publishable_0tPe5tBwnSAsBf_8OgB68g_362B5XPV";
 const vapidPublicKey = "BKu6165rw3XPcgaASzQ2lfauLSALUx9NP6I5Q718K45iCkDLoix74gylYXYr_saA8NwzKbSOZS0NrsCZb_YyBzc";
@@ -98,6 +110,7 @@ let notificationRealtimeChannel = null;
 let knownNotificationIds = new Set();
 let notificationsInitialized = false;
 let showingFriendQr = false;
+let sentFriendLeagueInviteKeys = new Set();
 let pendingConfirmAction = null;
 let pendingCancelAction = null;
 let lastPlayerProfileLookupSyncKey = "";
@@ -191,6 +204,10 @@ const els = {
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
   openLeagueRulesBtn: document.querySelector("#openLeagueRulesBtn"),
+  editLeagueRulesBtn: document.querySelector("#editLeagueRulesBtn"),
+  leagueRulesEditForm: document.querySelector("#leagueRulesEditForm"),
+  disableAppRulesBtn: document.querySelector("#disableAppRulesBtn"),
+  backToLeagueSettingsBtn: document.querySelector("#backToLeagueSettingsBtn"),
   closeLeagueRulesBtn: document.querySelector("#closeLeagueRulesBtn"),
   leagueRulesModal: document.querySelector("#leagueRulesModal"),
   leagueRulesTitle: document.querySelector("#leagueRulesTitle"),
@@ -233,7 +250,10 @@ const els = {
   openAboutBtn: document.querySelector("#openAboutBtn"),
   closeAboutBtn: document.querySelector("#closeAboutBtn"),
   aboutModal: document.querySelector("#aboutModal"),
+  openThemeBtn: document.querySelector("#openThemeBtn"),
+  backToSettingsBtn: document.querySelector("#backToSettingsBtn"),
   themeForm: document.querySelector("#themeForm"),
+  themePresetGrid: document.querySelector("#themePresetGrid"),
   deleteTournamentBtn: document.querySelector("#deleteTournamentBtn"),
   quickRematchBtn: document.querySelector("#quickRematchBtn"),
   openBigGameBtn: document.querySelector("#openBigGameBtn"),
@@ -346,21 +366,39 @@ function applyTheme(theme = state.appTheme) {
 }
 
 function themeFromForm() {
-  return normalizeTheme({
-    background: els.themeForm.elements.background.value,
-    panel: els.themeForm.elements.panel.value,
-    accent: els.themeForm.elements.accent.value,
-    text: els.themeForm.elements.text.value,
-  });
+  return normalizeTheme(state.appTheme);
 }
 
 function syncThemeForm() {
-  if (!els.themeForm) return;
-  const theme = normalizeTheme(state.appTheme);
-  els.themeForm.elements.background.value = theme.background;
-  els.themeForm.elements.panel.value = theme.panel;
-  els.themeForm.elements.accent.value = theme.accent;
-  els.themeForm.elements.text.value = theme.text;
+  renderThemePresets();
+}
+
+function renderThemePresets() {
+  if (!els.themePresetGrid) return;
+  const activeTheme = normalizeTheme(state.appTheme);
+  els.themePresetGrid.innerHTML = themePresets
+    .map((theme, index) => {
+      const normalized = normalizeTheme(theme);
+      const active = themesMatch(activeTheme, normalized);
+      return `
+        <button class="theme-preset-card ${active ? "active" : ""}" type="button" data-theme-preset="${index}">
+          <span class="theme-preset-name">${escapeHtml(theme.name)}</span>
+          <span class="theme-preset-swatches">
+            <i style="background:${normalized.background}"></i>
+            <i style="background:${normalized.panel}"></i>
+            <i style="background:${normalized.accent}"></i>
+            <i style="background:${normalized.text}"></i>
+          </span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function themesMatch(a, b) {
+  const first = normalizeTheme(a);
+  const second = normalizeTheme(b);
+  return first.background === second.background && first.panel === second.panel && first.accent === second.accent && first.text === second.text;
 }
 
 async function setupAuth() {
@@ -1151,6 +1189,10 @@ function bindEvents() {
 
   els.showLeagueCreateBtn.addEventListener("click", () => {
     els.leagueForm.classList.toggle("hidden");
+    toggleLeagueRulesFields(els.leagueForm);
+  });
+  els.leagueForm.addEventListener("change", (event) => {
+    if (event.target.name === "useAppRules") toggleLeagueRulesFields(els.leagueForm);
   });
 
   document.addEventListener("click", (event) => {
@@ -1403,6 +1445,23 @@ function bindEvents() {
     await updateCloudLeagueSettings(new FormData(els.leagueSettingsForm));
   });
   els.openLeagueRulesBtn.addEventListener("click", openLeagueRules);
+  els.editLeagueRulesBtn.addEventListener("click", openLeagueRulesEditor);
+  els.disableAppRulesBtn.addEventListener("click", () => {
+    els.leagueRulesEditForm.elements.useAppRules.checked = false;
+    toggleLeagueRulesFields(els.leagueRulesEditForm);
+    els.leagueRulesEditForm.elements.rules.focus();
+  });
+  els.backToLeagueSettingsBtn.addEventListener("click", () => {
+    leagueDetailTab = "settings";
+    renderLeagueDetails();
+  });
+  els.leagueRulesEditForm.addEventListener("change", (event) => {
+    if (event.target.name === "useAppRules") toggleLeagueRulesFields(els.leagueRulesEditForm);
+  });
+  els.leagueRulesEditForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await updateCloudLeagueRules(new FormData(els.leagueRulesEditForm));
+  });
   els.closeLeagueRulesBtn.addEventListener("click", closeLeagueRules);
   els.leagueRulesModal.addEventListener("click", (event) => {
     if (event.target === els.leagueRulesModal) closeLeagueRules();
@@ -1514,16 +1573,22 @@ function bindEvents() {
 
   els.exportBtn.addEventListener("click", exportData);
   els.leagueExportBtn.addEventListener("click", exportLeagueStats);
+  els.openThemeBtn.addEventListener("click", openThemePage);
+  els.backToSettingsBtn.addEventListener("click", () => switchView("settings"));
   els.themeForm.addEventListener("submit", (event) => {
     event.preventDefault();
     state.appTheme = themeFromForm();
     applyTheme();
     saveState();
   });
-  els.themeForm.addEventListener("input", () => {
-    applyTheme(themeFromForm());
-  });
   els.themeForm.addEventListener("click", (event) => {
+    const presetButton = event.target.closest("[data-theme-preset]");
+    if (presetButton) {
+      state.appTheme = normalizeTheme(themePresets[Number(presetButton.dataset.themePreset)]);
+      applyTheme();
+      renderThemePresets();
+      return;
+    }
     if (!event.target.closest("[data-reset-theme]")) return;
     state.appTheme = { ...defaultTheme };
     syncThemeForm();
@@ -1648,8 +1713,25 @@ function bindEvents() {
 }
 
 function switchView(viewName) {
+  if (document.querySelector("#friendsView")?.classList.contains("active") && viewName !== "friends") {
+    sentFriendLeagueInviteKeys.clear();
+  }
+  if (viewName === "leagues") {
+    const membership = myActiveLeagueMemberships()[0];
+    if (membership) {
+      openLeagueDetails(membership.league_id);
+      return;
+    }
+  }
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === viewName));
   els.views.forEach((view) => view.classList.toggle("active", view.id === `${viewName}View`));
+  scrollAppToTop();
+}
+
+function openThemePage() {
+  syncThemeForm();
+  els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === "settings"));
+  els.views.forEach((view) => view.classList.toggle("active", view.id === "themeView"));
   scrollAppToTop();
 }
 
@@ -3046,10 +3128,29 @@ function openLeagueRules() {
   document.body.classList.add("modal-open");
 }
 
+function openLeagueRulesEditor() {
+  const league = activeLeague();
+  if (!league || !canManageActiveLeague()) return;
+  leagueDetailTab = "rulesEdit";
+  renderLeagueDetails();
+  els.leagueRulesEditForm.elements.useAppRules.checked = !cleanText(league.rules);
+  els.leagueRulesEditForm.elements.rules.value = league.rules || "";
+  toggleLeagueRulesFields(els.leagueRulesEditForm);
+}
+
 function closeLeagueRules() {
   els.leagueRulesModal.classList.add("hidden");
   els.leagueRulesModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+}
+
+function toggleLeagueRulesFields(form) {
+  if (!form?.elements?.useAppRules) return;
+  const useAppRules = form.elements.useAppRules.checked;
+  form.querySelector(".league-custom-rules")?.classList.toggle("hidden", useAppRules);
+  if (form === els.leagueRulesEditForm && els.disableAppRulesBtn) {
+    els.disableAppRulesBtn.classList.toggle("hidden", !useAppRules);
+  }
 }
 
 function openPrivacy() {
@@ -3433,8 +3534,9 @@ async function inviteFriendToLeague(requestId) {
     message: `${currentPublicName()} invited you to ${league.name}.`,
     linkTarget: "friends",
   });
-  alert(`Invite sent to ${friend.name} for ${league.name}.`);
+  sentFriendLeagueInviteKeys.add(friendLeagueInviteKey(requestId, league.id));
   await loadLeagueData();
+  renderFriends();
 }
 
 function setPreferredPartnerFromFriend(requestId) {
@@ -3554,7 +3656,7 @@ async function createCloudLeague(form) {
     owner_id: currentUser.id,
     name: leagueName,
     description: cleanText(form.get("description")),
-    rules: cleanText(form.get("rules")),
+    rules: form.get("useAppRules") === "on" ? "" : cleanText(form.get("rules")),
     privacy: form.get("privacy") === "invite" ? "invite" : "open",
     logo_top: form.get("logoTop") || "#EFBF04",
     logo_left: form.get("logoLeft") || "#ffffff",
@@ -3576,6 +3678,7 @@ async function createCloudLeague(form) {
     .eq("role", "owner");
 
   els.leagueForm.reset();
+  toggleLeagueRulesFields(els.leagueForm);
   els.leagueForm.classList.add("hidden");
   activeLeagueId = leagueId;
   await loadLeagueData();
@@ -3687,7 +3790,6 @@ async function updateCloudLeagueSettings(form) {
     .update({
       name: leagueName,
       description: cleanText(form.get("description")),
-      rules: cleanText(form.get("rules")),
       privacy: form.get("privacy") === "invite" ? "invite" : "open",
       logo_top: form.get("logoTop") || "#EFBF04",
       logo_left: form.get("logoLeft") || "#ffffff",
@@ -3699,6 +3801,21 @@ async function updateCloudLeagueSettings(form) {
     return;
   }
   await loadLeagueData();
+}
+
+async function updateCloudLeagueRules(form) {
+  if (!canManageActiveLeague()) return;
+  const { error } = await authClient
+    .from("leagues")
+    .update({ rules: form.get("useAppRules") === "on" ? "" : cleanText(form.get("rules")) })
+    .eq("id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  await loadLeagueData();
+  leagueDetailTab = "settings";
+  renderLeagueDetails();
 }
 
 async function deleteCloudLeague() {
@@ -4731,10 +4848,16 @@ function friendRow(request) {
   const stats = localStatsForPlayer(friend.name);
   const selected = selectedFriendRequestId === request.id;
   const confirming = confirmingUnfriendRequestId === request.id;
+  const myLeagues = leagueCache.filter((league) => myLeagueMember(league.id));
+  const sentInvite = friend.userId
+    ? myLeagues.find((league) => sentFriendLeagueInviteKeys.has(friendLeagueInviteKey(request.id, league.id)))
+    : null;
   const inviteableLeagues = friend.userId
-    ? leagueCache.filter((league) => myLeagueMember(league.id) && !leagueMembers(league.id).some((member) => member.user_id === friend.userId))
+    ? myLeagues.filter((league) => !leagueMembers(league.id).some((member) => member.user_id === friend.userId))
     : [];
-  const inviteButton = inviteableLeagues.length
+  const inviteButton = sentInvite
+    ? `<button class="small-button secondary-button" type="button" disabled>Sent</button>`
+    : inviteableLeagues.length
     ? `<button class="small-button secondary-button" type="button" data-invite-friend-league="${request.id}">Invite to League</button>`
     : "";
   return `
@@ -4783,6 +4906,10 @@ function publicFriendRequestName(request) {
   return cleanText(request.requester_name) || "A player";
 }
 
+function friendLeagueInviteKey(requestId, leagueId) {
+  return `${requestId}:${leagueId}`;
+}
+
 function leagueCard(league) {
   const members = leagueMembers(league.id);
   const role = myLeagueMember(league.id)?.role || "";
@@ -4825,6 +4952,7 @@ function renderLeagueDetails() {
   const canLog = canLogActiveLeagueGames();
   const canInvite = canInviteActiveLeague();
   const isOwner = isActiveLeagueOwner();
+  els.backToLeaguesBtn.classList.toggle("hidden", isMember);
   const guestTabs = ["stats", "rankings"];
   if (!isMember && !guestTabs.includes(leagueDetailTab)) leagueDetailTab = "stats";
 
@@ -4839,12 +4967,22 @@ function renderLeagueDetails() {
     tab.disabled = guestHidden || (managerOnly && !canManage) || (loggerOnly && !canLog) || (inviteOnly && !canInvite);
   });
   els.leagueDetailPanels.forEach((panel) => {
+    if (panel.id === "leagueRulesEditPanel") {
+      panel.classList.toggle("hidden", !canManage);
+      panel.classList.toggle("active", canManage && leagueDetailTab === "rulesEdit");
+      return;
+    }
     const tabName = panel.id.replace(/^league/, "").replace(/Panel$/, "");
     const normalizedTabName = tabName.charAt(0).toLowerCase() + tabName.slice(1);
     const guestHidden = !isMember && !guestTabs.includes(normalizedTabName);
     panel.classList.toggle("hidden", guestHidden);
     panel.classList.toggle("active", !guestHidden && panel.id === `league${capitalize(leagueDetailTab)}Panel`);
   });
+  if (leagueDetailTab === "rulesEdit" && canManage) {
+    els.leagueRulesEditForm.elements.useAppRules.checked = !cleanText(league.rules);
+    els.leagueRulesEditForm.elements.rules.value = league.rules || "";
+    toggleLeagueRulesFields(els.leagueRulesEditForm);
+  }
 
   els.leagueDetailHero.innerHTML = `
     <div class="league-head">
@@ -5181,10 +5319,10 @@ function renderLeagueSettings() {
   els.leaveLeagueBtn.hidden = isOwner || !member || confirmingLeaveLeague;
   els.leaveLeagueConfirm.classList.toggle("hidden", isOwner || !member || !confirmingLeaveLeague);
   els.deleteLeagueBtn.hidden = !isOwner;
+  els.editLeagueRulesBtn.classList.toggle("hidden", !canManage);
   if (!league || !canManage) return;
   els.leagueSettingsForm.elements.name.value = league.name;
   els.leagueSettingsForm.elements.description.value = league.description || "";
-  els.leagueSettingsForm.elements.rules.value = league.rules || "";
   els.leagueSettingsForm.elements.privacy.value = league.privacy;
   els.leagueSettingsForm.elements.logoTop.value = league.logo_top || "#EFBF04";
   els.leagueSettingsForm.elements.logoLeft.value = league.logo_left || "#ffffff";
@@ -5697,7 +5835,7 @@ function renderProfiles() {
           <span class="notification-badge hidden" id="friendsBadge">0</span>
         </button>
       </div>
-      ${achievementSection(personalStats, "Achievements")}
+      ${achievementSection(personalStats, "League Badges")}
     </article>
   `;
   renderNotifications();
