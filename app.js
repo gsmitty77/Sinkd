@@ -19,9 +19,9 @@ const allStatFields = [...new Map([...statFields, ...bigGameStatFields])];
 const leaguePlayerStatFields = [
   ["tableHits", "Table Hits"],
   ["sinks", "Sinks"],
+  ["tinks", "Tinks"],
   ["fgOffense", "Field Goal (Offense)"],
   ["fgDefense", "Field Goal (Defense)"],
-  ["tinks", "Tinks"],
   ["fifas", "FIFAs"],
 ];
 const leagueGameDetailStatFields = [
@@ -30,8 +30,8 @@ const leagueGameDetailStatFields = [
   ["tinks", "Tinks"],
   ["fgOffense", "FG Offense"],
   ["fgDefense", "FG Defense"],
-  ["selfSinks", "Self Sinks"],
   ["fifas", "FIFAs"],
+  ["selfSinks", "Self Sinks"],
 ];
 const genericLeagueExampleNames = ["Alex", "Jordan", "Casey", "Taylor", "Morgan", "Riley", "Drew", "Quinn"];
 const genericLeagueTeamNames = ["Gold Team", "Navy Team", "White Team", "Black Team"];
@@ -57,6 +57,7 @@ const secretAchievementDefinitions = [
 const achievementTiers = ["Copper", "Silver", "Gold", "Diamond"];
 
 const playerRosterKey = "beerDiePlayers";
+const themeStorageKey = "sinkdTheme";
 const defaultTheme = {
   background: "#002147",
   panel: "#002147",
@@ -287,6 +288,7 @@ render();
 function loadState() {
   const saved = localStorage.getItem("beerDieTracker");
   const savedRoster = loadSavedPlayerRoster();
+  const savedTheme = loadSavedTheme();
   if (saved) {
     const parsed = JSON.parse(saved);
     return {
@@ -304,7 +306,7 @@ function loadState() {
       playerProfiles: parsed.playerProfiles || {},
       legacyMyProfile: parsed.legacyMyProfile || parsed.myProfile || null,
       accountProfiles: parsed.accountProfiles || {},
-      appTheme: normalizeTheme(parsed.appTheme),
+      appTheme: normalizeTheme(savedTheme || parsed.appTheme),
       myProfile: null,
       players: mergePlayerNames([...(parsed.players || []), ...savedRoster]),
     };
@@ -319,7 +321,7 @@ function loadState() {
     myProfile: null,
     legacyMyProfile: null,
     accountProfiles: {},
-    appTheme: { ...defaultTheme },
+    appTheme: normalizeTheme(savedTheme),
     activeTournamentId: "",
   };
 }
@@ -337,6 +339,19 @@ function loadSavedPlayerRoster() {
   } catch {
     return [];
   }
+}
+
+function loadSavedTheme() {
+  try {
+    const saved = localStorage.getItem(themeStorageKey);
+    return saved ? normalizeTheme(JSON.parse(saved)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveThemeState() {
+  localStorage.setItem(themeStorageKey, JSON.stringify(normalizeTheme(state.appTheme)));
 }
 
 function normalizeTheme(theme = {}) {
@@ -1579,8 +1594,8 @@ function bindEvents() {
     event.preventDefault();
     state.appTheme = themeFromForm();
     applyTheme();
-    saveState();
-    switchView("profiles");
+    saveThemeState();
+    switchView("settings");
   });
   els.themeForm.addEventListener("click", (event) => {
     const presetButton = event.target.closest("[data-theme-preset]");
@@ -1594,7 +1609,7 @@ function bindEvents() {
     state.appTheme = { ...defaultTheme };
     syncThemeForm();
     applyTheme();
-    saveState();
+    saveThemeState();
   });
   els.resetBtn.addEventListener("click", () => {
     showAppConfirm({
@@ -2276,6 +2291,10 @@ function readRegularGameForm(form) {
     name: cleanText(form.get(`player${number}_name`)),
     stats: readPlayerStats(form, `player${number}`),
   }));
+
+  if (selfSinkPlayer) {
+    players[selfSinkPlayer - 1].stats.selfSinks = (players[selfSinkPlayer - 1].stats.selfSinks || 0) + 1;
+  }
 
   const teamA = {
     name: players.slice(0, 2).map((player) => player.name).join(" / "),
@@ -5542,6 +5561,7 @@ function leagueCompareCard(player) {
     ["FG Off.", stats.fgOffense],
     ["FG Def.", stats.fgDefense],
     ["FIFAs", stats.fifas],
+    ["Self Sinks", stats.selfSinks],
   ];
   return `
     <article class="compare-card">
@@ -5636,7 +5656,7 @@ function computeLeagueStats() {
       team.players.forEach((playerName) => {
         const key = playerName.toLowerCase();
         if (!players[key]) players[key] = { name: playerName, ...emptyBucket() };
-        addGameToBucket(players[key], team.playerStats?.[playerName] || emptyLeagueStats(), won);
+        addGameToBucket(players[key], statsForPlayerInGame(game, team, playerName), won);
         if (game.source === "league_tournament") {
           players[key].tournamentWins += won ? 1 : 0;
           players[key].tournamentLosses += won ? 0 : 1;
@@ -5823,8 +5843,8 @@ function renderProfiles() {
         <div><b>${personalStats.tableHits}</b><span>Table Hits</span></div>
         <div><b>${personalStats.fgOffense}</b><span>FG Off</span></div>
         <div><b>${personalStats.fgDefense}</b><span>FG Def</span></div>
-        <div><b>${personalStats.selfSinks}</b><span>Self Sinks</span></div>
         <div><b>${personalStats.fifas}</b><span>FIFAs</span></div>
+        <div><b>${personalStats.selfSinks}</b><span>Self Sinks</span></div>
       </div>
       <div class="profile-action-row">
         <button class="primary-button notification-button" id="showNotificationsBtn" type="button">
@@ -6108,7 +6128,7 @@ function computePlayerStats(tournamentId = "") {
         const player = getPlayerStats(stats, playerName);
         const bucket = game.source === "tournament" ? player.tournament : player.overall;
         const overallBucket = player.overall;
-        const playerStats = team.playerStats?.[playerName] || team.stats;
+        const playerStats = statsForPlayerInGame(game, team, playerName, team.stats);
         addGameToBucket(bucket, playerStats, game.winnerIndex === teamIndex);
         if (game.source === "tournament") addGameToBucket(overallBucket, playerStats, game.winnerIndex === teamIndex);
       });
@@ -6146,7 +6166,7 @@ function computeBigGameStats() {
     game.teams.forEach((team, teamIndex) => {
       team.players.forEach((playerName) => {
         const player = getPlayerStats(stats, playerName);
-        const playerStats = team.playerStats?.[playerName] || team.stats;
+        const playerStats = statsForPlayerInGame(game, team, playerName, team.stats);
         addGameToBucket(player.overall, playerStats, game.winnerIndex === teamIndex);
       });
     });
@@ -6186,6 +6206,15 @@ function addGameToBucket(bucket, gameStats, won) {
   });
 }
 
+function statsForPlayerInGame(game, team, playerName, fallback = emptyLeagueStats()) {
+  const stats = { ...(team.playerStats?.[playerName] || fallback || emptyLeagueStats()) };
+  const selfSinkName = cleanText(game.selfSinkPlayer).toLowerCase();
+  if (selfSinkName && selfSinkName === cleanText(playerName).toLowerCase() && !stats.selfSinks) {
+    stats.selfSinks = 1;
+  }
+  return stats;
+}
+
 function statCard(player, bucketName) {
   const bucket = player[bucketName];
   return `
@@ -6223,8 +6252,8 @@ function playerRow(player) {
       <td>${overall.tinks}</td>
       <td>${overall.fgOffense}</td>
       <td>${overall.fgDefense}</td>
-      <td>${overall.selfSinks}</td>
       <td>${overall.fifas}</td>
+      <td>${overall.selfSinks}</td>
     </tr>
   `;
 }
