@@ -116,6 +116,11 @@ const sentFriendLeagueInviteTimers = new Map();
 let pendingConfirmAction = null;
 let pendingCancelAction = null;
 let lastPlayerProfileLookupSyncKey = "";
+
+window.setTimeout(() => {
+  document.querySelector("#splashScreen")?.classList.add("is-hidden");
+}, 2400);
+
 const state = loadState();
 
 const els = {
@@ -299,30 +304,35 @@ registerServiceWorker();
 render();
 
 function loadState() {
-  const saved = localStorage.getItem("beerDieTracker");
+  let saved = null;
   const savedRoster = loadSavedPlayerRoster();
   const savedTheme = loadSavedTheme();
-  if (saved) {
-    const parsed = JSON.parse(saved);
-    return {
-      regularGames: [],
-      bigGames: [],
-      tournaments: [],
-      activeTournamentId: "",
-      playerProfiles: {},
-      myProfile: null,
-      legacyMyProfile: parsed.myProfile || null,
-      accountProfiles: parsed.accountProfiles || {},
-      players: mergePlayerNames([...(parsed.players || []), ...savedRoster]),
-      ...parsed,
-      bigGames: parsed.bigGames || [],
-      playerProfiles: parsed.playerProfiles || {},
-      legacyMyProfile: parsed.legacyMyProfile || parsed.myProfile || null,
-      accountProfiles: parsed.accountProfiles || {},
-      appTheme: normalizeTheme(savedTheme || parsed.appTheme),
-      myProfile: null,
-      players: mergePlayerNames([...(parsed.players || []), ...savedRoster]),
-    };
+  try {
+    saved = localStorage.getItem("beerDieTracker");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        regularGames: [],
+        bigGames: [],
+        tournaments: [],
+        activeTournamentId: "",
+        playerProfiles: {},
+        myProfile: null,
+        legacyMyProfile: parsed.myProfile || null,
+        accountProfiles: parsed.accountProfiles || {},
+        players: mergePlayerNames([...(parsed.players || []), ...savedRoster]),
+        ...parsed,
+        bigGames: parsed.bigGames || [],
+        playerProfiles: parsed.playerProfiles || {},
+        legacyMyProfile: parsed.legacyMyProfile || parsed.myProfile || null,
+        accountProfiles: parsed.accountProfiles || {},
+        appTheme: normalizeTheme(savedTheme || parsed.appTheme),
+        myProfile: null,
+        players: mergePlayerNames([...(parsed.players || []), ...savedRoster]),
+      };
+    }
+  } catch (error) {
+    console.warn("Saved app data could not be loaded.", error);
   }
 
   return {
@@ -342,8 +352,12 @@ function loadState() {
 function saveState() {
   saveCurrentProfileForUser();
   state.players = collectLocalPlayerNames();
-  localStorage.setItem(playerRosterKey, JSON.stringify(state.players));
-  localStorage.setItem("beerDieTracker", JSON.stringify(state));
+  try {
+    localStorage.setItem(playerRosterKey, JSON.stringify(state.players));
+    localStorage.setItem("beerDieTracker", JSON.stringify(state));
+  } catch (error) {
+    console.warn("App data could not be saved locally.", error);
+  }
 }
 
 function loadSavedPlayerRoster() {

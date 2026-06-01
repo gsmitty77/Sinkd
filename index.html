@@ -39,6 +39,16 @@
         <div class="splash-wordmark">Sinkd</div>
       </div>
     </section>
+    <script>
+      window.setTimeout(() => {
+        const splash = document.getElementById("splashScreen");
+        if (!splash) return;
+        splash.classList.add("is-hidden");
+        splash.style.opacity = "0";
+        splash.style.visibility = "hidden";
+        splash.style.pointerEvents = "none";
+      }, 2400);
+    </script>
     <div class="notification-toast-wrap" id="notificationToastWrap" aria-live="polite"></div>
 
     <section class="intro-modal hidden" id="introModal" aria-hidden="true">
