@@ -81,7 +81,7 @@ const themePresets = [
 const supabaseUrl = "https://egkdplyqrkoqgysgossd.supabase.co";
 const supabaseKey = "sb_publishable_0tPe5tBwnSAsBf_8OgB68g_362B5XPV";
 const vapidPublicKey = "BKu6165rw3XPcgaASzQ2lfauLSALUx9NP6I5Q718K45iCkDLoix74gylYXYr_saA8NwzKbSOZS0NrsCZb_YyBzc";
-const authClient = window.supabase?.createClient(supabaseUrl, supabaseKey);
+let authClient = window.supabase?.createClient(supabaseUrl, supabaseKey) || null;
 const authDisabledForPreview = false;
 let currentUser = null;
 let activeLeagueId = "";
@@ -470,6 +470,7 @@ async function setupAuth() {
     return;
   }
 
+  await ensureAuthClient();
   if (!authClient) {
     showAuthMessage("Login could not load. Check your internet connection and refresh.");
     setAuthView(null);
@@ -499,6 +500,16 @@ async function setupAuth() {
     }
     setAuthView(session?.user || null);
   });
+}
+
+async function ensureAuthClient(timeoutMs = 5000) {
+  if (authClient) return authClient;
+  const started = Date.now();
+  while (!window.supabase && Date.now() - started < timeoutMs) {
+    await new Promise((resolve) => window.setTimeout(resolve, 100));
+  }
+  authClient = window.supabase?.createClient(supabaseUrl, supabaseKey) || null;
+  return authClient;
 }
 
 async function finishOAuthRedirect() {
@@ -940,6 +951,7 @@ async function findPlayerByCode(code) {
 
 async function signInWithEmail() {
   if (authBusy) return;
+  await ensureAuthClient();
   if (!authClient) {
     showAuthMessage("Login is not connected. Refresh and try again.");
     return;
@@ -969,6 +981,7 @@ async function signInWithEmail() {
 
 async function completePasswordReset() {
   if (authBusy) return;
+  await ensureAuthClient();
   if (!authClient) {
     showAuthMessage("Login is not connected. Refresh and try again.");
     return;
@@ -995,6 +1008,7 @@ async function completePasswordReset() {
 
 async function signUpWithEmail() {
   if (authBusy) return;
+  await ensureAuthClient();
   if (!authClient) {
     showAuthMessage("Login is not connected. Refresh and try again.");
     return;
@@ -1034,6 +1048,7 @@ async function signUpWithEmail() {
 
 async function sendPasswordReset() {
   if (authBusy) return;
+  await ensureAuthClient();
   if (!authClient) {
     showAuthMessage("Login is not connected. Refresh and try again.");
     return;
@@ -1054,6 +1069,7 @@ async function sendPasswordReset() {
 
 async function signInWithGoogle() {
   if (authBusy) return;
+  await ensureAuthClient();
   if (!authClient) {
     showAuthMessage("Google login is not connected. Refresh and try again.");
     return;
