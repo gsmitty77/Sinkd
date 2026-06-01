@@ -4,13 +4,16 @@
   --ink: #ffffff;
   --muted: #b8c4d6;
   --panel: #002147;
-  --line: rgba(255, 255, 255, 0.14);
+  --surface: color-mix(in srgb, var(--panel) 94%, #ffffff 6%);
+  --surface-strong: color-mix(in srgb, var(--panel) 88%, #ffffff 12%);
+  --accent-surface: color-mix(in srgb, var(--panel) 88%, var(--accent) 12%);
+  --line: rgba(255, 255, 255, 0.18);
   --accent: #efbf04;
   --accent-strong: #ffd84a;
   --gold: #efbf04;
   --red: #e05252;
   --blue: #4f7fc8;
-  --shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+  --shadow: none;
 }
 
 * {
@@ -27,9 +30,7 @@ body {
   justify-content: center;
   margin: 0;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(239, 191, 4, 0.14), transparent 260px),
-    var(--bg);
+  background: var(--bg);
   color: var(--ink);
   overflow-x: hidden;
   font-family:
@@ -106,7 +107,6 @@ textarea {
   place-items: center;
   padding: max(18px, env(safe-area-inset-top)) 12px max(18px, env(safe-area-inset-bottom));
   background: rgba(0, 12, 28, 0.86);
-  backdrop-filter: blur(12px);
 }
 
 .intro-sheet {
@@ -118,10 +118,8 @@ textarea {
   padding: 18px;
   border: 1px solid rgba(239, 191, 4, 0.34);
   border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(239, 191, 4, 0.14), transparent 190px),
-    var(--panel);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+  background: var(--panel);
+  box-shadow: none;
   text-align: center;
 }
 
@@ -398,7 +396,7 @@ textarea {
   padding: 8px 10px 92px;
   background: var(--bg);
   overflow-x: hidden;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 70px rgba(0, 0, 0, 0.34);
+  box-shadow: none;
 }
 
 .topbar {
@@ -523,7 +521,7 @@ button:disabled {
   margin-bottom: 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--panel) 92%, #ffffff 8%);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -535,7 +533,7 @@ nav.tabs[aria-label="Primary sections"] {
   left: max(10px, calc((100vw - 430px) / 2 + 10px));
   z-index: 20;
   margin-bottom: 0;
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.38);
+  box-shadow: none;
 }
 
 .tabs::-webkit-scrollbar,
@@ -614,7 +612,7 @@ nav.tabs[aria-label="Primary sections"] {
 .league-roster-card,
 .profile-card,
 .summary-item {
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
 }
 
 .stat-form {
@@ -775,7 +773,7 @@ legend {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .compact-player-card {
@@ -1247,8 +1245,7 @@ legend {
   justify-items: center;
   align-items: stretch;
   padding: max(14px, env(safe-area-inset-top)) 10px max(14px, env(safe-area-inset-bottom));
-  background: rgba(0, 12, 28, 0.78);
-  backdrop-filter: blur(10px);
+  background: var(--bg);
 }
 
 .rules-sheet {
@@ -1261,10 +1258,8 @@ legend {
   overflow-y: auto;
   border: 1px solid rgba(239, 191, 4, 0.28);
   border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(239, 191, 4, 0.12), transparent 170px),
-    var(--panel);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+  background: var(--panel);
+  box-shadow: none;
 }
 
 .rules-header {
@@ -1278,7 +1273,7 @@ legend {
   margin: -14px -14px 2px;
   padding: 14px;
   border-bottom: 1px solid var(--line);
-  background: rgba(0, 33, 71, 0.96);
+  background: var(--panel);
 }
 
 .rules-header p,
@@ -1305,7 +1300,7 @@ legend {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .rules-card h3 {
@@ -1387,7 +1382,7 @@ legend {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .profile-identity {
@@ -1455,7 +1450,7 @@ legend {
   padding: 8px 10px;
   border: 1px solid rgba(239, 191, 4, 0.22);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface);
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 750;
@@ -1475,7 +1470,7 @@ legend {
   padding: 8px 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--surface-strong);
   text-align: center;
 }
 
@@ -1554,7 +1549,7 @@ legend {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .league-badge-body {
@@ -1721,7 +1716,7 @@ legend {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
   color: var(--ink);
   text-align: left;
 }
@@ -1732,7 +1727,7 @@ legend {
 
 .friend-card.selected {
   border-color: var(--accent);
-  background: rgba(239, 191, 4, 0.1);
+  background: var(--accent-surface);
 }
 
 .friend-row span {
@@ -1796,7 +1791,7 @@ legend {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .notification-row.is-dismissing {
@@ -1830,7 +1825,7 @@ legend {
 
 .notification-row.unread {
   border-color: rgba(239, 191, 4, 0.72);
-  background: rgba(239, 191, 4, 0.12);
+  background: var(--accent-surface);
 }
 
 .notification-row span,
@@ -1879,8 +1874,9 @@ legend {
   width: 100%;
   padding: 12px;
   border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -1889,7 +1885,8 @@ legend {
 .league-card-button.league-card-member {
   grid-template-columns: 1fr;
   border-color: rgba(239, 191, 4, 0.42);
-  background: rgba(239, 191, 4, 0.1);
+  border-left-color: var(--accent);
+  background: var(--accent-surface);
 }
 
 .league-card-main {
@@ -2192,7 +2189,7 @@ legend {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .compare-card strong {
@@ -2220,7 +2217,7 @@ legend {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
   color: var(--ink);
   text-align: left;
   min-width: 0;
@@ -2229,7 +2226,7 @@ legend {
 
 .league-roster-card.selected {
   border-color: var(--accent);
-  background: rgba(239, 191, 4, 0.1);
+  background: var(--accent-surface);
 }
 
 .league-roster-card span {
@@ -2285,7 +2282,7 @@ legend {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface);
 }
 
 .roster-detail-actions {
@@ -2363,7 +2360,7 @@ legend {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .league-chat-row.received {
@@ -2373,14 +2370,14 @@ legend {
 .league-chat-row.sent {
   justify-self: end;
   border-color: rgba(239, 191, 4, 0.28);
-  background: rgba(239, 191, 4, 0.14);
+  background: var(--accent-surface);
 }
 
 .league-chat-row.system {
   justify-self: center;
   width: min(94%, 380px);
   border-color: rgba(239, 191, 4, 0.34);
-  background: rgba(239, 191, 4, 0.08);
+  background: var(--accent-surface);
 }
 
 .join-request-chat-row {
@@ -2436,7 +2433,7 @@ legend {
 .match-card {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
   padding: 12px;
 }
 
@@ -2479,7 +2476,7 @@ legend {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .summary-item b {
@@ -2519,7 +2516,7 @@ legend {
 }
 
 .match-card.pending {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-strong);
 }
 
 .team-line {
@@ -2622,7 +2619,7 @@ td {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
 }
 
 .match-detail-team h3 {
@@ -2642,7 +2639,7 @@ td {
   place-items: center;
   padding: 8px 4px;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--surface-strong);
   text-align: center;
 }
 
