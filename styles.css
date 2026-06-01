@@ -62,7 +62,8 @@ textarea {
   z-index: 999;
   display: grid;
   place-items: center;
-  background: var(--bg);
+  background: #002147;
+  background: var(--bg, #002147);
   opacity: 1;
   transition: opacity 420ms ease, visibility 420ms ease;
 }

@@ -446,14 +446,20 @@ async function setupAuth() {
     return;
   }
 
-  handleAuthRedirectError();
-  await finishOAuthRedirect();
+  try {
+    handleAuthRedirectError();
+    await finishOAuthRedirect();
 
-  const { data, error } = await authClient.auth.getSession();
-  if (error) showAuthMessage(error.message);
-  setAuthView(data.session?.user || null);
-  if (data.session?.user && window.location.hash.includes("type=recovery")) {
-    showPasswordRecoveryForm(data.session.user);
+    const { data, error } = await authClient.auth.getSession();
+    if (error) showAuthMessage(error.message);
+    setAuthView(data.session?.user || null);
+    if (data.session?.user && window.location.hash.includes("type=recovery")) {
+      showPasswordRecoveryForm(data.session.user);
+    }
+  } catch (error) {
+    console.error("Auth startup failed", error);
+    setAuthView(null);
+    showAuthMessage("Login could not load. Check the link, refresh, or try again in a minute.");
   }
 
   authClient.auth.onAuthStateChange((event, session) => {

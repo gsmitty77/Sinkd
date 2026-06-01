@@ -5,6 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#002147" />
     <title>Sinkd</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #002147;
+      }
+    </style>
+    <script>
+      (() => {
+        try {
+          const theme = JSON.parse(localStorage.getItem("sinkdTheme") || "{}");
+          const color = /^#[0-9a-f]{6}$/i.test(theme.background || "") ? theme.background : "#002147";
+          document.documentElement.style.background = color;
+          document.addEventListener("DOMContentLoaded", () => {
+            document.body.style.background = color;
+            document.querySelector('meta[name="theme-color"]')?.setAttribute("content", color);
+          });
+        } catch {
+          document.documentElement.style.background = "#002147";
+        }
+      })();
+    </script>
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
