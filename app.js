@@ -6307,23 +6307,21 @@ function leagueWeeklyReportHtml() {
   const theme = normalizeTheme(state.appTheme);
   const allGames = leagueStatGames();
   const weeklyGames = weeklyLeagueReportGames(allGames);
-  const hasCurrentWeek = weeklyGames.some((game) => isCurrentWeekLeagueGame(game));
   const weeklyStats = computeLeagueStatsFromGames(weeklyGames);
-  const overallStats = computeLeagueStats();
   const weeklyPlayers = Object.values(weeklyStats.players);
-  const overallPlayers = Object.values(overallStats.players);
-  const standings = [...overallPlayers].sort(sortPlayersByRecord).slice(0, 4);
+  const standings = [...weeklyPlayers].sort(sortPlayersByRecord).slice(0, 4);
   const mvp = [...weeklyPlayers].sort(sortWeeklyMvp).at(0) || standings[0] || { name: "No games yet", ...emptyBucket() };
-  const sinkLeader = topPlayerBy(weeklyPlayers, "sinks") || topPlayerBy(overallPlayers, "sinks");
-  const fifaLeader = topPlayerBy(weeklyPlayers, "fifas") || topPlayerBy(overallPlayers, "fifas");
-  const returnLeader = topPlayerBy(weeklyPlayers, "fgDefense") || topPlayerBy(overallPlayers, "fgDefense");
-  const hotStreak = topStreak(overallPlayers, "W");
-  const coldStreak = topStreak(overallPlayers, "L");
+  const sinkLeader = topPlayerBy(weeklyPlayers, "sinks");
+  const fifaLeader = topPlayerBy(weeklyPlayers, "fifas");
+  const returnLeader = topPlayerBy(weeklyPlayers, "fgDefense");
+  const hotStreak = topStreak(weeklyPlayers, "W");
+  const coldStreak = topStreak(weeklyPlayers, "L");
   const biggestRiser = [...weeklyPlayers].sort((a, b) => b.wins - a.wins || b.points - a.points || b.sinks - a.sinks).at(0);
-  const achievement = topLeagueAchievement(overallPlayers);
+  const achievement = topLeagueAchievement(weeklyPlayers);
   const match = matchOfTheWeek(weeklyGames);
   const reportDate = new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" }).format(new Date());
-  const weekLabel = hasCurrentWeek ? "This Week" : "Recent League";
+  const weekRange = leagueWeeklyReportDateRange();
+  const logo = weeklyReportLogoSvg(theme);
 
   return `
     <!doctype html>
@@ -6331,75 +6329,76 @@ function leagueWeeklyReportHtml() {
       <head>
         <title>${escapeHtml(league.name)} Weekly Report</title>
         <style>
-          @page{size:letter portrait;margin:.25in}
+          @page{size:9in 16in;margin:0}
           *{box-sizing:border-box}
           :root{--bg:${theme.background};--panel:${theme.panel};--accent:${theme.accent};--ink:${theme.text};--line:color-mix(in srgb,var(--accent) 42%,transparent)}
           body{margin:0;background:#07111f;color:var(--ink);font-family:Arial,Helvetica,sans-serif}
-          .report-actions{display:flex;justify-content:space-between;gap:8px;margin:0 0 12px}
+          .report-actions{display:flex;justify-content:space-between;gap:8px;width:min(100%,540px);margin:0 auto 12px}
           .report-actions button{min-height:34px;padding:0 12px;border:1px solid var(--accent);border-radius:5px;background:var(--accent);color:var(--bg);font-weight:900}
           .report-actions .back-button{background:transparent;color:var(--ink)}
-          .sheet{max-width:8in;margin:auto;padding:18px;background:linear-gradient(180deg,var(--bg),#07111f);border:2px solid var(--accent);border-radius:14px}
-          .hero{display:grid;grid-template-columns:72px 1fr;gap:14px;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--line)}
-          .mark{display:grid;place-items:center;width:72px;height:72px;border:2px solid var(--accent);border-radius:14px;background:rgba(255,255,255,.04);font-size:34px;font-weight:900;color:var(--accent)}
-          .title{margin:0;font-size:58px;line-height:.9;letter-spacing:2px;font-weight:1000}
-          .subtitle{margin:3px 0 0;color:var(--accent);font-size:30px;line-height:1;font-weight:1000;text-transform:uppercase}
-          .league-name{margin:8px 0 0;font-size:14px;font-weight:900;letter-spacing:2px;text-transform:uppercase}
-          .date{margin-top:4px;color:rgba(255,255,255,.72);font-size:11px;text-transform:uppercase;letter-spacing:1px}
-          .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:12px;margin-top:12px}
-          .panel{border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.2);padding:12px;min-width:0}
-          .panel-title{display:inline-block;margin:0 0 10px;padding:5px 10px;border-radius:5px;background:var(--accent);color:var(--bg);font-size:16px;font-weight:1000;text-transform:uppercase}
+          .sheet{width:min(100%,540px);aspect-ratio:9/16;margin:auto;padding:14px;background:linear-gradient(180deg,var(--bg),#07111f);border:2px solid var(--accent);border-radius:16px;display:flex;flex-direction:column;overflow:hidden}
+          .hero{display:grid;grid-template-columns:70px 1fr;gap:12px;align-items:center;padding-bottom:11px;border-bottom:1px solid var(--line)}
+          .mark{display:grid;place-items:center;width:70px;height:70px;border:2px solid var(--accent);border-radius:13px;background:${theme.background};overflow:hidden}
+          .report-logo{display:block;width:64px;height:64px}
+          .title{margin:0;font-size:43px;line-height:.9;letter-spacing:2px;font-weight:1000}
+          .subtitle{margin:2px 0 0;color:var(--accent);font-size:25px;line-height:1;font-weight:1000;text-transform:uppercase}
+          .league-name{margin:7px 0 0;font-size:19px;font-weight:1000;letter-spacing:1px;text-transform:uppercase}
+          .date{margin-top:3px;color:rgba(255,255,255,.72);font-size:10px;text-transform:uppercase;letter-spacing:.8px}
+          .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:9px;margin-top:9px;flex:1}
+          .panel{border:1px solid var(--line);border-radius:9px;background:rgba(0,0,0,.2);padding:9px;min-width:0}
+          .panel-title{display:inline-block;margin:0 0 8px;padding:4px 8px;border-radius:5px;background:var(--accent);color:var(--bg);font-size:13px;font-weight:1000;text-transform:uppercase}
           .blue-title{background:rgba(255,255,255,.08);color:var(--ink);border-left:5px solid var(--accent)}
-          .mvp-layout{display:grid;grid-template-columns:116px 1fr;gap:14px;align-items:center}
-          .trophy-box{display:grid;place-items:center;aspect-ratio:1;border:2px solid var(--accent);border-radius:10px;color:var(--accent);font-size:54px;font-weight:1000;background:rgba(239,191,4,.08)}
-          .mvp-name{font-size:44px;line-height:1;font-weight:1000;text-transform:uppercase}
-          .mvp-lines{display:grid;gap:7px;margin-top:12px}
-          .metric-line{display:flex;align-items:baseline;gap:8px;border-top:1px solid rgba(255,255,255,.12);padding-top:6px;font-weight:900}
-          .metric-line b{color:var(--accent);font-size:24px}
-          .standings{display:grid;gap:8px}
-          .standing-row{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;border-bottom:1px solid rgba(255,255,255,.12);padding:5px 0;font-weight:900}
-          .standing-row .rank{font-size:26px}
-          .standing-row .name{font-size:22px;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-          .standing-row .record{color:var(--accent);font-size:22px}
+          .mvp-layout{display:grid;grid-template-columns:88px 1fr;gap:10px;align-items:center}
+          .trophy-box{display:grid;place-items:center;aspect-ratio:1;border:2px solid var(--accent);border-radius:9px;color:var(--accent);font-size:42px;font-weight:1000;background:rgba(239,191,4,.08)}
+          .mvp-name{font-size:34px;line-height:1;font-weight:1000;text-transform:uppercase}
+          .mvp-lines{display:grid;gap:5px;margin-top:9px}
+          .metric-line{display:flex;align-items:baseline;gap:7px;border-top:1px solid rgba(255,255,255,.12);padding-top:5px;font-weight:900}
+          .metric-line b{color:var(--accent);font-size:19px}
+          .standings{display:grid;gap:6px}
+          .standing-row{display:grid;grid-template-columns:20px 1fr auto;gap:7px;align-items:center;border-bottom:1px solid rgba(255,255,255,.12);padding:4px 0;font-weight:900}
+          .standing-row .rank{font-size:21px}
+          .standing-row .name{font-size:17px;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .standing-row .record{color:var(--accent);font-size:18px}
           .wide{grid-column:1/-1}
-          .leaders{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center}
-          .leader-title{font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.82)}
-          .leader-name{margin-top:6px;font-size:21px;font-weight:1000;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-          .leader-value{display:inline-block;margin-top:6px;padding:3px 18px;background:var(--accent);color:var(--bg);font-size:24px;font-weight:1000;border-radius:3px}
-          .mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-          .mini{min-height:120px}
-          .mini h3{margin:0 0 10px;font-size:16px;text-transform:uppercase}
+          .leaders{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+          .leader-title{font-size:9px;font-weight:1000;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.82)}
+          .leader-name{margin-top:5px;font-size:16px;font-weight:1000;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .leader-value{display:inline-block;margin-top:5px;padding:3px 15px;background:var(--accent);color:var(--bg);font-size:20px;font-weight:1000;border-radius:3px}
+          .mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+          .mini{min-height:96px}
+          .mini h3{margin:0 0 8px;font-size:13px;text-transform:uppercase}
           .mini .hot{color:#ff4a36}.mini .rise{color:#9be15d}.mini .cold{color:#5aa7ff}
-          .mini-name{font-size:24px;font-weight:1000;text-transform:uppercase}
-          .mini-note{margin-top:5px;font-size:14px;font-weight:800;line-height:1.25;color:rgba(255,255,255,.84)}
-          .bottom{display:grid;grid-template-columns:.85fr 1.15fr;gap:12px}
-          .badge-row{display:grid;grid-template-columns:90px 1fr;gap:12px;align-items:center}
-          .badge-row img{width:90px;height:90px;object-fit:contain}
-          .badge-player{font-size:26px;font-weight:1000;text-transform:uppercase;color:var(--accent)}
-          .badge-name{font-size:18px;font-weight:1000;text-transform:uppercase}
-          .match-teams{display:grid;grid-template-columns:1fr 44px 1fr;align-items:center;gap:10px;text-align:center}
-          .team-name{font-size:15px;font-weight:1000;text-transform:uppercase}
-          .versus{font-size:28px;font-weight:1000;color:var(--accent)}
-          .score{margin-top:12px;text-align:center;color:var(--accent);font-size:44px;font-weight:1000}
-          .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-weight:1000;letter-spacing:1px;text-transform:uppercase}
-          .footer .brand{font-size:22px}.footer .tag{color:var(--accent)}
+          .mini-name{font-size:20px;font-weight:1000;text-transform:uppercase}
+          .mini-note{margin-top:4px;font-size:12px;font-weight:800;line-height:1.22;color:rgba(255,255,255,.84)}
+          .bottom{display:grid;grid-template-columns:.85fr 1.15fr;gap:9px}
+          .badge-row{display:grid;grid-template-columns:72px 1fr;gap:9px;align-items:center}
+          .badge-row img{width:72px;height:72px;object-fit:contain}
+          .badge-player{font-size:21px;font-weight:1000;text-transform:uppercase;color:var(--accent)}
+          .badge-name{font-size:15px;font-weight:1000;text-transform:uppercase}
+          .match-teams{display:grid;grid-template-columns:1fr 36px 1fr;align-items:center;gap:7px;text-align:center}
+          .team-name{font-size:12px;font-weight:1000;text-transform:uppercase}
+          .versus{font-size:23px;font-weight:1000;color:var(--accent)}
+          .score{margin-top:9px;text-align:center;color:var(--accent);font-size:36px;font-weight:1000}
+          .footer{display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:8px;border-top:1px solid var(--line);font-weight:1000;letter-spacing:1px;text-transform:uppercase}
+          .footer .brand{font-size:19px}.footer .tag{color:var(--accent);font-size:12px}
           @media screen{body{padding:14px}.sheet{box-shadow:0 18px 60px rgba(0,0,0,.35)}}
-          @media print{body{background:#fff}.report-actions{display:none}.sheet{max-width:none;min-height:10.35in;border-radius:0}}
-          @media (max-width:720px){.title{font-size:42px}.subtitle{font-size:24px}.grid,.bottom{grid-template-columns:1fr}.leaders,.mini-grid{grid-template-columns:1fr}.mvp-name{font-size:34px}}
+          @media print{body{background:var(--bg);padding:0}.report-actions{display:none}.sheet{width:9in;height:16in;border-radius:0;border:0}}
+          @media (max-width:560px){body{padding:10px}.sheet{width:100%;min-height:auto}.title{font-size:34px}.subtitle{font-size:21px}.league-name{font-size:16px}.mvp-name{font-size:28px}.footer .tag{font-size:10px}}
         </style>
       </head>
       <body>
+        <div class="report-actions">
+          <button class="back-button" type="button" onclick="window.close()">Back</button>
+          <button type="button" onclick="window.print()">Print / Save PDF</button>
+        </div>
         <main class="sheet">
-          <div class="report-actions">
-            <button class="back-button" type="button" onclick="window.close()">Back</button>
-            <button type="button" onclick="window.print()">Print / Save PDF</button>
-          </div>
           <header class="hero">
-            <div class="mark">S</div>
+            <div class="mark">${logo}</div>
             <div>
               <h1 class="title">SINKD</h1>
-              <div class="subtitle">${escapeHtml(weekLabel)} Report</div>
+              <div class="subtitle">Weekly Report</div>
               <div class="league-name">${escapeHtml(league.name)}</div>
-              <div class="date">${escapeHtml(reportDate)}</div>
+              <div class="date">${escapeHtml(weekRange)} - Generated ${escapeHtml(reportDate)}</div>
             </div>
           </header>
 
@@ -6422,7 +6421,7 @@ function leagueWeeklyReportHtml() {
             <article class="panel">
               <h2 class="panel-title blue-title">League Standings</h2>
               <div class="standings">
-                ${standings.length ? standings.map((player, index) => weeklyStandingRow(player, index)).join("") : '<p>No league games logged yet.</p>'}
+                ${standings.length ? standings.map((player, index) => weeklyStandingRow(player, index)).join("") : '<p>No weekly league games logged yet.</p>'}
               </div>
             </article>
 
@@ -6464,13 +6463,42 @@ function leagueWeeklyReportHtml() {
 }
 
 function weeklyLeagueReportGames(games) {
-  const currentWeek = games.filter(isCurrentWeekLeagueGame);
-  return currentWeek.length ? currentWeek : games.slice(0, 12);
+  return games.filter(isCurrentWeekLeagueGame);
 }
 
 function isCurrentWeekLeagueGame(game) {
   const gameTime = new Date(game.createdAt || game.created_at || Date.now()).getTime();
   return Number.isFinite(gameTime) && gameTime >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+}
+
+function leagueWeeklyReportDateRange() {
+  const end = new Date();
+  const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const formatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+  const endFormatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return `${formatter.format(start)} - ${endFormatter.format(end)}`;
+}
+
+function weeklyReportLogoSvg(theme) {
+  const fill = escapeHtml(theme.background);
+  const stroke = escapeHtml(theme.text);
+  return `
+    <svg class="report-logo" viewBox="0 0 120 112" role="img" aria-label="Sinkd logo" xmlns="http://www.w3.org/2000/svg">
+      <path d="M60 10 105 27 60 45 15 27Z" fill="${fill}" stroke="${stroke}" stroke-width="7" stroke-linejoin="round"/>
+      <path d="M15 27 60 45 60 102 18 82C14 80 12 76 12 72V34C12 30 13 28 15 27Z" fill="${fill}" stroke="${stroke}" stroke-width="7" stroke-linejoin="round"/>
+      <path d="M105 27 60 45 60 102 102 82C106 80 108 76 108 72V34C108 30 107 28 105 27Z" fill="${fill}" stroke="${stroke}" stroke-width="7" stroke-linejoin="round"/>
+      <ellipse cx="60" cy="27" rx="8" ry="5" fill="${stroke}"/>
+      <ellipse cx="33" cy="47" rx="5" ry="8" fill="${stroke}" transform="rotate(-15 33 47)"/>
+      <ellipse cx="43" cy="68" rx="5" ry="8" fill="${stroke}" transform="rotate(-15 43 68)"/>
+      <ellipse cx="53" cy="90" rx="5" ry="8" fill="${stroke}" transform="rotate(-15 53 90)"/>
+      <ellipse cx="88" cy="47" rx="5" ry="8" fill="${stroke}" transform="rotate(15 88 47)"/>
+      <ellipse cx="73" cy="56" rx="5" ry="8" fill="${stroke}" transform="rotate(15 73 56)"/>
+      <ellipse cx="91" cy="69" rx="5" ry="8" fill="${stroke}" transform="rotate(15 91 69)"/>
+      <ellipse cx="73" cy="89" rx="5" ry="8" fill="${stroke}" transform="rotate(15 73 89)"/>
+      <ellipse cx="94" cy="90" rx="5" ry="8" fill="${stroke}" transform="rotate(15 94 90)"/>
+    </svg>
+  `;
 }
 
 function computeLeagueStatsFromGames(games) {
@@ -6493,9 +6521,26 @@ function computeLeagueStatsFromGames(games) {
     });
   });
   Object.values(players).forEach((player) => {
-    player.streak = currentLeagueStreak(player.name);
+    player.streak = leagueStreakFromGames(games, player.name);
   });
   return { players, teams };
+}
+
+function leagueStreakFromGames(games, playerName) {
+  const target = cleanText(playerName).toLowerCase();
+  let streakType = "";
+  let count = 0;
+
+  for (const game of games) {
+    const teamIndex = game.teams.findIndex((team) => team.players.some((player) => player.toLowerCase() === target));
+    if (teamIndex === -1) continue;
+    const result = game.winnerIndex === teamIndex ? "W" : "L";
+    if (!streakType) streakType = result;
+    if (result !== streakType) break;
+    count += 1;
+  }
+
+  return count ? { type: streakType, count, label: `${streakType}${count}` } : { type: "", count: 0, label: "-" };
 }
 
 function sortPlayersByRecord(a, b) {
