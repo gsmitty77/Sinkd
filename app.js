@@ -65,14 +65,14 @@ const defaultTheme = {
 };
 const themePresets = [
   { name: "Sinkd Classic", background: "#002147", panel: "#002147", accent: "#efbf04", text: "#ffffff" },
-  { name: "Midnight Gold", background: "#00142f", panel: "#082a55", accent: "#f2c94c", text: "#ffffff" },
+  { name: "Sandstone", background: "#2b241c", panel: "#4a3827", accent: "#e7c27a", text: "#ffffff" },
   { name: "Stadium Lights", background: "#07111f", panel: "#10243d", accent: "#35d0ff", text: "#ffffff" },
   { name: "Chalkboard", background: "#10231d", panel: "#18382d", accent: "#f4d35e", text: "#ffffff" },
   { name: "Maroon Night", background: "#2a0712", panel: "#3a0d1b", accent: "#ffc857", text: "#ffffff" },
   { name: "Slate Ice", background: "#111827", panel: "#1f2937", accent: "#93c5fd", text: "#ffffff" },
   { name: "Forest Gold", background: "#071b14", panel: "#123527", accent: "#d4af37", text: "#ffffff" },
   { name: "Royal", background: "#10104a", panel: "#1d1b6b", accent: "#f8d66d", text: "#ffffff" },
-  { name: "Clean Court", background: "#f7f9fc", panel: "#ffffff", accent: "#002147", text: "#0b172a" },
+  { name: "Plum Gold", background: "#241124", panel: "#341a34", accent: "#f5c542", text: "#ffffff" },
   { name: "Blacktop", background: "#050505", panel: "#171717", accent: "#efbf04", text: "#ffffff" },
 ];
 const supabaseUrl = "https://egkdplyqrkoqgysgossd.supabase.co";
@@ -1580,6 +1580,7 @@ function bindEvents() {
     state.appTheme = themeFromForm();
     applyTheme();
     saveState();
+    switchView("profiles");
   });
   els.themeForm.addEventListener("click", (event) => {
     const presetButton = event.target.closest("[data-theme-preset]");
