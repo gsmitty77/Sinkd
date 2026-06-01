@@ -266,10 +266,20 @@ const els = {
 
 applyTheme();
 
+function hideSplashScreen() {
+  els.splashScreen?.classList.add("is-hidden");
+}
+
+window.setTimeout(hideSplashScreen, 1800);
+
+window.addEventListener("DOMContentLoaded", () => {
+  window.setTimeout(hideSplashScreen, 1150);
+});
+
 window.addEventListener("load", () => {
   window.setTimeout(() => {
-    els.splashScreen?.classList.add("is-hidden");
-  }, 1150);
+    hideSplashScreen();
+  }, 650);
 });
 
 if ("serviceWorker" in navigator) {
@@ -6434,9 +6444,9 @@ function leagueWeeklyReportHtml() {
             </article>
 
             <article class="mini-grid wide">
-              ${weeklyStreakBox("Hot Streak", hotStreak, "hot")}
+              ${weeklyStreakBox("Hot Streak", hotStreak, "hot", "wins")}
               ${weeklyRiserBox(biggestRiser)}
-              ${weeklyStreakBox("Cold Streak", coldStreak, "cold")}
+              ${weeklyStreakBox("Cold Streak", coldStreak, "cold", "losses")}
             </article>
 
             <section class="bottom wide">
@@ -6488,9 +6498,9 @@ function weeklyReportLogoSvg(theme) {
       <path d="M15 27 60 45 60 102 18 82C14 80 12 76 12 72V34C12 30 13 28 15 27Z" fill="${fill}" stroke="${stroke}" stroke-width="7" stroke-linejoin="round"/>
       <path d="M105 27 60 45 60 102 102 82C106 80 108 76 108 72V34C108 30 107 28 105 27Z" fill="${fill}" stroke="${stroke}" stroke-width="7" stroke-linejoin="round"/>
       <ellipse cx="60" cy="27" rx="8" ry="5" fill="${stroke}"/>
-      <ellipse cx="28" cy="46" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(-15 28 46)"/>
+      <ellipse cx="27" cy="45" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(-15 27 45)"/>
       <ellipse cx="38" cy="64" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(-15 38 64)"/>
-      <ellipse cx="48" cy="82" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(-15 48 82)"/>
+      <ellipse cx="49" cy="83" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(-15 49 83)"/>
       <ellipse cx="72" cy="54" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(15 72 54)"/>
       <ellipse cx="92" cy="46" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(15 92 46)"/>
       <ellipse cx="82" cy="64" rx="4.8" ry="7.4" fill="${stroke}" transform="rotate(15 82 64)"/>
@@ -6578,13 +6588,12 @@ function weeklyLeaderBox(title, player, key) {
   `;
 }
 
-function weeklyStreakBox(title, player, className) {
-  const type = player?.streak?.type === "L" ? "losses" : "wins";
+function weeklyStreakBox(title, player, className, resultLabel) {
   return `
     <article class="panel mini">
       <h3 class="${className}">${escapeHtml(title)}</h3>
       <div class="mini-name">${escapeHtml(player?.name || "No streak yet")}</div>
-      <div class="mini-note">${player?.streak?.count || 0} ${type} in a row</div>
+      <div class="mini-note">${player?.streak?.count || 0} ${resultLabel} in a row</div>
     </article>
   `;
 }
