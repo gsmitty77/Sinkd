@@ -1093,6 +1093,9 @@ legend {
 
 #openThemeBtn {
   grid-column: 1 / -1;
+  border-color: var(--theme-button-border, var(--accent));
+  background: var(--theme-button-bg, var(--panel));
+  color: var(--theme-button-text, var(--ink));
 }
 
 .league-rule-actions {
@@ -1100,6 +1103,20 @@ legend {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 12px;
+}
+
+.league-stat-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.league-stat-actions .small-button {
+  width: 100%;
+  min-width: 0;
+  margin-top: 0;
+  padding: 0 8px;
+  font-size: 0.74rem;
 }
 
 .league-rules-edit-form {

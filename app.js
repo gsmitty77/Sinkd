@@ -204,6 +204,7 @@ const els = {
   leagueChatForm: document.querySelector("#leagueChatForm"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
+  leagueWeeklyReportBtn: document.querySelector("#leagueWeeklyReportBtn"),
   openLeagueRulesBtn: document.querySelector("#openLeagueRulesBtn"),
   editLeagueRulesBtn: document.querySelector("#editLeagueRulesBtn"),
   leagueRulesEditForm: document.querySelector("#leagueRulesEditForm"),
@@ -377,6 +378,9 @@ function applyTheme(theme = state.appTheme) {
   root.style.setProperty("--accent-strong", nextTheme.accent);
   root.style.setProperty("--gold", nextTheme.accent);
   root.style.setProperty("--ink", nextTheme.text);
+  root.style.setProperty("--theme-button-bg", `linear-gradient(90deg, ${nextTheme.background}, ${nextTheme.panel})`);
+  root.style.setProperty("--theme-button-border", nextTheme.accent);
+  root.style.setProperty("--theme-button-text", nextTheme.text);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", nextTheme.background);
 }
 
@@ -1588,6 +1592,7 @@ function bindEvents() {
 
   els.exportBtn.addEventListener("click", exportData);
   els.leagueExportBtn.addEventListener("click", exportLeagueStats);
+  els.leagueWeeklyReportBtn.addEventListener("click", exportLeagueWeeklyReport);
   els.openThemeBtn.addEventListener("click", openThemePage);
   els.backToSettingsBtn.addEventListener("click", () => switchView("settings"));
   els.themeForm.addEventListener("submit", (event) => {
@@ -6274,6 +6279,18 @@ function exportLeagueStats() {
   openStatReport(statReportHtml({ leagueOnly: true }), "league stat report");
 }
 
+function exportLeagueWeeklyReport() {
+  if (!activeLeague()) {
+    alert("Open a league first.");
+    return;
+  }
+  if (!myLeagueMember()) {
+    alert("You can only create weekly reports for leagues you are in.");
+    return;
+  }
+  openStatReport(leagueWeeklyReportHtml(), "league weekly report");
+}
+
 function openStatReport(html, label) {
   const report = window.open("", "_blank");
   if (!report) {
@@ -6283,6 +6300,319 @@ function openStatReport(html, label) {
   report.document.write(html);
   report.document.close();
   report.focus();
+}
+
+function leagueWeeklyReportHtml() {
+  const league = activeLeague();
+  const theme = normalizeTheme(state.appTheme);
+  const allGames = leagueStatGames();
+  const weeklyGames = weeklyLeagueReportGames(allGames);
+  const hasCurrentWeek = weeklyGames.some((game) => isCurrentWeekLeagueGame(game));
+  const weeklyStats = computeLeagueStatsFromGames(weeklyGames);
+  const overallStats = computeLeagueStats();
+  const weeklyPlayers = Object.values(weeklyStats.players);
+  const overallPlayers = Object.values(overallStats.players);
+  const standings = [...overallPlayers].sort(sortPlayersByRecord).slice(0, 4);
+  const mvp = [...weeklyPlayers].sort(sortWeeklyMvp).at(0) || standings[0] || { name: "No games yet", ...emptyBucket() };
+  const sinkLeader = topPlayerBy(weeklyPlayers, "sinks") || topPlayerBy(overallPlayers, "sinks");
+  const fifaLeader = topPlayerBy(weeklyPlayers, "fifas") || topPlayerBy(overallPlayers, "fifas");
+  const returnLeader = topPlayerBy(weeklyPlayers, "fgDefense") || topPlayerBy(overallPlayers, "fgDefense");
+  const hotStreak = topStreak(overallPlayers, "W");
+  const coldStreak = topStreak(overallPlayers, "L");
+  const biggestRiser = [...weeklyPlayers].sort((a, b) => b.wins - a.wins || b.points - a.points || b.sinks - a.sinks).at(0);
+  const achievement = topLeagueAchievement(overallPlayers);
+  const match = matchOfTheWeek(weeklyGames);
+  const reportDate = new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" }).format(new Date());
+  const weekLabel = hasCurrentWeek ? "This Week" : "Recent League";
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <title>${escapeHtml(league.name)} Weekly Report</title>
+        <style>
+          @page{size:letter portrait;margin:.25in}
+          *{box-sizing:border-box}
+          :root{--bg:${theme.background};--panel:${theme.panel};--accent:${theme.accent};--ink:${theme.text};--line:color-mix(in srgb,var(--accent) 42%,transparent)}
+          body{margin:0;background:#07111f;color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+          .report-actions{display:flex;justify-content:space-between;gap:8px;margin:0 0 12px}
+          .report-actions button{min-height:34px;padding:0 12px;border:1px solid var(--accent);border-radius:5px;background:var(--accent);color:var(--bg);font-weight:900}
+          .report-actions .back-button{background:transparent;color:var(--ink)}
+          .sheet{max-width:8in;margin:auto;padding:18px;background:linear-gradient(180deg,var(--bg),#07111f);border:2px solid var(--accent);border-radius:14px}
+          .hero{display:grid;grid-template-columns:72px 1fr;gap:14px;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--line)}
+          .mark{display:grid;place-items:center;width:72px;height:72px;border:2px solid var(--accent);border-radius:14px;background:rgba(255,255,255,.04);font-size:34px;font-weight:900;color:var(--accent)}
+          .title{margin:0;font-size:58px;line-height:.9;letter-spacing:2px;font-weight:1000}
+          .subtitle{margin:3px 0 0;color:var(--accent);font-size:30px;line-height:1;font-weight:1000;text-transform:uppercase}
+          .league-name{margin:8px 0 0;font-size:14px;font-weight:900;letter-spacing:2px;text-transform:uppercase}
+          .date{margin-top:4px;color:rgba(255,255,255,.72);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+          .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:12px;margin-top:12px}
+          .panel{border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.2);padding:12px;min-width:0}
+          .panel-title{display:inline-block;margin:0 0 10px;padding:5px 10px;border-radius:5px;background:var(--accent);color:var(--bg);font-size:16px;font-weight:1000;text-transform:uppercase}
+          .blue-title{background:rgba(255,255,255,.08);color:var(--ink);border-left:5px solid var(--accent)}
+          .mvp-layout{display:grid;grid-template-columns:116px 1fr;gap:14px;align-items:center}
+          .trophy-box{display:grid;place-items:center;aspect-ratio:1;border:2px solid var(--accent);border-radius:10px;color:var(--accent);font-size:54px;font-weight:1000;background:rgba(239,191,4,.08)}
+          .mvp-name{font-size:44px;line-height:1;font-weight:1000;text-transform:uppercase}
+          .mvp-lines{display:grid;gap:7px;margin-top:12px}
+          .metric-line{display:flex;align-items:baseline;gap:8px;border-top:1px solid rgba(255,255,255,.12);padding-top:6px;font-weight:900}
+          .metric-line b{color:var(--accent);font-size:24px}
+          .standings{display:grid;gap:8px}
+          .standing-row{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;border-bottom:1px solid rgba(255,255,255,.12);padding:5px 0;font-weight:900}
+          .standing-row .rank{font-size:26px}
+          .standing-row .name{font-size:22px;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .standing-row .record{color:var(--accent);font-size:22px}
+          .wide{grid-column:1/-1}
+          .leaders{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center}
+          .leader-title{font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.82)}
+          .leader-name{margin-top:6px;font-size:21px;font-weight:1000;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .leader-value{display:inline-block;margin-top:6px;padding:3px 18px;background:var(--accent);color:var(--bg);font-size:24px;font-weight:1000;border-radius:3px}
+          .mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+          .mini{min-height:120px}
+          .mini h3{margin:0 0 10px;font-size:16px;text-transform:uppercase}
+          .mini .hot{color:#ff4a36}.mini .rise{color:#9be15d}.mini .cold{color:#5aa7ff}
+          .mini-name{font-size:24px;font-weight:1000;text-transform:uppercase}
+          .mini-note{margin-top:5px;font-size:14px;font-weight:800;line-height:1.25;color:rgba(255,255,255,.84)}
+          .bottom{display:grid;grid-template-columns:.85fr 1.15fr;gap:12px}
+          .badge-row{display:grid;grid-template-columns:90px 1fr;gap:12px;align-items:center}
+          .badge-row img{width:90px;height:90px;object-fit:contain}
+          .badge-player{font-size:26px;font-weight:1000;text-transform:uppercase;color:var(--accent)}
+          .badge-name{font-size:18px;font-weight:1000;text-transform:uppercase}
+          .match-teams{display:grid;grid-template-columns:1fr 44px 1fr;align-items:center;gap:10px;text-align:center}
+          .team-name{font-size:15px;font-weight:1000;text-transform:uppercase}
+          .versus{font-size:28px;font-weight:1000;color:var(--accent)}
+          .score{margin-top:12px;text-align:center;color:var(--accent);font-size:44px;font-weight:1000}
+          .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-weight:1000;letter-spacing:1px;text-transform:uppercase}
+          .footer .brand{font-size:22px}.footer .tag{color:var(--accent)}
+          @media screen{body{padding:14px}.sheet{box-shadow:0 18px 60px rgba(0,0,0,.35)}}
+          @media print{body{background:#fff}.report-actions{display:none}.sheet{max-width:none;min-height:10.35in;border-radius:0}}
+          @media (max-width:720px){.title{font-size:42px}.subtitle{font-size:24px}.grid,.bottom{grid-template-columns:1fr}.leaders,.mini-grid{grid-template-columns:1fr}.mvp-name{font-size:34px}}
+        </style>
+      </head>
+      <body>
+        <main class="sheet">
+          <div class="report-actions">
+            <button class="back-button" type="button" onclick="window.close()">Back</button>
+            <button type="button" onclick="window.print()">Print / Save PDF</button>
+          </div>
+          <header class="hero">
+            <div class="mark">S</div>
+            <div>
+              <h1 class="title">SINKD</h1>
+              <div class="subtitle">${escapeHtml(weekLabel)} Report</div>
+              <div class="league-name">${escapeHtml(league.name)}</div>
+              <div class="date">${escapeHtml(reportDate)}</div>
+            </div>
+          </header>
+
+          <section class="grid">
+            <article class="panel">
+              <h2 class="panel-title">MVP of the Week</h2>
+              <div class="mvp-layout">
+                <div class="trophy-box">1</div>
+                <div>
+                  <div class="mvp-name">${escapeHtml(mvp.name)}</div>
+                  <div class="mvp-lines">
+                    <div class="metric-line"><b>${mvp.sinks || 0}</b><span>sinks</span></div>
+                    <div class="metric-line"><b>${mvp.fifas || 0}</b><span>FIFAs</span></div>
+                    <div class="metric-line"><b>${mvp.wins || 0}-${mvp.losses || 0}</b><span>record</span></div>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel">
+              <h2 class="panel-title blue-title">League Standings</h2>
+              <div class="standings">
+                ${standings.length ? standings.map((player, index) => weeklyStandingRow(player, index)).join("") : '<p>No league games logged yet.</p>'}
+              </div>
+            </article>
+
+            <article class="panel wide">
+              <h2 class="panel-title blue-title">Stat Leaders</h2>
+              <div class="leaders">
+                ${weeklyLeaderBox("Sink Leader", sinkLeader, "sinks")}
+                ${weeklyLeaderBox("FIFA King", fifaLeader, "fifas")}
+                ${weeklyLeaderBox("Return to Sender Leader", returnLeader, "fgDefense")}
+              </div>
+            </article>
+
+            <article class="mini-grid wide">
+              ${weeklyStreakBox("Hot Streak", hotStreak, "hot")}
+              ${weeklyRiserBox(biggestRiser)}
+              ${weeklyStreakBox("Cold Streak", coldStreak, "cold")}
+            </article>
+
+            <section class="bottom wide">
+              <article class="panel">
+                <h2 class="panel-title blue-title">Achievement Unlocked</h2>
+                ${weeklyAchievementBox(achievement)}
+              </article>
+              <article class="panel">
+                <h2 class="panel-title">Match of the Week</h2>
+                ${weeklyMatchBox(match)}
+              </article>
+            </section>
+          </section>
+
+          <footer class="footer">
+            <div class="brand">SINKD</div>
+            <div class="tag">Track it. Prove it. Run it.</div>
+          </footer>
+        </main>
+      </body>
+    </html>
+  `;
+}
+
+function weeklyLeagueReportGames(games) {
+  const currentWeek = games.filter(isCurrentWeekLeagueGame);
+  return currentWeek.length ? currentWeek : games.slice(0, 12);
+}
+
+function isCurrentWeekLeagueGame(game) {
+  const gameTime = new Date(game.createdAt || game.created_at || Date.now()).getTime();
+  return Number.isFinite(gameTime) && gameTime >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+}
+
+function computeLeagueStatsFromGames(games) {
+  const players = {};
+  const teams = {};
+  games.forEach((game) => {
+    game.teams.forEach((team, teamIndex) => {
+      const won = game.winnerIndex === teamIndex;
+      const teamKey = team.players.join(" / ").toLowerCase();
+      if (!teams[teamKey]) teams[teamKey] = { name: team.players.join(" / "), wins: 0, losses: 0, totalPoints: 0, games: 0 };
+      teams[teamKey].games += 1;
+      teams[teamKey].wins += won ? 1 : 0;
+      teams[teamKey].losses += won ? 0 : 1;
+      teams[teamKey].totalPoints += team.score || 0;
+      team.players.forEach((playerName) => {
+        const key = playerName.toLowerCase();
+        if (!players[key]) players[key] = { name: playerName, ...emptyBucket() };
+        addGameToBucket(players[key], statsForPlayerInGame(game, team, playerName), won);
+      });
+    });
+  });
+  Object.values(players).forEach((player) => {
+    player.streak = currentLeagueStreak(player.name);
+  });
+  return { players, teams };
+}
+
+function sortPlayersByRecord(a, b) {
+  return b.wins - a.wins || winPercent(b) - winPercent(a) || b.sinks - a.sinks || b.points - a.points;
+}
+
+function sortWeeklyMvp(a, b) {
+  return b.wins - a.wins || b.points - a.points || b.sinks - a.sinks || b.fifas - a.fifas;
+}
+
+function topPlayerBy(players, key) {
+  return [...players].filter((player) => (player[key] || 0) > 0).sort((a, b) => b[key] - a[key] || b.wins - a.wins || b.points - a.points).at(0);
+}
+
+function topStreak(players, type) {
+  return [...players].filter((player) => player.streak?.type === type).sort((a, b) => b.streak.count - a.streak.count || b.wins - a.wins).at(0);
+}
+
+function weeklyStandingRow(player, index) {
+  return `
+    <div class="standing-row">
+      <span class="rank">${index + 1}</span>
+      <span class="name">${escapeHtml(player.name)}</span>
+      <span class="record">${player.wins}-${player.losses}</span>
+    </div>
+  `;
+}
+
+function weeklyLeaderBox(title, player, key) {
+  return `
+    <div>
+      <div class="leader-title">${escapeHtml(title)}</div>
+      <div class="leader-name">${escapeHtml(player?.name || "No leader yet")}</div>
+      <div class="leader-value">${player?.[key] || 0}</div>
+    </div>
+  `;
+}
+
+function weeklyStreakBox(title, player, className) {
+  const type = player?.streak?.type === "L" ? "losses" : "wins";
+  return `
+    <article class="panel mini">
+      <h3 class="${className}">${escapeHtml(title)}</h3>
+      <div class="mini-name">${escapeHtml(player?.name || "No streak yet")}</div>
+      <div class="mini-note">${player?.streak?.count || 0} ${type} in a row</div>
+    </article>
+  `;
+}
+
+function weeklyRiserBox(player) {
+  return `
+    <article class="panel mini">
+      <h3 class="rise">Top Climber</h3>
+      <div class="mini-name">${escapeHtml(player?.name || "No games yet")}</div>
+      <div class="mini-note">${player ? `${player.wins}-${player.losses} this report` : "Log league games to build the report"}</div>
+    </article>
+  `;
+}
+
+function topLeagueAchievement(players) {
+  const unlocked = [];
+  players.forEach((player) => {
+    achievementDefinitions.forEach((definition) => {
+      const rank = achievementRankValue(player[definition.key] || 0, definition.thresholds);
+      if (rank) unlocked.push({ player, definition, rank, value: player[definition.key] || 0, tierClass: achievementRankClass(rank) });
+    });
+    secretAchievementDefinitions.forEach((definition) => {
+      if (secretAchievementUnlocked(player, definition)) {
+        unlocked.push({ player, definition, rank: 4, value: player[definition.key] || 0, tierClass: definition.tierClass });
+      }
+    });
+  });
+  return unlocked.sort((a, b) => b.rank - a.rank || b.value - a.value).at(0);
+}
+
+function weeklyAchievementBox(achievement) {
+  if (!achievement) {
+    return '<p>No league badges unlocked yet.</p>';
+  }
+  const rankName = achievementRankLabel(achievement.rank);
+  return `
+    <div class="badge-row">
+      <img src="${achievementBadgeSrc(achievement.tierClass)}" alt="${escapeHtml(rankName)} badge" />
+      <div>
+        <div class="badge-player">${escapeHtml(achievement.player.name)}</div>
+        <div class="badge-name">Unlocked ${escapeHtml(rankName)} ${escapeHtml(achievement.definition.label)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function matchOfTheWeek(games) {
+  return [...games]
+    .filter((game) => game.teams?.length >= 2)
+    .sort((a, b) => {
+      const aTotal = (a.teams[0].score || 0) + (a.teams[1].score || 0);
+      const bTotal = (b.teams[0].score || 0) + (b.teams[1].score || 0);
+      const aDiff = Math.abs((a.teams[0].score || 0) - (a.teams[1].score || 0));
+      const bDiff = Math.abs((b.teams[0].score || 0) - (b.teams[1].score || 0));
+      return bTotal - aTotal || aDiff - bDiff;
+    })
+    .at(0);
+}
+
+function weeklyMatchBox(match) {
+  if (!match) return "<p>No match logged yet.</p>";
+  const left = match.teams[0];
+  const right = match.teams[1];
+  return `
+    <div class="match-teams">
+      <div class="team-name">${escapeHtml(left.players.join(" & "))}</div>
+      <div class="versus">VS</div>
+      <div class="team-name">${escapeHtml(right.players.join(" & "))}</div>
+    </div>
+    <div class="score">${left.score || 0} - ${right.score || 0}</div>
+    <div class="mini-note" style="text-align:center">${escapeHtml(formatDate(match.createdAt || match.created_at || Date.now()))}</div>
+  `;
 }
 
 function statReportHtml({ leagueOnly = false } = {}) {
