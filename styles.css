@@ -2796,3 +2796,81 @@ td {
     line-height: 34px;
   }
 }
+
+/* Flatter surfaces: keep the app feeling designed without boxing every section. */
+.view.active {
+  display: grid;
+  gap: 18px;
+}
+
+.panel,
+.player-stat-card,
+.profile-card,
+.friend-row,
+.notification-row,
+.league-badge-card,
+.compare-card,
+.league-roster-card,
+.league-player-detail-card,
+.game-card,
+.stat-card,
+.match-card,
+.rules-card,
+.form-help,
+.summary-item {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.panel,
+.player-stat-card,
+.profile-card,
+.league-player-detail-card,
+.rules-card {
+  padding: 0;
+}
+
+.friend-row,
+.notification-row,
+.league-roster-card,
+.game-card,
+.stat-card,
+.match-card,
+.summary-item {
+  padding: 10px 0;
+}
+
+.league-badge-card {
+  padding: 8px 0;
+}
+
+.profile-stat-grid div,
+.rules-score-grid div {
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.notification-row.unread,
+.match-card.pending,
+.league-roster-card.selected {
+  background: transparent;
+}
+
+.notification-row.unread strong,
+.league-roster-card.selected strong {
+  color: var(--accent-strong);
+}
+
+.form-help {
+  padding: 0;
+}
+
+.league-card-button {
+  border-color: rgba(239, 191, 4, 0.34);
+  background: var(--surface);
+  box-shadow: none;
+}
