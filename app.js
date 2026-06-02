@@ -61,9 +61,9 @@ const achievementTiers = ["Copper", "Silver", "Gold", "Diamond"];
 const playerRosterKey = "beerDiePlayers";
 const themeStorageKey = "sinkdTheme";
 const defaultTheme = {
-  background: "#002147",
-  panel: "#002147",
-  accent: "#efbf04",
+  background: "#111827",
+  panel: "#1f2937",
+  accent: "#93c5fd",
   text: "#ffffff",
 };
 const themePresets = [
@@ -72,7 +72,7 @@ const themePresets = [
   { name: "Stadium Lights", background: "#07111f", panel: "#10243d", accent: "#35d0ff", text: "#ffffff" },
   { name: "Chalkboard", background: "#10231d", panel: "#18382d", accent: "#f4d35e", text: "#ffffff" },
   { name: "Maroon Night", background: "#2a0712", panel: "#3a0d1b", accent: "#ffc857", text: "#ffffff" },
-  { name: "Slate Ice", background: "#111827", panel: "#1f2937", accent: "#93c5fd", text: "#ffffff" },
+  { name: "Plum Gold", background: "#241124", panel: "#341a34", accent: "#f5c542", text: "#ffffff" },
   { name: "Forest Gold", background: "#071b14", panel: "#123527", accent: "#d4af37", text: "#ffffff" },
   { name: "Royal", background: "#002147", panel: "#002147", accent: "#efbf04", text: "#ffffff" },
   { name: "Redline", background: "#2a0508", panel: "#4a0b10", accent: "#ffffff", text: "#ffffff" },
