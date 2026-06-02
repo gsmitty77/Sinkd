@@ -299,13 +299,13 @@ if ("serviceWorker" in navigator) {
 
 bootApp();
 
-function bootApp() {
+async function bootApp() {
   try {
     buildRegularPlayerCards();
     buildBigGamePlayerCards();
     buildLeagueGamePlayerCards();
     bindEvents();
-    setupAuth();
+    await setupAuth();
     registerServiceWorker();
     render();
   } catch (error) {
@@ -396,11 +396,12 @@ function saveThemeState() {
 }
 
 function normalizeTheme(theme = {}) {
+  const source = theme && typeof theme === "object" ? theme : {};
   return {
-    background: cleanHexColor(theme.background, defaultTheme.background),
-    panel: cleanHexColor(theme.panel, defaultTheme.panel),
-    accent: cleanHexColor(theme.accent, defaultTheme.accent),
-    text: cleanHexColor(theme.text, defaultTheme.text),
+    background: cleanHexColor(source.background, defaultTheme.background),
+    panel: cleanHexColor(source.panel, defaultTheme.panel),
+    accent: cleanHexColor(source.accent, defaultTheme.accent),
+    text: cleanHexColor(source.text, defaultTheme.text),
   };
 }
 
