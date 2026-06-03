@@ -203,6 +203,8 @@ const els = {
   leagueGamePlayerGrid: document.querySelector("#leagueGamePlayerGrid"),
   leagueGameHistory: document.querySelector("#leagueGameHistory"),
   leagueTournamentForm: document.querySelector("#leagueTournamentForm"),
+  leagueTournamentTeamBuilder: document.querySelector("#leagueTournamentTeamBuilder"),
+  addLeagueTournamentTeamBtn: document.querySelector("#addLeagueTournamentTeamBtn"),
   leagueTournamentSelect: document.querySelector("#leagueTournamentSelect"),
   deleteLeagueTournamentBtn: document.querySelector("#deleteLeagueTournamentBtn"),
   leagueTournamentSummary: document.querySelector("#leagueTournamentSummary"),
@@ -1508,6 +1510,13 @@ function bindEvents() {
     event.preventDefault();
     await createCloudLeagueTournament(new FormData(els.leagueTournamentForm));
   });
+  els.addLeagueTournamentTeamBtn?.addEventListener("click", () => addLeagueTournamentTeamRow());
+  els.leagueTournamentTeamBuilder?.addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-remove-league-tournament-team]");
+    if (!remove) return;
+    remove.closest(".league-tournament-team-row")?.remove();
+    renumberLeagueTournamentTeams();
+  });
 
   els.leagueTournamentSelect.addEventListener("change", async () => {
     activeLeagueTournamentId = els.leagueTournamentSelect.value;
@@ -2664,6 +2673,71 @@ function parseTeams(value) {
       };
     })
     .filter((team) => team.players.length);
+}
+
+function resetLeagueTournamentTeamBuilder() {
+  if (!els.leagueTournamentTeamBuilder) return;
+  els.leagueTournamentTeamBuilder.innerHTML = "";
+  addLeagueTournamentTeamRow();
+  addLeagueTournamentTeamRow();
+}
+
+function ensureLeagueTournamentTeamBuilder() {
+  if (!els.leagueTournamentTeamBuilder?.children.length) resetLeagueTournamentTeamBuilder();
+}
+
+function addLeagueTournamentTeamRow(team = {}) {
+  if (!els.leagueTournamentTeamBuilder) return;
+  const index = els.leagueTournamentTeamBuilder.children.length;
+  const row = document.createElement("article");
+  row.className = "league-tournament-team-row";
+  row.innerHTML = `
+    <div class="league-tournament-team-head">
+      <strong>Team ${index + 1}</strong>
+      <button class="text-button danger-text" type="button" data-remove-league-tournament-team>Remove</button>
+    </div>
+    <label>
+      Team Name
+      <input data-league-tournament-team-name maxlength="32" placeholder="Team ${index + 1}" value="${escapeHtml(team.name || "")}" />
+    </label>
+    <div class="league-tournament-player-picks">
+      <label>Player 1 <select data-league-tournament-player>${leagueTournamentPlayerOptions(team.players?.[0])}</select></label>
+      <label>Player 2 <select data-league-tournament-player>${leagueTournamentPlayerOptions(team.players?.[1])}</select></label>
+    </div>
+  `;
+  els.leagueTournamentTeamBuilder.appendChild(row);
+  renumberLeagueTournamentTeams();
+}
+
+function leagueTournamentPlayerOptions(selected = "") {
+  const members = leagueMembers()
+    .map((member) => member.nickname || member.display_name)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  return [
+    '<option value="">Select player</option>',
+    ...members.map((name) => `<option value="${escapeHtml(name)}" ${name === selected ? "selected" : ""}>${escapeHtml(name)}</option>`),
+  ].join("");
+}
+
+function renumberLeagueTournamentTeams() {
+  els.leagueTournamentTeamBuilder?.querySelectorAll(".league-tournament-team-row").forEach((row, index) => {
+    row.querySelector(".league-tournament-team-head strong").textContent = `Team ${index + 1}`;
+    row.querySelector("[data-league-tournament-team-name]").placeholder = `Team ${index + 1}`;
+  });
+}
+
+function leagueTournamentTeamsFromBuilder() {
+  return [...(els.leagueTournamentTeamBuilder?.querySelectorAll(".league-tournament-team-row") || [])]
+    .map((row, index) => {
+      const players = [...row.querySelectorAll("[data-league-tournament-player]")].map((select) => cleanText(select.value)).filter(Boolean);
+      return {
+        id: crypto.randomUUID(),
+        name: cleanText(row.querySelector("[data-league-tournament-team-name]")?.value) || `Team ${index + 1}`,
+        players,
+      };
+    })
+    .filter((team) => team.players.length === 2);
 }
 
 function createTournament(name, teams, gamesToWin = 1) {
@@ -4291,13 +4365,18 @@ async function logCloudLeagueGame(form) {
 async function createCloudLeagueTournament(form) {
   if (!canLogActiveLeagueGames()) return;
   const name = cleanText(form.get("name"));
-  const teams = parseTeams(form.get("teams"));
+  const teams = leagueTournamentTeamsFromBuilder();
   if (!name) {
     alert("Add a tournament name.");
     return;
   }
   if (teams.length < 2) {
-    alert("Add at least two teams.");
+    alert("Add at least two complete teams.");
+    return;
+  }
+  const selectedPlayers = teams.flatMap((team) => team.players);
+  if (new Set(selectedPlayers.map((player) => player.toLowerCase())).size !== selectedPlayers.length) {
+    alert("Each player can only be selected once in the tournament.");
     return;
   }
 
@@ -4315,6 +4394,7 @@ async function createCloudLeagueTournament(form) {
 
   activeLeagueTournamentId = data.id;
   els.leagueTournamentForm.reset();
+  resetLeagueTournamentTeamBuilder();
   await loadLeagueData();
 }
 
@@ -4782,9 +4862,8 @@ function gameCard(game) {
     <article class="game-card"${leagueDetailTarget}>
       ${gameScoreboard(game)}
       ${selfSinkNote}
-      <div class="card-actions">${deleteButton}</div>
       <div class="meta-line logged-winner-line">Winner: ${escapeHtml(winner.name)} - ${formatDate(game.createdAt)}</div>
-      ${loggedGameStats(game)}
+      <div class="card-actions game-history-actions">${deleteButton}</div>
       <div class="meta-line">Winner: ${escapeHtml(winner.name)} · ${formatDate(game.createdAt)}</div>
       <div class="meta-line">${statSummary(teamA)} · ${statSummary(teamB)}</div>
     </article>
@@ -5428,9 +5507,8 @@ function renderLeagueTournaments() {
   const tournaments = leagueTournaments();
   const canLog = canLogActiveLeagueGames();
   const canManage = canManageActiveLeague();
-  const teamsTextarea = els.leagueTournamentForm.elements.teams;
-  if (teamsTextarea) teamsTextarea.placeholder = leagueTournamentExampleText();
   els.leagueTournamentForm.classList.toggle("hidden", !canLog);
+  if (canLog) ensureLeagueTournamentTeamBuilder();
   els.deleteLeagueTournamentBtn.hidden = !canManage || !tournaments.length;
 
   if (!tournaments.length) {

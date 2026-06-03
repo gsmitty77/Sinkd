@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260603-1" />
+    <link rel="stylesheet" href="styles.css?v=20260603-4" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -430,10 +430,11 @@
               <form class="panel" id="leagueTournamentForm">
                 <h3>Create League Tournament</h3>
                 <label>Tournament Name <input name="name" maxlength="32" placeholder="Friday bracket" required /></label>
-                <label>
-                  Teams
-                  <textarea name="teams" rows="6" placeholder="Gold Team: Alex / Jordan&#10;Navy Team: Casey / Taylor&#10;White Team: Morgan / Riley&#10;Black Team: Drew / Quinn" required></textarea>
-                </label>
+                <div class="league-tournament-team-field">
+                  <span>Teams</span>
+                  <div class="league-tournament-team-builder" id="leagueTournamentTeamBuilder"></div>
+                  <button class="small-button secondary-button compact-action-button" id="addLeagueTournamentTeamBtn" type="button">Add Team</button>
+                </div>
                 <label>
                   Games to Win by Round
                   <input name="gamesToWin" type="text" value="1" placeholder="1, 1, 2" required />
@@ -971,6 +972,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260603-1"></script>
+    <script src="app.js?v=20260603-4"></script>
   </body>
 </html>
