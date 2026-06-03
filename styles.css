@@ -21,6 +21,7 @@
 }
 
 html {
+  background: var(--bg);
   overflow-x: hidden;
   touch-action: manipulation;
 }
@@ -515,6 +516,23 @@ button:disabled {
   opacity: 0.55;
 }
 
+button.is-saving,
+button.is-confirmed {
+  opacity: 1;
+}
+
+button.is-saving {
+  border-color: rgba(239, 191, 4, 0.62);
+  background: var(--surface);
+  color: var(--accent-strong);
+}
+
+button.is-confirmed {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #002147;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
@@ -588,6 +606,12 @@ nav.tabs[aria-label="Primary sections"] {
   display: grid;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.section-actions {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
 }
 
 .section-head p,
@@ -1011,6 +1035,49 @@ legend {
   font-size: 0.9rem;
 }
 
+.tiny-action-button {
+  justify-self: end;
+  width: fit-content;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid rgba(239, 191, 4, 0.42);
+  border-radius: 999px;
+  background: rgba(239, 191, 4, 0.12);
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.league-game-point-button {
+  margin-left: auto;
+  margin-bottom: 6px;
+}
+
+.game-point-sheet {
+  gap: 14px;
+}
+
+.game-point-stepper {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  gap: 10px;
+  align-items: center;
+}
+
+.game-point-stepper strong {
+  display: grid;
+  min-height: 58px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--accent-strong);
+  font-size: 2rem;
+  font-weight: 1000;
+}
+
 .secondary-button {
   background: rgba(255, 255, 255, 0.08);
   border-color: var(--line);
@@ -1060,6 +1127,18 @@ legend {
 
 .danger-text {
   color: var(--red);
+}
+
+[data-delete-regular],
+[data-delete-big],
+[data-delete-league-game],
+[data-detail-delete-league-game] {
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(224, 82, 82, 0.48);
+  border-radius: 999px;
+  background: rgba(224, 82, 82, 0.12);
 }
 
 .card-actions {
@@ -2313,6 +2392,22 @@ legend {
   gap: 8px;
 }
 
+.roster-profile-button {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.roster-profile-sheet {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.roster-profile-card {
+  display: grid;
+  gap: 14px;
+}
+
 .league-roster-stats {
   display: flex;
   justify-content: flex-start;
@@ -2463,6 +2558,119 @@ legend {
 .match-card strong {
   display: block;
   margin-bottom: 5px;
+}
+
+.logged-scoreboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.logged-score-team {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.logged-score-team b {
+  display: block;
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.logged-score-team.winner b {
+  color: var(--accent-strong);
+  font-size: 1.8rem;
+}
+
+.logged-score-team.loser b {
+  color: var(--muted);
+  font-size: 1.12rem;
+}
+
+.logged-score-team span {
+  display: block;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.logged-score-divider {
+  color: var(--muted);
+  font-size: 1.1rem;
+  font-weight: 950;
+}
+
+.logged-winner-line {
+  display: block;
+  margin: 6px 0 8px;
+  white-space: nowrap;
+}
+
+.logged-game-stats {
+  display: grid;
+  gap: 8px;
+}
+
+.logged-team-stats {
+  display: grid;
+  gap: 5px;
+}
+
+.logged-team-stats strong {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.logged-team-stats > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.logged-stat-chip {
+  display: inline-grid;
+  min-width: 54px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.logged-stat-chip b,
+.logged-stat-chip small {
+  display: block;
+}
+
+.logged-stat-chip b {
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.logged-stat-chip small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.game-card > .meta-line:not(.self-sink-note):not(.logged-winner-line) {
+  display: none;
 }
 
 .meta-line {

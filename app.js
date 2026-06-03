@@ -88,6 +88,7 @@ let activeLeagueId = "";
 let activeLeagueTournamentId = "";
 let selectedLeagueRosterMemberId = "";
 let selectedLeagueAchievementsMemberId = "";
+let activeRosterProfileMemberId = "";
 let activeLeagueGameDetailId = "";
 let selectedFriendRequestId = "";
 let confirmingUnfriendRequestId = "";
@@ -100,6 +101,8 @@ let showingLeagueQr = false;
 let leagueDetailTab = "games";
 let editingMyProfile = false;
 let authBusy = false;
+let gamePointDraft = 11;
+let gamePointContext = "local";
 let leagueCache = [];
 let leagueMemberCache = [];
 let leagueGameCache = [];
@@ -136,6 +139,14 @@ const els = {
   confirmChoiceList: document.querySelector("#confirmChoiceList"),
   confirmYesBtn: document.querySelector("#confirmYesBtn"),
   confirmCancelBtn: document.querySelector("#confirmCancelBtn"),
+  gamePointModal: document.querySelector("#gamePointModal"),
+  gamePointValue: document.querySelector("#gamePointValue"),
+  localGamePointText: document.querySelector("#localGamePointText"),
+  bigGamePointText: document.querySelector("#bigGamePointText"),
+  leagueGamePointText: document.querySelector("#leagueGamePointText"),
+  decreaseGamePointBtn: document.querySelector("#decreaseGamePointBtn"),
+  increaseGamePointBtn: document.querySelector("#increaseGamePointBtn"),
+  saveGamePointBtn: document.querySelector("#saveGamePointBtn"),
   authShell: document.querySelector("#authShell"),
   appShell: document.querySelector("#appShell"),
   authForm: document.querySelector("#authForm"),
@@ -186,6 +197,7 @@ const els = {
   leagueGameForm: document.querySelector("#leagueGameForm"),
   leagueGameFormTitle: document.querySelector("#leagueGameFormTitle"),
   leagueGameSubmitBtn: document.querySelector("#leagueGameSubmitBtn"),
+  leagueGamePointBtn: document.querySelector("#leagueGamePointBtn"),
   leagueQuickRematchBtn: document.querySelector("#leagueQuickRematchBtn"),
   cancelLeagueGameEditBtn: document.querySelector("#cancelLeagueGameEditBtn"),
   leagueGamePlayerGrid: document.querySelector("#leagueGamePlayerGrid"),
@@ -223,6 +235,10 @@ const els = {
   leagueRulesTitle: document.querySelector("#leagueRulesTitle"),
   leagueRulesContent: document.querySelector("#leagueRulesContent"),
   leagueRulesSummary: document.querySelector("#leagueRulesSummary"),
+  rosterProfileModal: document.querySelector("#rosterProfileModal"),
+  closeRosterProfileBtn: document.querySelector("#closeRosterProfileBtn"),
+  rosterProfileTitle: document.querySelector("#rosterProfileTitle"),
+  rosterProfileContent: document.querySelector("#rosterProfileContent"),
   leagueSettingsForm: document.querySelector("#leagueSettingsForm"),
   leaveLeagueBtn: document.querySelector("#leaveLeagueBtn"),
   leaveLeagueConfirm: document.querySelector("#leaveLeagueConfirm"),
@@ -267,6 +283,7 @@ const els = {
   deleteTournamentBtn: document.querySelector("#deleteTournamentBtn"),
   quickRematchBtn: document.querySelector("#quickRematchBtn"),
   openBigGameBtn: document.querySelector("#openBigGameBtn"),
+  localGamePointBtn: document.querySelector("#localGamePointBtn"),
   backToRegularBtn: document.querySelector("#backToRegularBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   resetBtn: document.querySelector("#resetBtn"),
@@ -340,6 +357,8 @@ function loadState() {
         playerProfiles: parsed.playerProfiles || {},
         legacyMyProfile: parsed.legacyMyProfile || parsed.myProfile || null,
         accountProfiles: parsed.accountProfiles || {},
+        localGamePoint: validGamePoint(parsed.localGamePoint),
+        leagueGamePoints: parsed.leagueGamePoints || {},
         appTheme: normalizeTheme(savedTheme || parsed.appTheme),
         myProfile: null,
         players: mergePlayerNames([...(parsed.players || []), ...savedRoster]),
@@ -358,6 +377,8 @@ function loadState() {
     myProfile: null,
     legacyMyProfile: null,
     accountProfiles: {},
+    localGamePoint: 11,
+    leagueGamePoints: {},
     appTheme: normalizeTheme(savedTheme),
     activeTournamentId: "",
   };
@@ -422,6 +443,10 @@ function applyTheme(theme = state.appTheme) {
   root.style.setProperty("--theme-button-bg", `linear-gradient(90deg, ${nextTheme.background}, ${nextTheme.panel})`);
   root.style.setProperty("--theme-button-border", nextTheme.accent);
   root.style.setProperty("--theme-button-text", nextTheme.text);
+  root.style.background = nextTheme.background;
+  root.style.backgroundColor = nextTheme.background;
+  document.body.style.background = nextTheme.background;
+  document.body.style.backgroundColor = nextTheme.background;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", nextTheme.background);
 }
 
@@ -1174,6 +1199,14 @@ function bindEvents() {
       if (action) action();
     }
   });
+  els.localGamePointBtn?.addEventListener("click", () => openGamePointModal("local"));
+  els.leagueGamePointBtn?.addEventListener("click", () => openGamePointModal("league"));
+  els.decreaseGamePointBtn?.addEventListener("click", () => adjustGamePointDraft(-1));
+  els.increaseGamePointBtn?.addEventListener("click", () => adjustGamePointDraft(1));
+  els.saveGamePointBtn?.addEventListener("click", saveGamePointDraft);
+  els.gamePointModal?.addEventListener("click", (event) => {
+    if (event.target === els.gamePointModal) closeGamePointModal();
+  });
   els.signInBtn.addEventListener("click", signInWithEmail);
   els.signUpBtn.addEventListener("click", signUpWithEmail);
   els.forgotPasswordBtn.addEventListener("click", sendPasswordReset);
@@ -1192,30 +1225,34 @@ function bindEvents() {
   els.openBigGameBtn.addEventListener("click", openBigGamePage);
   els.backToRegularBtn.addEventListener("click", () => switchView("regular"));
 
-  els.regularForm.addEventListener("submit", (event) => {
+  els.regularForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const game = readRegularGameForm(new FormData(els.regularForm));
-    rememberPlayers(game.teams.flatMap((team) => team.players));
-    state.regularGames.unshift(game);
-    saveState();
-    els.regularForm.reset();
-    resetCounters(els.regularForm);
-    buildRegularPlayerCards();
-    buildBigGamePlayerCards();
-    render();
+    await runSubmitConfirmation(els.regularForm, () => {
+      const game = readRegularGameForm(new FormData(els.regularForm));
+      rememberPlayers(game.teams.flatMap((team) => team.players));
+      state.regularGames.unshift(game);
+      saveState();
+      els.regularForm.reset();
+      resetCounters(els.regularForm);
+      buildRegularPlayerCards();
+      buildBigGamePlayerCards();
+      render();
+    }, { success: "Logged", restoreText: "Quick Log" });
   });
 
-  els.bigGameForm.addEventListener("submit", (event) => {
+  els.bigGameForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const game = readBigGameForm(new FormData(els.bigGameForm));
-    rememberPlayers(game.teams.flatMap((team) => team.players));
-    state.bigGames.unshift(game);
-    saveState();
-    els.bigGameForm.reset();
-    resetCounters(els.bigGameForm);
-    buildRegularPlayerCards();
-    buildBigGamePlayerCards();
-    render();
+    await runSubmitConfirmation(els.bigGameForm, () => {
+      const game = readBigGameForm(new FormData(els.bigGameForm));
+      rememberPlayers(game.teams.flatMap((team) => team.players));
+      state.bigGames.unshift(game);
+      saveState();
+      els.bigGameForm.reset();
+      resetCounters(els.bigGameForm);
+      buildRegularPlayerCards();
+      buildBigGamePlayerCards();
+      render();
+    }, { success: "Logged", restoreText: "Log Big Game" });
   });
 
   els.profileForm.addEventListener("submit", (event) => {
@@ -1437,7 +1474,11 @@ function bindEvents() {
 
   els.leagueGameForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await logCloudLeagueGame(new FormData(els.leagueGameForm));
+    await runSubmitConfirmation(
+      els.leagueGameForm,
+      () => logCloudLeagueGame(new FormData(els.leagueGameForm)),
+      { success: "Logged", restoreText: "Log League Game" },
+    );
   });
 
   els.leagueQuickRematchBtn.addEventListener("click", loadLeagueQuickRematch);
@@ -1486,7 +1527,11 @@ function bindEvents() {
     const form = event.target.closest(".league-tournament-match-form");
     if (!form) return;
     event.preventDefault();
-    await logLeagueTournamentMatch(form.dataset.tournamentId, form.dataset.matchId, new FormData(form));
+    await runSubmitConfirmation(
+      form,
+      () => logLeagueTournamentMatch(form.dataset.tournamentId, form.dataset.matchId, new FormData(form)),
+      { success: "Logged", restoreText: "Log Tournament Game" },
+    );
   });
 
   els.deleteLeagueTournamentBtn.addEventListener("click", async () => {
@@ -1612,10 +1657,15 @@ function bindEvents() {
     renderLeagueInviteTools();
   });
 
-  els.leaguePlayerStats.addEventListener("click", (event) => {
+  els.leaguePlayerStats.addEventListener("click", async (event) => {
+    const seeProfile = event.target.closest("[data-roster-profile]");
+    if (seeProfile) {
+      openRosterProfile(seeProfile.dataset.rosterProfile);
+      return;
+    }
     const addFriend = event.target.closest("[data-add-friend]");
     if (addFriend) {
-      addLeagueMemberAsFriend(addFriend.dataset.addFriend);
+      await addLeagueMemberAsFriend(addFriend.dataset.addFriend);
       return;
     }
     const preferredPartner = event.target.closest("[data-roster-preferred-partner]");
@@ -1645,6 +1695,24 @@ function bindEvents() {
     }
     const preferredPartner = event.target.closest("[data-roster-preferred-partner]");
     if (preferredPartner) setPreferredPartnerFromLeagueMember(preferredPartner.dataset.rosterPreferredPartner);
+  });
+
+  els.closeRosterProfileBtn?.addEventListener("click", closeRosterProfile);
+  els.rosterProfileModal?.addEventListener("click", (event) => {
+    if (event.target === els.rosterProfileModal) closeRosterProfile();
+  });
+  els.rosterProfileContent?.addEventListener("click", async (event) => {
+    const addFriend = event.target.closest("[data-add-friend]");
+    if (addFriend) {
+      await addLeagueMemberAsFriend(addFriend.dataset.addFriend);
+      renderRosterProfile();
+      return;
+    }
+    const preferredPartner = event.target.closest("[data-roster-preferred-partner]");
+    if (preferredPartner) {
+      setPreferredPartnerFromLeagueMember(preferredPartner.dataset.rosterPreferredPartner);
+      renderRosterProfile();
+    }
   });
 
   els.leagueMemberList.addEventListener("click", async (event) => {
@@ -3685,6 +3753,39 @@ function flashSubmitButton(form, message, duration = 2300) {
   }, duration);
 }
 
+async function runSubmitConfirmation(form, action, { saving = "Logging...", success = "Logged", restoreText = "" } = {}) {
+  const button = form?.querySelector('button[type="submit"]');
+  if (!button || button.disabled) return false;
+  const originalText = restoreText || button.textContent;
+  button.dataset.originalText = originalText;
+  button.textContent = saving;
+  button.disabled = true;
+  button.classList.add("is-saving");
+  try {
+    const result = await action();
+    if (result === false) {
+      restoreSubmitButton(button, originalText);
+      return false;
+    }
+    scrollAppToTop();
+    button.textContent = success;
+    button.classList.remove("is-saving");
+    button.classList.add("is-confirmed");
+    window.setTimeout(() => restoreSubmitButton(button, originalText), 1200);
+    return true;
+  } catch (error) {
+    restoreSubmitButton(button, originalText);
+    throw error;
+  }
+}
+
+function restoreSubmitButton(button, text) {
+  button.textContent = text || button.dataset.originalText || button.textContent;
+  button.disabled = false;
+  button.classList.remove("is-saving", "is-confirmed");
+  delete button.dataset.originalText;
+}
+
 function setPreferredPartnerFromFriend(requestId) {
   const request = friendRequestCache.find((item) => item.id === requestId);
   const friend = request ? friendInfo(request) : null;
@@ -4151,7 +4252,7 @@ async function transferCloudLeagueOwnership(memberId) {
 }
 
 async function logCloudLeagueGame(form) {
-  if (!canLogActiveLeagueGames()) return;
+  if (!canLogActiveLeagueGames()) return false;
   const beforeStats = computeLeagueStats();
   const beforeAchievementRanks = leagueAchievementRanks(beforeStats);
   const beforeLeaders = leagueRankingLeaders(beforeStats);
@@ -4174,7 +4275,7 @@ async function logCloudLeagueGame(form) {
   const { error } = await request;
   if (error) {
     alert(error.message);
-    return;
+    return false;
   }
 
   resetLeagueGameForm();
@@ -4184,6 +4285,7 @@ async function logCloudLeagueGame(form) {
   await createLeagueChatMessage(activeLeagueId, `${winner.name} logged a ${winner.score}-${game.teams[game.winnerIndex === 0 ? 1 : 0].score} league win.`, "system");
   await notifyLeagueAchievementUnlocks(beforeAchievementRanks, afterStats);
   await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
+  return true;
 }
 
 async function createCloudLeagueTournament(form) {
@@ -4265,10 +4367,10 @@ function leagueTournamentPayload(tournament) {
 }
 
 async function logLeagueTournamentMatch(tournamentId, matchId, form) {
-  if (!canLogActiveLeagueGames()) return;
+  if (!canLogActiveLeagueGames()) return false;
   const tournament = leagueTournaments().find((item) => item.id === tournamentId);
   const match = tournament?.rounds.flatMap((round) => round.matches).find((item) => item.id === matchId);
-  if (!tournament || !match || match.winner) return;
+  if (!tournament || !match || match.winner) return false;
 
   const beforeStats = computeLeagueStats();
   const beforeAchievementRanks = leagueAchievementRanks(beforeStats);
@@ -4289,6 +4391,7 @@ async function logLeagueTournamentMatch(tournamentId, matchId, form) {
   await createLeagueChatMessage(activeLeagueId, `${match.winner?.name || game.teams[game.winnerIndex].name} ${seriesComplete ? "advanced" : "won a game"} in ${tournament.name}.`, "system");
   await notifyLeagueAchievementUnlocks(beforeAchievementRanks, afterStats);
   await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
+  return true;
 }
 
 function resetLeagueGameForm() {
@@ -4507,6 +4610,7 @@ function render() {
   renderProfiles();
   renderSettings();
   renderQuickRematch();
+  renderGamePointButtons();
   renderFriends();
   renderNotifications();
 }
@@ -4517,6 +4621,96 @@ function updateAccountLabel() {
 
 function renderQuickRematch() {
   els.quickRematchBtn.disabled = !state.regularGames.length;
+}
+
+function renderGamePointButtons() {
+  const localPoint = localGamePoint();
+  if (els.localGamePointBtn) els.localGamePointBtn.textContent = `Game Point: ${localPoint}`;
+  if (els.localGamePointText) els.localGamePointText.textContent = String(localPoint);
+  if (els.bigGamePointText) els.bigGamePointText.textContent = String(localPoint);
+  const canConfigureLeaguePoint = canConfigureActiveLeagueGamePoint();
+  if (els.leagueGamePointText) els.leagueGamePointText.textContent = String(activeLeagueGamePoint());
+  if (els.leagueGamePointBtn) {
+    els.leagueGamePointBtn.classList.toggle("hidden", !canConfigureLeaguePoint);
+    els.leagueGamePointBtn.textContent = `Game Point: ${activeLeagueGamePoint()}`;
+  }
+  applyGamePointTarget(els.regularForm, localPoint);
+  applyGamePointTarget(els.bigGameForm, localPoint);
+  applyGamePointTarget(els.leagueGameForm, activeLeagueGamePoint());
+}
+
+function applyGamePointTarget(form, point) {
+  form?.querySelectorAll('input[name="teamAScore"], input[name="teamBScore"]').forEach((input) => {
+    input.dataset.gamePoint = String(point);
+    input.title = `Game point: ${point}`;
+  });
+}
+
+function validGamePoint(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 11;
+  return Math.max(1, Math.min(99, Math.round(number)));
+}
+
+function localGamePoint() {
+  return validGamePoint(state.localGamePoint || 11);
+}
+
+function activeLeagueGamePoint() {
+  const leagueId = activeLeagueId || activeLeague()?.id || "";
+  return validGamePoint(state.leagueGamePoints?.[leagueId] || 11);
+}
+
+function canConfigureActiveLeagueGamePoint() {
+  return ["owner", "co_leader", "ref"].includes(myLeagueMember()?.role);
+}
+
+function openGamePointModal(context = "local") {
+  gamePointContext = context === "league" ? "league" : "local";
+  if (gamePointContext === "league" && !canConfigureActiveLeagueGamePoint()) return;
+  gamePointDraft = gamePointContext === "league" ? activeLeagueGamePoint() : localGamePoint();
+  renderGamePointModal();
+  els.gamePointModal.classList.remove("hidden");
+  els.gamePointModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeGamePointModal() {
+  els.gamePointModal.classList.add("hidden");
+  els.gamePointModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function adjustGamePointDraft(amount) {
+  gamePointDraft = validGamePoint(gamePointDraft + amount);
+  renderGamePointModal();
+}
+
+function renderGamePointModal() {
+  els.gamePointValue.textContent = String(gamePointDraft);
+}
+
+function saveGamePointDraft() {
+  const point = validGamePoint(gamePointDraft);
+  if (gamePointContext === "league") {
+    if (!canConfigureActiveLeagueGamePoint()) {
+      closeGamePointModal();
+      return;
+    }
+    state.leagueGamePoints ||= {};
+    state.leagueGamePoints[activeLeagueId] = point;
+    saveState();
+    closeGamePointModal();
+    renderGamePointButtons();
+    leagueDetailTab = "games";
+    renderLeagueDetails();
+    scrollAppToTop();
+    return;
+  }
+  state.localGamePoint = point;
+  saveState();
+  closeGamePointModal();
+  renderGamePointButtons();
 }
 
 function renderTournamentSelect() {
@@ -4586,9 +4780,11 @@ function gameCard(game) {
   const leagueDetailTarget = game.source === "league" ? ` data-view-league-game="${game.id}" tabindex="0" role="button"` : "";
   return `
     <article class="game-card"${leagueDetailTarget}>
-      <strong>${escapeHtml(teamA.name)} ${teamA.score} - ${teamB.score} ${escapeHtml(teamB.name)}</strong>
+      ${gameScoreboard(game)}
       ${selfSinkNote}
       <div class="card-actions">${deleteButton}</div>
+      <div class="meta-line logged-winner-line">Winner: ${escapeHtml(winner.name)} - ${formatDate(game.createdAt)}</div>
+      ${loggedGameStats(game)}
       <div class="meta-line">Winner: ${escapeHtml(winner.name)} · ${formatDate(game.createdAt)}</div>
       <div class="meta-line">${statSummary(teamA)} · ${statSummary(teamB)}</div>
     </article>
@@ -4600,6 +4796,59 @@ function statSummary(team) {
     return `${escapeHtml(team.name)}: ${team.score} score, ${team.stats.tableHits || 0} table hits, ${team.stats.sinks || 0} sinks, ${team.stats.tinks || 0} tinks`;
   }
   return `${escapeHtml(team.name)}: ${team.stats.sinks} sinks, ${team.stats.tinks} tinks`;
+}
+
+function gameScoreboard(game) {
+  return `
+    <div class="logged-scoreboard">
+      ${game.teams.map((team, index) => loggedScoreTeam(team, index === game.winnerIndex)).join('<span class="logged-score-divider">-</span>')}
+    </div>
+  `;
+}
+
+function loggedScoreTeam(team, isWinner) {
+  return `
+    <div class="logged-score-team ${isWinner ? "winner" : "loser"}">
+      <b>${team.score}</b>
+      <span>${escapeHtml(team.name)}</span>
+    </div>
+  `;
+}
+
+function loggedGameStats(game) {
+  return `
+    <div class="logged-game-stats">
+      ${game.teams.map(loggedTeamStats).join("")}
+    </div>
+  `;
+}
+
+function loggedTeamStats(team) {
+  const stats = team.stats || {};
+  const isLongFormat = stats.tableHits || stats.points || stats.fgOffense || stats.fgDefense || stats.fifas || stats.selfSinks;
+  const items = isLongFormat
+    ? [
+        ["Score", team.score],
+        ["Hits", stats.tableHits || 0],
+        ["Sinks", stats.sinks || 0],
+        ["Tinks", stats.tinks || 0],
+        ["FG Off", stats.fgOffense || 0],
+        ["FG Def", stats.fgDefense || 0],
+        ["FIFAs", stats.fifas || 0],
+        ["Self", stats.selfSinks || 0],
+      ]
+    : [
+        ["Sinks", stats.sinks || 0],
+        ["Tinks", stats.tinks || 0],
+      ];
+  return `
+    <div class="logged-team-stats">
+      <strong>${escapeHtml(team.name)}</strong>
+      <div>
+        ${items.map(([label, value]) => `<span class="logged-stat-chip"><b>${escapeHtml(value)}</b><small>${escapeHtml(label)}</small></span>`).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function renderBracket() {
@@ -4640,9 +4889,13 @@ function renderBracket() {
 
   const form = els.bracket.querySelector(".match-form");
   restoreFormDraft(form, currentDraft);
-  form?.addEventListener("submit", (event) => {
+  form?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    logTournamentMatch(tournament.id, form.dataset.matchId, new FormData(form));
+    await runSubmitConfirmation(
+      form,
+      () => logTournamentMatch(tournament.id, form.dataset.matchId, new FormData(form)),
+      { success: "Logged", restoreText: "Log Tournament Game" },
+    );
   });
 }
 
@@ -5302,11 +5555,8 @@ function renderLeagueGameDetail() {
       </div>
       ${detailActions}
     </div>
-    <div class="summary-grid">
-      <div class="summary-item"><b>${game.teams[0].score}</b><span>${escapeHtml(game.teams[0].name)}</span></div>
-      <div class="summary-item"><b>${game.teams[1].score}</b><span>${escapeHtml(game.teams[1].name)}</span></div>
-      <div class="summary-item"><b>${escapeHtml(winner.name)}</b><span>Winner</span></div>
-    </div>
+    ${gameScoreboard(game)}
+    <div class="meta-line logged-winner-line">Winner: ${escapeHtml(winner.name)}</div>
     ${selfSinkNote}
     <div class="match-detail-grid">
       ${game.teams.map((team, index) => leagueGameTeamDetail(team, index)).join("")}
@@ -5715,11 +5965,6 @@ function renderLeagueRosterDetail(players) {
 
 function leagueRosterDetailCard(selected) {
   const stats = selected.stats || emptyBucket();
-  const achievementsOpen = selectedLeagueAchievementsMemberId === selected.id;
-  const isSelf = selected.user_id === currentUser?.id;
-  const code = normalizePlayerCode(selected.player_code);
-  const friendSent = rosterActionFeedback?.memberId === selected.id && rosterActionFeedback.action === "friend";
-  const partnerSent = rosterActionFeedback?.memberId === selected.id && rosterActionFeedback.action === "partner";
   const statItems = [
     ["Games", stats.games],
     ["Record", `${stats.wins}-${stats.losses}`],
@@ -5737,29 +5982,89 @@ function leagueRosterDetailCard(selected) {
 
   return `
     <article class="league-player-detail-card">
-      <div class="league-roster-player">
-        <span class="roster-cup-badge" style="--cup-color:${escapeHtml(selected.cup_color || "#d71920")}">${cupSvg()}</span>
+      <div class="profile-stat-grid">
+        ${statItems.map(([label, value]) => `<div><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("")}
+      </div>
+      <button class="primary-button roster-profile-button" type="button" data-roster-profile="${escapeHtml(selected.id)}">See Profile</button>
+    </article>
+  `;
+}
+
+function openRosterProfile(memberId) {
+  activeRosterProfileMemberId = memberId;
+  renderRosterProfile();
+  els.rosterProfileModal.classList.remove("hidden");
+  els.rosterProfileModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeRosterProfile() {
+  activeRosterProfileMemberId = "";
+  els.rosterProfileModal.classList.add("hidden");
+  els.rosterProfileModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function rosterProfileMember() {
+  if (!activeRosterProfileMemberId) return null;
+  const stats = computeLeagueStats();
+  return leagueMembers()
+    .map((member) => ({ ...member, stats: stats.players[member.display_name.toLowerCase()] || emptyBucket() }))
+    .find((member) => member.id === activeRosterProfileMemberId);
+}
+
+function renderRosterProfile() {
+  const member = rosterProfileMember();
+  if (!member) {
+    els.rosterProfileTitle.textContent = "Player Profile";
+    els.rosterProfileContent.innerHTML = '<p class="empty">That player is not available anymore.</p>';
+    return;
+  }
+
+  const stats = member.stats || emptyBucket();
+  const isSelf = member.user_id === currentUser?.id;
+  const code = normalizePlayerCode(member.player_code);
+  const friendSent = rosterActionFeedback?.memberId === member.id && rosterActionFeedback.action === "friend";
+  const partnerSent = rosterActionFeedback?.memberId === member.id && rosterActionFeedback.action === "partner";
+  const statItems = [
+    ["Games", stats.games],
+    ["Record", `${stats.wins}-${stats.losses}`],
+    ["Win %", formatPercent(winPercent(stats))],
+    ["Current Streak", streakLabel(stats)],
+    ["Table Hits", stats.tableHits],
+    ["Sinks", stats.sinks],
+    ["Tinks", stats.tinks],
+    ["FG Offense", stats.fgOffense],
+    ["FG Defense", stats.fgDefense],
+    ["FIFAs", stats.fifas],
+    ["Self Sinks", stats.selfSinks],
+    ["Tourney Record", `${stats.tournamentWins || 0}-${stats.tournamentLosses || 0}`],
+  ];
+
+  els.rosterProfileTitle.textContent = member.nickname || member.display_name || "Player Profile";
+  els.rosterProfileContent.innerHTML = `
+    <article class="profile-card roster-profile-card">
+      <div class="profile-identity">
+        <span class="profile-cup-badge" style="--cup-color:${escapeHtml(member.cup_color || "#d71920")}">${cupSvg()}</span>
         <div>
-          <strong>${escapeHtml(selected.nickname || selected.display_name)}</strong>
-          <span>${displayRole(selected.role)}</span>
-          ${code && !isSelf ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
+          <strong>${escapeHtml(member.nickname || member.display_name)}</strong>
+          <span>${member.preferred_partner ? `Preferred partner: ${escapeHtml(member.preferred_partner)}` : "Preferred partner: -"}</span>
+          <span>${displayRole(member.role)}</span>
+          ${code ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
         </div>
       </div>
       <div class="profile-stat-grid">
         ${statItems.map(([label, value]) => `<div><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("")}
       </div>
-      <div class="roster-detail-actions">
-        <button class="small-button secondary-button" type="button" data-roster-achievements="${escapeHtml(selected.id)}">
-          ${achievementsOpen ? "Hide League Badges" : "See League Badges"}
-        </button>
-        ${
-          isSelf
-            ? ""
-            : `<button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(selected.id)}">${friendSent ? "Sent" : "Add Friend"}</button>
-               <button class="small-button secondary-button" type="button" data-roster-preferred-partner="${escapeHtml(selected.id)}">${partnerSent ? "Sent" : "Preferred Partner"}</button>`
-        }
-      </div>
-      ${achievementsOpen ? leagueBadgeSection(stats) : ""}
+      ${
+        isSelf
+          ? ""
+          : `<div class="roster-detail-actions">
+              <button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(member.id)}">${friendSent ? "Sent" : "Add Friend"}</button>
+              <button class="small-button secondary-button" type="button" data-roster-preferred-partner="${escapeHtml(member.id)}">${partnerSent ? "Sent" : "Preferred Partner"}</button>
+            </div>`
+      }
+      ${leagueBadgeSection(stats)}
     </article>
   `;
 }

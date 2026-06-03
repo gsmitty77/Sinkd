@@ -3,27 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#002147" />
+    <meta name="theme-color" content="#111827" />
     <title>Sinkd</title>
     <style>
       html,
       body {
         margin: 0;
-        background: #002147;
+        background: #111827;
       }
     </style>
     <script>
       (() => {
         try {
           const theme = JSON.parse(localStorage.getItem("sinkdTheme") || "{}");
-          const color = /^#[0-9a-f]{6}$/i.test(theme.background || "") ? theme.background : "#002147";
+          const color = /^#[0-9a-f]{6}$/i.test(theme.background || "") ? theme.background : "#111827";
           document.documentElement.style.background = color;
+          document.documentElement.style.backgroundColor = color;
           document.addEventListener("DOMContentLoaded", () => {
             document.body.style.background = color;
+            document.body.style.backgroundColor = color;
             document.querySelector('meta[name="theme-color"]')?.setAttribute("content", color);
           });
         } catch {
-          document.documentElement.style.background = "#002147";
+          document.documentElement.style.background = "#111827";
         }
       })();
     </script>
@@ -79,6 +81,19 @@
           <button class="primary-button" id="confirmYesBtn" type="button">Yes</button>
           <button class="small-button danger-button" id="confirmCancelBtn" type="button">Cancel</button>
         </div>
+      </div>
+    </section>
+
+    <section class="intro-modal hidden" id="gamePointModal" aria-hidden="true">
+      <div class="intro-sheet confirm-sheet game-point-sheet">
+        <h2>Game Point</h2>
+        <p class="intro-lead">Set what score this game plays to.</p>
+        <div class="game-point-stepper">
+          <button class="small-button secondary-button" id="decreaseGamePointBtn" type="button">-</button>
+          <strong id="gamePointValue">11</strong>
+          <button class="small-button secondary-button" id="increaseGamePointBtn" type="button">+</button>
+        </div>
+        <button class="primary-button" id="saveGamePointBtn" type="button">Save</button>
       </div>
     </section>
 
@@ -147,7 +162,10 @@
               <h2>Quick Log</h2>
               <p>Log head-to-head games and keep overall player totals current.</p>
             </div>
-            <button class="small-button export-button" id="openBigGameBtn" type="button">Big Game?</button>
+            <div class="section-actions">
+              <button class="tiny-action-button" id="localGamePointBtn" type="button">Game Point: 11</button>
+              <button class="small-button export-button" id="openBigGameBtn" type="button">Big Game?</button>
+            </div>
           </div>
 
           <form class="panel stat-form" id="regularGameForm">
@@ -161,7 +179,7 @@
                 <input name="teamBScore" type="number" min="0" value="0" required />
               </label>
             </div>
-            <p class="score-helper">Plus and minus buttons update the score automatically. You can still type the score manually.</p>
+            <p class="score-helper">Game point: <span id="localGamePointText">11</span>. Plus and minus buttons update the score automatically. You can still type the score manually.</p>
 
             <div class="regular-player-grid" id="regularPlayerGrid"></div>
             <input type="hidden" name="selfSinkPlayer" value="" />
@@ -194,7 +212,7 @@
           <button class="small-button secondary-button back-nav-button" id="backToRegularBtn" type="button">Back to Quick Log</button>
 
           <form class="panel stat-form" id="bigGameForm">
-            <p class="score-helper">Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
+            <p class="score-helper">Game point: <span id="bigGamePointText">11</span>. Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
             <div class="regular-player-grid" id="bigGamePlayerGrid"></div>
             <input type="hidden" name="selfSinkPlayer" value="" />
             <input type="hidden" name="selfSinkTeam" value="" />
@@ -385,8 +403,9 @@
           <section class="league-detail-panel active" id="leagueGamesPanel">
             <form class="panel stat-form" id="leagueGameForm">
               <h3 id="leagueGameFormTitle">Log League Game</h3>
+              <button class="tiny-action-button league-game-point-button hidden" id="leagueGamePointBtn" type="button">Game Point: 11</button>
               <button class="small-button export-button" id="leagueQuickRematchBtn" type="button">Quick Rematch</button>
-              <p class="score-helper">Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
+              <p class="score-helper">Game point: <span id="leagueGamePointText">11</span>. Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
               <div class="regular-player-grid" id="leagueGamePlayerGrid"></div>
               <input type="hidden" name="selfSinkPlayer" value="" />
               <input type="hidden" name="selfSinkTeam" value="" />
@@ -780,6 +799,19 @@
           <button class="text-button" id="closeLeagueRulesBtn" type="button">Close</button>
         </header>
         <section class="rules-card" id="leagueRulesContent"></section>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="rosterProfileModal" aria-hidden="true">
+      <div class="rules-sheet roster-profile-sheet">
+        <header class="rules-header">
+          <div>
+            <p>League Profile</p>
+            <h2 id="rosterProfileTitle">Player Profile</h2>
+          </div>
+          <button class="text-button" id="closeRosterProfileBtn" type="button">Close</button>
+        </header>
+        <section id="rosterProfileContent"></section>
       </div>
     </section>
 
