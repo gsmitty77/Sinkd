@@ -2025,6 +2025,43 @@ legend {
   background: var(--accent-surface);
 }
 
+.league-roster-card-shell {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.league-roster-card-shell .league-roster-card,
+.league-roster-card-shell .league-roster-card.selected {
+  padding: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.logged-score-team {
+  border: 0;
+  background: transparent;
+}
+
+.league-roster-card-shell {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.league-roster-card-shell .league-roster-card,
+.league-roster-card-shell .league-roster-card.selected {
+  border: 0;
+  background: transparent;
+}
+
+.logged-score-team {
+  border: 0;
+  background: transparent;
+}
+
 .game-history-actions {
   justify-content: flex-end;
   margin-top: -3px;
@@ -2466,6 +2503,17 @@ legend {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: stretch;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.league-roster-card-shell .league-roster-card {
+  padding: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .roster-management-actions {
@@ -2487,6 +2535,10 @@ legend {
   gap: 8px;
   margin-top: 14px;
   padding-top: 4px;
+}
+
+.league-past-games {
+  margin-top: 14px;
 }
 
 .league-roster-card.selected {
@@ -3322,4 +3374,24 @@ td {
 .notification-row.unread {
   border-color: rgba(239, 191, 4, 0.72);
   background: var(--accent-surface);
+}
+
+.league-roster-card-shell {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.league-roster-card-shell .league-roster-card,
+.league-roster-card-shell .league-roster-card.selected {
+  padding: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.logged-score-team {
+  border: 0;
+  background: transparent;
 }

@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260603-6" />
+    <link rel="stylesheet" href="styles.css?v=20260603-7" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -388,16 +388,15 @@
 
           <nav class="tabs sub-tabs" aria-label="League sections">
             <button class="tab active" data-league-detail-tab="games" type="button">League Games</button>
-            <button class="tab" data-league-detail-tab="history" type="button">Game History</button>
             <button class="tab" data-league-detail-tab="tournaments" type="button">Tournaments</button>
             <button class="tab" data-league-detail-tab="stats" type="button">Roster</button>
             <button class="tab" data-league-detail-tab="leagueStats" type="button">League Stats</button>
             <button class="tab" data-league-detail-tab="rankings" type="button">Rankings</button>
-            <button class="tab" data-league-detail-tab="past" type="button">The Past</button>
             <button class="tab league-chat-tab" data-league-detail-tab="chat" type="button">
               Chat
               <span class="notification-badge chat-badge hidden" id="leagueChatBadge">0</span>
             </button>
+            <button class="tab" data-league-detail-tab="past" type="button">The Past</button>
             <button class="tab" data-league-detail-tab="settings" type="button">Settings</button>
           </nav>
 
@@ -420,13 +419,6 @@
                 <button class="small-button secondary-button hidden" id="cancelLeagueGameEditBtn" type="button">Cancel Edit</button>
               </div>
             </form>
-          </section>
-
-          <section class="league-detail-panel" id="leagueHistoryPanel">
-            <section class="panel">
-              <h3>Game History</h3>
-              <div class="list" id="leagueGameHistory"></div>
-            </section>
           </section>
 
           <section class="league-detail-panel" id="leagueTournamentsPanel">
@@ -493,7 +485,8 @@
           <section class="league-detail-panel" id="leaguePastPanel">
             <section class="panel">
               <h3>The Past</h3>
-              <div class="list" id="leaguePastList"></div>
+              <button class="small-button secondary-button compact-action-button" id="openPastSeasonsBtn" type="button">The Past Seasons</button>
+              <div class="list league-past-games" id="leagueGameHistory"></div>
             </section>
           </section>
 
@@ -628,7 +621,7 @@
               <p>Review the full match log.</p>
             </div>
           </div>
-          <button class="small-button secondary-button back-nav-button" id="backToLeagueGamesBtn" type="button">Back to Game History</button>
+          <button class="small-button secondary-button back-nav-button" id="backToLeagueGamesBtn" type="button">Back to The Past</button>
           <section class="panel" id="leagueGameDetail"></section>
         </section>
 
@@ -834,6 +827,21 @@
       </div>
     </section>
 
+    <section class="rules-modal hidden" id="pastSeasonsModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>League Archive</p>
+            <h2>The Past Seasons</h2>
+          </div>
+          <button class="text-button" id="closePastSeasonsBtn" type="button">Close</button>
+        </header>
+        <section class="rules-card">
+          <div class="list" id="pastSeasonsList"></div>
+        </section>
+      </div>
+    </section>
+
     <section class="rules-modal hidden" id="feedbackModal" aria-hidden="true">
       <div class="rules-sheet">
         <header class="rules-header">
@@ -990,6 +998,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260603-6"></script>
+    <script src="app.js?v=20260603-7"></script>
   </body>
 </html>

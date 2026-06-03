@@ -202,7 +202,10 @@ const els = {
   cancelLeagueGameEditBtn: document.querySelector("#cancelLeagueGameEditBtn"),
   leagueGamePlayerGrid: document.querySelector("#leagueGamePlayerGrid"),
   leagueGameHistory: document.querySelector("#leagueGameHistory"),
-  leaguePastList: document.querySelector("#leaguePastList"),
+  openPastSeasonsBtn: document.querySelector("#openPastSeasonsBtn"),
+  pastSeasonsModal: document.querySelector("#pastSeasonsModal"),
+  closePastSeasonsBtn: document.querySelector("#closePastSeasonsBtn"),
+  pastSeasonsList: document.querySelector("#pastSeasonsList"),
   leagueTournamentForm: document.querySelector("#leagueTournamentForm"),
   leagueTournamentTeamBuilder: document.querySelector("#leagueTournamentTeamBuilder"),
   addLeagueTournamentTeamBtn: document.querySelector("#addLeagueTournamentTeamBtn"),
@@ -1468,6 +1471,11 @@ function bindEvents() {
   });
 
   els.backToLeagueGamesBtn.addEventListener("click", backToLeagueGames);
+  els.openPastSeasonsBtn?.addEventListener("click", openPastSeasons);
+  els.closePastSeasonsBtn?.addEventListener("click", closePastSeasons);
+  els.pastSeasonsModal?.addEventListener("click", (event) => {
+    if (event.target === els.pastSeasonsModal) closePastSeasons();
+  });
 
   els.leagueDetailTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -1494,17 +1502,6 @@ function bindEvents() {
   });
 
   els.leagueGameHistory.addEventListener("click", (event) => {
-    const deleteButton = event.target.closest("[data-delete-league-game]");
-    if (deleteButton) {
-      showAppConfirm({
-        title: "Delete league game?",
-        message: "This removes the game from league history and updates league stats.",
-        confirmLabel: "Delete",
-        onConfirm: () => deleteCloudLeagueGame(deleteButton.dataset.deleteLeagueGame),
-      });
-      return;
-    }
-
     const gameCardButton = event.target.closest("[data-view-league-game]");
     if (!gameCardButton) return;
     openLeagueGameDetail(gameCardButton.dataset.viewLeagueGame);
@@ -1683,9 +1680,14 @@ function bindEvents() {
 
   els.leaguePlayerStats.addEventListener("click", async (event) => {
     const promote = event.target.closest("[data-roster-promote]");
+    const demote = event.target.closest("[data-roster-demote]");
     const kick = event.target.closest("[data-roster-kick]");
     if (promote) {
       await promoteLeagueRosterMember(promote.dataset.rosterPromote);
+      return;
+    }
+    if (demote) {
+      await demoteLeagueRosterMember(demote.dataset.rosterDemote);
       return;
     }
     if (kick) {
@@ -1982,8 +1984,8 @@ function openLeagueGameDetail(gameId) {
   scrollAppToTop();
 }
 
-function backToLeagueGames(targetTab = "history") {
-  leagueDetailTab = typeof targetTab === "string" ? targetTab : "history";
+function backToLeagueGames(targetTab = "past") {
+  leagueDetailTab = typeof targetTab === "string" ? targetTab : "past";
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === "leagues"));
   els.views.forEach((view) => view.classList.toggle("active", view.id === "leagueDetailsView"));
   renderLeagueDetails();
@@ -4313,6 +4315,13 @@ async function promoteLeagueRosterMember(memberId) {
   await updateCloudLeagueMemberRole(memberId, nextRole);
 }
 
+async function demoteLeagueRosterMember(memberId) {
+  if (!isActiveLeagueOwner()) return;
+  const member = leagueMembers().find((item) => item.id === memberId);
+  if (!member || member.user_id === currentUser?.id || member.role !== "co_leader") return;
+  await updateCloudLeagueMemberRole(memberId, "ref");
+}
+
 async function approveLeagueJoinRequest(memberId) {
   if (!canManageActiveLeague()) return;
   const request = leagueMemberCache.find((member) => member.id === memberId && member.role === "pending");
@@ -4337,8 +4346,9 @@ async function approveLeagueJoinRequest(memberId) {
 async function removeCloudLeagueMember(memberId) {
   if (!canManageActiveLeague()) return;
   const member = leagueMembers().find((item) => item.id === memberId);
-  if (!member || member.user_id === currentUser?.id || !["member", "pending"].includes(member.role)) return;
-  const { error } = await authClient.from("league_members").delete().eq("id", memberId).in("role", ["member", "pending"]);
+  const allowedRoles = isActiveLeagueOwner() ? ["member", "pending", "co_leader"] : ["member", "pending"];
+  if (!member || member.user_id === currentUser?.id || !allowedRoles.includes(member.role)) return;
+  const { error } = await authClient.from("league_members").delete().eq("id", memberId).in("role", allowedRoles);
   if (error) alert(error.message);
   await loadLeagueData();
 }
@@ -4467,7 +4477,7 @@ async function deleteCloudLeagueGame(gameId) {
 
   if (activeLeagueGameDetailId === gameId) {
     activeLeagueGameDetailId = "";
-    backToLeagueGames("history");
+    backToLeagueGames("past");
   }
   if (editingLeagueGameId === gameId) {
     resetLeagueGameForm();
@@ -4894,9 +4904,7 @@ function gameCard(game) {
       ? `<button class="text-button danger-text" type="button" data-delete-regular="${game.id}">Remove</button>`
       : game.source === "big"
         ? `<button class="text-button danger-text" type="button" data-delete-big="${game.id}">Remove</button>`
-        : game.source === "league" && isActiveLeagueOwner()
-          ? `<button class="text-button danger-text" type="button" data-delete-league-game="${game.id}">Delete</button>`
-          : "";
+        : "";
   const leagueDetailTarget = game.source === "league" ? ` data-view-league-game="${game.id}" tabindex="0" role="button"` : "";
   return `
     <article class="game-card"${leagueDetailTarget}>
@@ -5473,6 +5481,7 @@ function renderLeagueDetails() {
   els.backToLeaguesBtn.classList.toggle("hidden", isMember);
   const guestTabs = ["stats", "rankings"];
   if (leagueDetailTab === "invite") leagueDetailTab = "stats";
+  if (leagueDetailTab === "history") leagueDetailTab = "past";
   if (!isMember && !guestTabs.includes(leagueDetailTab)) leagueDetailTab = "stats";
 
   els.leagueDetailTabs.forEach((tab) => {
@@ -5545,8 +5554,21 @@ function renderLeagueGames() {
 }
 
 function renderLeaguePast() {
-  if (!els.leaguePastList) return;
-  els.leaguePastList.innerHTML = '<p class="empty">Archived seasons will appear here.</p>';
+  if (!els.pastSeasonsList) return;
+  els.pastSeasonsList.innerHTML = '<p class="empty">No archived seasons yet.</p>';
+}
+
+function openPastSeasons() {
+  renderLeaguePast();
+  els.pastSeasonsModal.classList.remove("hidden");
+  els.pastSeasonsModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closePastSeasons() {
+  els.pastSeasonsModal.classList.add("hidden");
+  els.pastSeasonsModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
 }
 
 function renderLeagueTournaments() {
@@ -5997,11 +6019,13 @@ function leagueRosterCard(member) {
   const code = normalizePlayerCode(member.player_code);
   const isSelf = member.user_id === currentUser?.id;
   const canPromote = isActiveLeagueOwner() && !isSelf && ["member", "ref"].includes(member.role);
-  const canKick = canManageActiveLeague() && !isSelf && member.role === "member";
+  const canDemote = isActiveLeagueOwner() && !isSelf && member.role === "co_leader";
+  const canKick = !isSelf && (member.role === "member" ? canManageActiveLeague() : member.role === "co_leader" && isActiveLeagueOwner());
   const actions =
-    canPromote || canKick
+    canPromote || canDemote || canKick
       ? `<div class="roster-management-actions">
           ${canPromote ? `<button class="small-button secondary-button" type="button" data-roster-promote="${escapeHtml(member.id)}">Promote</button>` : ""}
+          ${canDemote ? `<button class="small-button secondary-button" type="button" data-roster-demote="${escapeHtml(member.id)}">Demote</button>` : ""}
           ${canKick ? `<button class="small-button danger-button" type="button" data-roster-kick="${escapeHtml(member.id)}">Kick</button>` : ""}
         </div>`
       : "";
