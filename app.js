@@ -202,6 +202,7 @@ const els = {
   cancelLeagueGameEditBtn: document.querySelector("#cancelLeagueGameEditBtn"),
   leagueGamePlayerGrid: document.querySelector("#leagueGamePlayerGrid"),
   leagueGameHistory: document.querySelector("#leagueGameHistory"),
+  leaguePastList: document.querySelector("#leaguePastList"),
   leagueTournamentForm: document.querySelector("#leagueTournamentForm"),
   leagueTournamentTeamBuilder: document.querySelector("#leagueTournamentTeamBuilder"),
   addLeagueTournamentTeamBtn: document.querySelector("#addLeagueTournamentTeamBtn"),
@@ -242,6 +243,9 @@ const els = {
   rosterProfileTitle: document.querySelector("#rosterProfileTitle"),
   rosterProfileContent: document.querySelector("#rosterProfileContent"),
   leagueSettingsForm: document.querySelector("#leagueSettingsForm"),
+  ownerTransferControls: document.querySelector("#ownerTransferControls"),
+  transferOwnershipSelect: document.querySelector("#transferOwnershipSelect"),
+  transferOwnershipBtn: document.querySelector("#transferOwnershipBtn"),
   leaveLeagueBtn: document.querySelector("#leaveLeagueBtn"),
   leaveLeagueConfirm: document.querySelector("#leaveLeagueConfirm"),
   confirmLeaveLeagueBtn: document.querySelector("#confirmLeaveLeagueBtn"),
@@ -1567,7 +1571,7 @@ function bindEvents() {
 
     const editButton = event.target.closest("[data-detail-edit-league-game]");
     if (!editButton) return;
-    backToLeagueGames();
+    backToLeagueGames("games");
     startLeagueGameEdit(editButton.dataset.detailEditLeagueGame);
   });
 
@@ -1652,6 +1656,17 @@ function bindEvents() {
     });
   });
 
+  els.transferOwnershipBtn?.addEventListener("click", () => {
+    if (!isActiveLeagueOwner()) return;
+    const memberId = els.transferOwnershipSelect?.value;
+    if (!memberId) return;
+    showAppConfirm({
+      title: "Transfer ownership?",
+      message: "Transfer league ownership to this member?",
+      onConfirm: () => transferCloudLeagueOwnership(memberId),
+    });
+  });
+
   els.leagueInviteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await addCloudLeagueMember(new FormData(els.leagueInviteForm));
@@ -1667,6 +1682,20 @@ function bindEvents() {
   });
 
   els.leaguePlayerStats.addEventListener("click", async (event) => {
+    const promote = event.target.closest("[data-roster-promote]");
+    const kick = event.target.closest("[data-roster-kick]");
+    if (promote) {
+      await promoteLeagueRosterMember(promote.dataset.rosterPromote);
+      return;
+    }
+    if (kick) {
+      showAppConfirm({
+        title: "Kick member?",
+        message: "Remove this member from the league?",
+        onConfirm: () => removeCloudLeagueMember(kick.dataset.rosterKick),
+      });
+      return;
+    }
     const seeProfile = event.target.closest("[data-roster-profile]");
     if (seeProfile) {
       openRosterProfile(seeProfile.dataset.rosterProfile);
@@ -1953,8 +1982,8 @@ function openLeagueGameDetail(gameId) {
   scrollAppToTop();
 }
 
-function backToLeagueGames() {
-  leagueDetailTab = "games";
+function backToLeagueGames(targetTab = "history") {
+  leagueDetailTab = typeof targetTab === "string" ? targetTab : "history";
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === "leagues"));
   els.views.forEach((view) => view.classList.toggle("active", view.id === "leagueDetailsView"));
   renderLeagueDetails();
@@ -4275,6 +4304,15 @@ async function updateCloudLeagueMemberRole(memberId, role) {
   await loadLeagueData();
 }
 
+async function promoteLeagueRosterMember(memberId) {
+  if (!isActiveLeagueOwner()) return;
+  const member = leagueMembers().find((item) => item.id === memberId);
+  if (!member || member.user_id === currentUser?.id) return;
+  const nextRole = member.role === "member" ? "ref" : member.role === "ref" ? "co_leader" : "";
+  if (!nextRole) return;
+  await updateCloudLeagueMemberRole(memberId, nextRole);
+}
+
 async function approveLeagueJoinRequest(memberId) {
   if (!canManageActiveLeague()) return;
   const request = leagueMemberCache.find((member) => member.id === memberId && member.role === "pending");
@@ -4298,7 +4336,9 @@ async function approveLeagueJoinRequest(memberId) {
 
 async function removeCloudLeagueMember(memberId) {
   if (!canManageActiveLeague()) return;
-  const { error } = await authClient.from("league_members").delete().eq("id", memberId).neq("role", "owner");
+  const member = leagueMembers().find((item) => item.id === memberId);
+  if (!member || member.user_id === currentUser?.id || !["member", "pending"].includes(member.role)) return;
+  const { error } = await authClient.from("league_members").delete().eq("id", memberId).in("role", ["member", "pending"]);
   if (error) alert(error.message);
   await loadLeagueData();
 }
@@ -4309,8 +4349,8 @@ async function transferCloudLeagueOwnership(memberId) {
   const newOwner = leagueMembers().find((member) => member.id === memberId);
   const oldOwner = myLeagueMember();
   if (!league || !newOwner || !oldOwner) return;
-  if (newOwner.role !== "co_leader" || !newOwner.user_id) {
-    alert("Ownership can only be transferred to a co-leader.");
+  if (newOwner.role === "owner" || !newOwner.user_id || newOwner.user_id === currentUser?.id) {
+    alert("Choose another connected league member.");
     return;
   }
 
@@ -4427,7 +4467,7 @@ async function deleteCloudLeagueGame(gameId) {
 
   if (activeLeagueGameDetailId === gameId) {
     activeLeagueGameDetailId = "";
-    backToLeagueGames();
+    backToLeagueGames("history");
   }
   if (editingLeagueGameId === gameId) {
     resetLeagueGameForm();
@@ -5432,17 +5472,17 @@ function renderLeagueDetails() {
   const isOwner = isActiveLeagueOwner();
   els.backToLeaguesBtn.classList.toggle("hidden", isMember);
   const guestTabs = ["stats", "rankings"];
+  if (leagueDetailTab === "invite") leagueDetailTab = "stats";
   if (!isMember && !guestTabs.includes(leagueDetailTab)) leagueDetailTab = "stats";
 
   els.leagueDetailTabs.forEach((tab) => {
     const tabName = tab.dataset.leagueDetailTab;
     const managerOnly = false;
     const loggerOnly = false;
-    const inviteOnly = tabName === "invite";
     const guestHidden = !isMember && !guestTabs.includes(tabName);
     tab.classList.toggle("hidden", guestHidden);
     tab.classList.toggle("active", tabName === leagueDetailTab);
-    tab.disabled = guestHidden || (managerOnly && !canManage) || (loggerOnly && !canLog) || (inviteOnly && !canInvite);
+    tab.disabled = guestHidden || (managerOnly && !canManage) || (loggerOnly && !canLog);
   });
   els.leagueDetailPanels.forEach((panel) => {
     if (panel.id === "leagueRulesEditPanel") {
@@ -5478,6 +5518,7 @@ function renderLeagueDetails() {
   renderLeagueStats();
   renderLeagueStatsTable();
   renderLeagueRankings();
+  renderLeaguePast();
   renderLeagueChat();
   renderLeagueChatBadge();
   renderLeagueSettings();
@@ -5501,6 +5542,11 @@ function renderLeagueGames() {
   } else if (editingLeagueGameId) {
     resetLeagueGameForm();
   }
+}
+
+function renderLeaguePast() {
+  if (!els.leaguePastList) return;
+  els.leaguePastList.innerHTML = '<p class="empty">Archived seasons will appear here.</p>';
 }
 
 function renderLeagueTournaments() {
@@ -5794,6 +5840,14 @@ function renderLeagueSettings() {
   els.leaveLeagueBtn.hidden = isOwner || !member || confirmingLeaveLeague;
   els.leaveLeagueConfirm.classList.toggle("hidden", isOwner || !member || !confirmingLeaveLeague);
   els.deleteLeagueBtn.hidden = !isOwner;
+  const transferCandidates = leagueMembers().filter((item) => item.role !== "owner" && item.user_id && item.user_id !== currentUser?.id);
+  els.ownerTransferControls?.classList.toggle("hidden", !isOwner || !transferCandidates.length);
+  if (els.transferOwnershipSelect) {
+    els.transferOwnershipSelect.innerHTML = transferCandidates.length
+      ? transferCandidates.map((item) => `<option value="${item.id}">${escapeHtml(item.nickname || item.display_name)} - ${displayRole(item.role)}</option>`).join("")
+      : '<option value="">No eligible members</option>';
+  }
+  if (els.transferOwnershipBtn) els.transferOwnershipBtn.disabled = !transferCandidates.length;
   els.editLeagueRulesBtn.classList.toggle("hidden", !canManage);
   if (!league || !canManage) return;
   els.leagueSettingsForm.elements.name.value = league.name;
@@ -5942,24 +5996,36 @@ function leagueRosterCard(member) {
   const isSelected = member.id === selectedLeagueRosterMemberId;
   const code = normalizePlayerCode(member.player_code);
   const isSelf = member.user_id === currentUser?.id;
+  const canPromote = isActiveLeagueOwner() && !isSelf && ["member", "ref"].includes(member.role);
+  const canKick = canManageActiveLeague() && !isSelf && member.role === "member";
+  const actions =
+    canPromote || canKick
+      ? `<div class="roster-management-actions">
+          ${canPromote ? `<button class="small-button secondary-button" type="button" data-roster-promote="${escapeHtml(member.id)}">Promote</button>` : ""}
+          ${canKick ? `<button class="small-button danger-button" type="button" data-roster-kick="${escapeHtml(member.id)}">Kick</button>` : ""}
+        </div>`
+      : "";
   return `
     <article class="league-roster-item">
-      <button class="league-roster-card ${isSelected ? "selected" : ""}" type="button" data-roster-member="${escapeHtml(member.id)}">
-        <div class="league-roster-player">
-          <span class="roster-cup-badge" style="--cup-color:${escapeHtml(member.cup_color || "#d71920")}">${cupSvg()}</span>
-          <div>
-            <strong>${escapeHtml(member.nickname || member.display_name)}</strong>
-            <span>${member.nickname ? escapeHtml(member.display_name) : "No nickname"} - ${displayRole(member.role)}</span>
-            ${code && !isSelf ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
+      <div class="league-roster-card-shell">
+        <button class="league-roster-card ${isSelected ? "selected" : ""}" type="button" data-roster-member="${escapeHtml(member.id)}">
+          <div class="league-roster-player">
+            <span class="roster-cup-badge" style="--cup-color:${escapeHtml(member.cup_color || "#d71920")}">${cupSvg()}</span>
+            <div>
+              <strong>${escapeHtml(member.nickname || member.display_name)}</strong>
+              <span>${member.nickname ? escapeHtml(member.display_name) : "No nickname"} - ${displayRole(member.role)}</span>
+              ${code && !isSelf ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
+            </div>
           </div>
-        </div>
-        <div class="league-roster-stats">
-          <div><b>${stats.wins}-${stats.losses}</b><span>Record</span></div>
-          <div><b>${formatPercent(winPercent(stats))}</b><span>Win %</span></div>
-          <div><b>${stats.sinks}</b><span>Sinks</span></div>
-          <div><b>${escapeHtml(streakLabel(stats))}</b><span>Streak</span></div>
-        </div>
-      </button>
+          <div class="league-roster-stats">
+            <div><b>${stats.wins}-${stats.losses}</b><span>Record</span></div>
+            <div><b>${formatPercent(winPercent(stats))}</b><span>Win %</span></div>
+            <div><b>${stats.sinks}</b><span>Sinks</span></div>
+            <div><b>${escapeHtml(streakLabel(stats))}</b><span>Streak</span></div>
+          </div>
+        </button>
+        ${actions}
+      </div>
       ${isSelected ? leagueRosterDetailCard(member) : ""}
     </article>
   `;

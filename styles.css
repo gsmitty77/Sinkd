@@ -2025,6 +2025,24 @@ legend {
   background: var(--accent-surface);
 }
 
+.game-history-actions {
+  justify-content: flex-end;
+  margin-top: -3px;
+}
+
+.game-history-actions [data-delete-regular],
+.game-history-actions [data-delete-big],
+.game-history-actions [data-delete-league-game] {
+  width: auto;
+  min-width: 0;
+  min-height: 26px;
+  margin: 0;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
 .game-card {
   padding: 12px;
   border: 1px solid var(--line);
@@ -2441,6 +2459,34 @@ legend {
   text-align: left;
   min-width: 0;
   cursor: pointer;
+}
+
+.league-roster-card-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.roster-management-actions {
+  display: grid;
+  width: 72px;
+  gap: 6px;
+  align-content: center;
+}
+
+.roster-management-actions .small-button {
+  min-height: 30px;
+  margin: 0;
+  padding: 0 6px;
+  font-size: 0.68rem;
+}
+
+.owner-transfer {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 4px;
 }
 
 .league-roster-card.selected {
