@@ -5409,6 +5409,7 @@ function renderLeagueDetails() {
 function renderLeagueGames() {
   const canLog = canLogActiveLeagueGames();
   els.leagueGameForm.classList.toggle("hidden", !canLog);
+  renderGamePointButtons();
   buildLeagueGamePlayerCards();
   const games = leagueGames();
   els.leagueQuickRematchBtn.disabled = !games.length;
