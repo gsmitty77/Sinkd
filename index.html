@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260604-3" />
+    <link rel="stylesheet" href="styles.css?v=20260604-5" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -573,6 +573,13 @@
               <button class="small-button secondary-button compact-action-button leave-league-compact" id="leaveLeagueBtn" type="button">Leave League</button>
               <button class="primary-button compact-action-button manager-setting" type="submit">Save Settings</button>
               <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
+              <section class="league-plus-setting hidden" id="leaguePlusSetting">
+                <div>
+                  <strong id="leaguePlusTitle">League Plus</strong>
+                  <span id="leaguePlusStatus">Free league - up to 8 members</span>
+                </div>
+                <button class="small-button export-button compact-action-button hidden" id="leaguePlusBtn" type="button">Upgrade to League Plus</button>
+              </section>
               <div class="owner-transfer manager-setting hidden" id="ownerTransferControls">
                 <label>
                   Transfer Ownership
@@ -1019,6 +1026,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260604-3"></script>
+    <script src="app.js?v=20260604-5"></script>
   </body>
 </html>

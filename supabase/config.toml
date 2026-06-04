@@ -9,3 +9,18 @@ entrypoint = "./functions/send-push/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/send-push/*.html" ]
+
+[functions.create-checkout]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-checkout/index.ts"
+
+[functions.customer-portal]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/customer-portal/index.ts"
+
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"

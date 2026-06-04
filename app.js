@@ -108,6 +108,8 @@ let leagueMemberCache = [];
 let leagueGameCache = [];
 let leagueTournamentCache = [];
 let leagueChatCache = [];
+let leaguePlusCache = new Map();
+let leagueSubscriptionCache = new Map();
 let leagueRealtimeChannel = null;
 let friendRequestCache = [];
 let friendRealtimeChannel = null;
@@ -246,6 +248,10 @@ const els = {
   rosterProfileTitle: document.querySelector("#rosterProfileTitle"),
   rosterProfileContent: document.querySelector("#rosterProfileContent"),
   leagueSettingsForm: document.querySelector("#leagueSettingsForm"),
+  leaguePlusSetting: document.querySelector("#leaguePlusSetting"),
+  leaguePlusTitle: document.querySelector("#leaguePlusTitle"),
+  leaguePlusStatus: document.querySelector("#leaguePlusStatus"),
+  leaguePlusBtn: document.querySelector("#leaguePlusBtn"),
   ownerTransferControls: document.querySelector("#ownerTransferControls"),
   transferOwnershipSelect: document.querySelector("#transferOwnershipSelect"),
   transferOwnershipBtn: document.querySelector("#transferOwnershipBtn"),
@@ -1600,6 +1606,7 @@ function bindEvents() {
     event.preventDefault();
     await updateCloudLeagueSettings(new FormData(els.leagueSettingsForm));
   });
+  els.leaguePlusBtn?.addEventListener("click", openLeaguePlusBilling);
   els.openLeagueRulesBtn.addEventListener("click", openLeagueRules);
   els.editLeagueRulesBtn.addEventListener("click", openLeagueRulesEditor);
   els.disableAppRulesBtn.addEventListener("click", () => {
@@ -2588,7 +2595,7 @@ function leagueRuleStatLabel(key, label) {
 
 function leagueScoringRulesNote() {
   const rules = leagueScoringRules();
-  const labels = [rules.sinkAutoWin ? "Sink = automatic win" : "", rules.fifaMultiplier ? "FIFAs multiply" : ""].filter(Boolean);
+  const labels = [rules.fifaMultiplier ? "FIFAs multiply" : ""].filter(Boolean);
   return labels.length ? `<div class="league-scoring-rules">${labels.map((label) => `<span>${label}</span>`).join("")}</div>` : "";
 }
 
@@ -2596,7 +2603,7 @@ function renderLeagueScoringRulesNote() {
   const note = document.querySelector("#leagueScoringRulesNote");
   if (!note) return;
   const rules = leagueScoringRules();
-  const labels = [rules.sinkAutoWin ? "Sink = automatic win" : "", rules.fifaMultiplier ? "FIFAs multiply" : ""].filter(Boolean);
+  const labels = [rules.fifaMultiplier ? "FIFAs multiply" : ""].filter(Boolean);
   note.classList.toggle("hidden", !labels.length);
   note.innerHTML = labels.map((label) => `<span>${escapeHtml(label)}</span>`).join("");
 }
@@ -3173,6 +3180,41 @@ function isActiveLeagueOwner() {
   return myLeagueMember()?.role === "owner";
 }
 
+function leagueHasPlus(leagueId = activeLeagueId) {
+  return Boolean(leaguePlusCache.get(leagueId));
+}
+
+function leagueMemberCapacity(leagueId = activeLeagueId) {
+  return leagueHasPlus(leagueId) ? 24 : 8;
+}
+
+function leagueCapacityMessage(leagueId = activeLeagueId) {
+  return `This league is full. ${leagueHasPlus(leagueId) ? "League Plus" : "Free"} leagues are capped at ${leagueMemberCapacity(leagueId)} members.`;
+}
+
+async function loadLeaguePlusData(leagueIds = []) {
+  leaguePlusCache = new Map();
+  leagueSubscriptionCache = new Map();
+  if (!authClient || !currentUser || !leagueIds.length) return;
+
+  const plusResults = await Promise.all(
+    leagueIds.map(async (leagueId) => {
+      const { data } = await authClient.rpc("has_league_plus", { target_league_id: leagueId });
+      return [leagueId, Boolean(data)];
+    }),
+  );
+  leaguePlusCache = new Map(plusResults);
+
+  const ownedLeagueIds = leagueCache.filter((league) => league.owner_id === currentUser.id).map((league) => league.id);
+  if (!ownedLeagueIds.length) return;
+  const { data, error } = await authClient.from("league_subscriptions").select("*").in("league_id", ownedLeagueIds);
+  if (error) {
+    console.warn(error);
+    return;
+  }
+  leagueSubscriptionCache = new Map((data || []).map((subscription) => [subscription.league_id, subscription]));
+}
+
 function roleRank(role) {
   return role === "owner" ? 0 : role === "co_leader" ? 1 : role === "ref" ? 2 : role === "pending" ? 4 : 3;
 }
@@ -3221,6 +3263,8 @@ async function loadLeagueData() {
     leagueGameCache = [];
     leagueTournamentCache = [];
     leagueChatCache = [];
+    leaguePlusCache = new Map();
+    leagueSubscriptionCache = new Map();
     render();
     return;
   }
@@ -3234,6 +3278,7 @@ async function loadLeagueData() {
   ]);
 
   leagueCache = [...new Map([...(openLeagues || []), ...(memberLeagues || [])].map((league) => [league.id, league])).values()];
+  await loadLeaguePlusData(leagueIds);
   leagueMemberCache = [...new Map([...(members || []), ...(memberships || [])].map((member) => [member.id, member])).values()];
   await hydrateLeagueMemberPlayerCodes();
   leagueGameCache = (games || []).map(normalizeLeagueGame);
@@ -3292,6 +3337,8 @@ function clearLeagueCloudState() {
   leagueGameCache = [];
   leagueTournamentCache = [];
   leagueChatCache = [];
+  leaguePlusCache = new Map();
+  leagueSubscriptionCache = new Map();
   activeLeagueTournamentId = "";
 }
 
@@ -4076,6 +4123,10 @@ async function acceptLeagueInvite(memberId) {
   const invite = leagueMemberCache.find((member) => member.id === memberId);
   if (!invite) return;
   if (blocksAnotherLeagueJoin(invite.league_id)) return;
+  if (leagueMembers(invite.league_id).length >= leagueMemberCapacity(invite.league_id)) {
+    alert(leagueCapacityMessage(invite.league_id));
+    return;
+  }
   const nickname = myProfileNickname();
   const { error } = await authClient
     .from("league_members")
@@ -4179,8 +4230,8 @@ async function joinOpenLeague(leagueId) {
     return;
   }
   if (blocksAnotherLeagueJoin(leagueId)) return;
-  if (leagueMembers(leagueId).length >= 50) {
-    alert("This league is full. Leagues are capped at 50 members.");
+  if (leagueMembers(leagueId).length >= leagueMemberCapacity(leagueId)) {
+    alert(leagueCapacityMessage(leagueId));
     return;
   }
   if (league.privacy !== "open") {
@@ -4231,8 +4282,8 @@ async function requestInviteOnlyLeague(leagueId) {
     alert("Your request is already pending.");
     return;
   }
-  if (leagueMembers(leagueId).length >= 50) {
-    alert("This league is full. Leagues are capped at 50 members.");
+  if (leagueMembers(leagueId).length >= leagueMemberCapacity(leagueId)) {
+    alert(leagueCapacityMessage(leagueId));
     return;
   }
 
@@ -4306,6 +4357,23 @@ async function updateCloudLeagueRules(form) {
   renderLeagueDetails();
 }
 
+async function openLeaguePlusBilling() {
+  const league = activeLeague();
+  if (!league || !isActiveLeagueOwner() || !authClient) return;
+  const functionName = leagueHasPlus(league.id) ? "customer-portal" : "create-checkout";
+  const originalText = els.leaguePlusBtn.textContent;
+  els.leaguePlusBtn.disabled = true;
+  els.leaguePlusBtn.textContent = "Opening...";
+  const { data, error } = await authClient.functions.invoke(functionName, { body: { leagueId: league.id } });
+  els.leaguePlusBtn.disabled = false;
+  els.leaguePlusBtn.textContent = originalText;
+  if (error || !data?.url) {
+    alert(data?.error || error?.message || "League Plus billing could not open.");
+    return;
+  }
+  window.location.assign(data.url);
+}
+
 async function deleteCloudLeague() {
   if (!isActiveLeagueOwner()) return;
   const { error } = await authClient.from("leagues").delete().eq("id", activeLeagueId);
@@ -4323,8 +4391,8 @@ async function deleteCloudLeague() {
 async function addCloudLeagueMember(form) {
   if (!canInviteActiveLeague()) return;
   const members = leagueMembers();
-  if (members.length >= 50) {
-    alert("This league is full. Leagues are capped at 50 members.");
+  if (members.length >= leagueMemberCapacity()) {
+    alert(leagueCapacityMessage());
     return;
   }
 
@@ -4464,6 +4532,10 @@ async function approveLeagueJoinRequest(memberId) {
   if (!canManageActiveLeague()) return;
   const request = leagueMemberCache.find((member) => member.id === memberId && member.role === "pending");
   if (!request) return;
+  if (leagueMembers(request.league_id).length >= leagueMemberCapacity(request.league_id)) {
+    alert(leagueCapacityMessage(request.league_id));
+    return;
+  }
   const { error } = await authClient.from("league_members").update({ role: "member" }).eq("id", memberId).eq("role", "pending");
   if (error) {
     alert(error.message);
@@ -5592,11 +5664,12 @@ function friendLeagueInviteKey(requestId, leagueId) {
 
 function leagueCard(league) {
   const members = leagueMembers(league.id);
+  const capacity = leagueMemberCapacity(league.id);
   const role = myLeagueMember(league.id)?.role || "";
   const isMember = Boolean(role);
   const isInAnotherLeague = myActiveLeagueMemberships().some((member) => member.league_id !== league.id);
   const requested = Boolean(myLeagueJoinRequest(league.id));
-  const isFull = members.length >= 50;
+  const isFull = members.length >= capacity;
   const action = isMember
     ? ""
     : isInAnotherLeague
@@ -5613,7 +5686,7 @@ function leagueCard(league) {
         <span>
           <strong>${escapeHtml(league.name)}</strong>
           <small>${escapeHtml(league.description || "No description")} </small>
-          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/50 - Tap to enter` : requested ? "Request pending" : isInAnotherLeague ? "Leave your league to join" : "Join to view data"}${role ? ` - ${displayRole(role)}` : ""}</em>
+          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/${capacity} - Tap to enter` : requested ? "Request pending" : isInAnotherLeague ? "Leave your league to join" : "Join to view data"}${leagueHasPlus(league.id) ? " - League Plus" : ""}${role ? ` - ${displayRole(role)}` : ""}</em>
         </span>
       </button>
       ${action}
@@ -5673,7 +5746,7 @@ function renderLeagueDetails() {
       <div>
         <h2>${escapeHtml(league.name)}</h2>
         <p>${escapeHtml(league.description || "No description yet.")}</p>
-        <div class="meta-line">${member ? `${members.length}/50 members` : "Join this league to view league data"} - ${league.privacy === "invite" ? "Invite Only" : "Open"}${role ? ` - Your role: ${displayRole(role)}` : ""}</div>
+        <div class="meta-line">${member ? `${members.length}/${leagueMemberCapacity(league.id)} members` : "Join this league to view league data"} - ${league.privacy === "invite" ? "Invite Only" : "Open"}${leagueHasPlus(league.id) ? " - League Plus" : ""}${role ? ` - Your role: ${displayRole(role)}` : ""}</div>
       </div>
     </div>
   `;
@@ -6029,6 +6102,21 @@ function renderLeagueSettings() {
   els.leaveLeagueBtn.hidden = isOwner || !member || confirmingLeaveLeague;
   els.leaveLeagueConfirm.classList.toggle("hidden", isOwner || !member || !confirmingLeaveLeague);
   els.deleteLeagueBtn.hidden = !isOwner;
+  const hasPlus = leagueHasPlus(league?.id);
+  const subscription = leagueSubscriptionCache.get(league?.id);
+  els.leaguePlusSetting?.classList.toggle("hidden", !isOwner);
+  if (els.leaguePlusStatus) {
+    els.leaguePlusStatus.textContent = hasPlus
+      ? subscription?.stripe_customer_id
+        ? "Active - up to 24 members"
+        : "Owner access - up to 24 members"
+      : "Free league - up to 8 members";
+  }
+  if (els.leaguePlusBtn) {
+    const canOpenBilling = isOwner && (!hasPlus || Boolean(subscription?.stripe_customer_id));
+    els.leaguePlusBtn.classList.toggle("hidden", !canOpenBilling);
+    els.leaguePlusBtn.textContent = hasPlus ? "Manage League Plus" : "Upgrade to League Plus";
+  }
   const transferCandidates = leagueMembers().filter((item) => item.role !== "owner" && item.user_id && item.user_id !== currentUser?.id);
   els.ownerTransferControls?.classList.toggle("hidden", !isOwner || !transferCandidates.length);
   if (els.transferOwnershipSelect) {
