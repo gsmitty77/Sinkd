@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260603-7" />
+    <link rel="stylesheet" href="styles.css?v=20260604-3" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -323,6 +323,16 @@
                 <input name="useAppRules" type="checkbox" checked />
                 Use app rules
               </label>
+              <div class="league-rule-toggles">
+                <label class="toggle-row">
+                  <span><b>Sinks are an automatic win</b><small>A sink immediately wins the league game.</small></span>
+                  <input name="sinkAutoWin" type="checkbox" />
+                </label>
+                <label class="toggle-row">
+                  <span><b>FIFAs are multiplying</b><small>FIFAs score 1, then 2, then 3 points.</small></span>
+                  <input name="fifaMultiplier" type="checkbox" />
+                </label>
+              </div>
               <label class="league-custom-rules hidden">
                 League Rules
                 <textarea name="rules" rows="7" placeholder="Type your league rules here if your group plays different."></textarea>
@@ -406,6 +416,7 @@
               <button class="tiny-action-button league-game-point-button hidden" id="leagueGamePointBtn" type="button">Game Point: 11</button>
               <button class="small-button export-button" id="leagueQuickRematchBtn" type="button">Quick Rematch</button>
               <p class="score-helper">Game point: <span id="leagueGamePointText">11</span>. Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
+              <div class="league-scoring-rules hidden" id="leagueScoringRulesNote"></div>
               <div class="regular-player-grid" id="leagueGamePlayerGrid"></div>
               <input type="hidden" name="selfSinkPlayer" value="" />
               <input type="hidden" name="selfSinkTeam" value="" />
@@ -429,7 +440,7 @@
                 <div class="league-tournament-team-field">
                   <span>Teams</span>
                   <div class="league-tournament-team-builder" id="leagueTournamentTeamBuilder"></div>
-                  <button class="small-button secondary-button compact-action-button" id="addLeagueTournamentTeamBtn" type="button">Add Team</button>
+                  <button class="small-button blue-action-button compact-action-button" id="addLeagueTournamentTeamBtn" type="button">Add Team</button>
                 </div>
                 <label>
                   Games to Win by Round
@@ -559,6 +570,9 @@
                 <label>Left <input name="logoLeft" type="color" /></label>
                 <label>Right <input name="logoRight" type="color" /></label>
               </div>
+              <button class="small-button secondary-button compact-action-button leave-league-compact" id="leaveLeagueBtn" type="button">Leave League</button>
+              <button class="primary-button compact-action-button manager-setting" type="submit">Save Settings</button>
+              <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
               <div class="owner-transfer manager-setting hidden" id="ownerTransferControls">
                 <label>
                   Transfer Ownership
@@ -566,9 +580,6 @@
                 </label>
                 <button class="small-button secondary-button compact-action-button" id="transferOwnershipBtn" type="button">Transfer Ownership</button>
               </div>
-              <button class="small-button secondary-button compact-action-button leave-league-compact" id="leaveLeagueBtn" type="button">Leave League</button>
-              <button class="primary-button compact-action-button manager-setting" type="submit">Save Settings</button>
-              <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
               <div class="leave-confirm hidden" id="leaveLeagueConfirm">
                 <span>Are you sure?</span>
                 <div class="friend-actions">
@@ -589,6 +600,16 @@
                   Use app rules
                 </label>
                 <button class="small-button secondary-button" id="disableAppRulesBtn" type="button">Disable App Rules</button>
+                <div class="league-rule-toggles">
+                  <label class="toggle-row">
+                    <span><b>Sinks are an automatic win</b><small>A sink immediately wins the league game.</small></span>
+                    <input name="sinkAutoWin" type="checkbox" />
+                  </label>
+                  <label class="toggle-row">
+                    <span><b>FIFAs are multiplying</b><small>FIFAs score 1, then 2, then 3 points.</small></span>
+                    <input name="fifaMultiplier" type="checkbox" />
+                  </label>
+                </div>
                 <label class="league-custom-rules hidden">
                   Custom League Rules
                   <textarea name="rules" rows="14" placeholder="Type your league rules here. Example: table rules, scoring notes, house penalties, toss-back rules, and anything your group argues about."></textarea>
@@ -998,6 +1019,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260603-7"></script>
+    <script src="app.js?v=20260604-3"></script>
   </body>
 </html>

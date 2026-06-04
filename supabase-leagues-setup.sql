@@ -23,6 +23,12 @@ on public.leagues (lower(btrim(name)));
 alter table public.leagues
 add column if not exists rules text default '';
 
+alter table public.leagues
+add column if not exists sink_auto_win boolean not null default false;
+
+alter table public.leagues
+add column if not exists fifa_multiplier boolean not null default false;
+
 create table if not exists public.league_members (
   id uuid primary key default gen_random_uuid(),
   league_id uuid not null references public.leagues(id) on delete cascade,

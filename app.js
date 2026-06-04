@@ -1909,6 +1909,25 @@ function bindEvents() {
     updateFormScoreFromCounters(form);
   });
 
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-auto-win-sink]");
+    if (!button) return;
+    const form = button.closest("form");
+    if (!form) return;
+    event.preventDefault();
+    const wasActive = button.classList.contains("active");
+    form.querySelectorAll("[data-auto-win-sink]").forEach((sinkButton) => sinkButton.classList.remove("active"));
+    form.querySelectorAll("[data-auto-win-sink-input]").forEach((input) => {
+      input.value = 0;
+    });
+    if (!wasActive) {
+      button.classList.add("active");
+      const input = form.elements[button.dataset.autoWinSink];
+      if (input) input.value = 1;
+    }
+    updateFormScoreFromCounters(form);
+  });
+
   document.addEventListener("change", (event) => {
     const select = event.target.closest("[data-player-select]");
     if (!select || select.value !== "__new") return;
@@ -2116,12 +2135,19 @@ function restoreFormDraft(form, draft = {}) {
     field.value = value;
   });
   refreshSelfSinkButtons(form);
+  refreshAutoWinSinkButtons(form);
 }
 
 function refreshSelfSinkButtons(form) {
   if (!form?.selfSinkPlayer) return;
   form.querySelectorAll("[data-self-sink]").forEach((button) => {
     button.classList.toggle("active", button.dataset.playerNumber === form.selfSinkPlayer.value);
+  });
+}
+
+function refreshAutoWinSinkButtons(form) {
+  form?.querySelectorAll("[data-auto-win-sink]").forEach((button) => {
+    button.classList.toggle("active", Number(form.elements[button.dataset.autoWinSink]?.value) > 0);
   });
 }
 
@@ -2149,6 +2175,7 @@ function playerStatCard(number, label) {
 function leagueGamePlayerStatCard(number, label) {
   const playerPrefix = `leaguePlayer${number}`;
   const teamIndex = number <= 2 ? 0 : 1;
+  const sinkAutoWin = leagueScoringRules().sinkAutoWin;
   return `
     <section class="player-stat-card">
       <label class="player-name">
@@ -2157,8 +2184,12 @@ function leagueGamePlayerStatCard(number, label) {
           ${leaguePlayerOptions()}
         </select>
       </label>
+      ${sinkAutoWin ? autoWinSinkButton(`${playerPrefix}_sinks`, teamIndex) : ""}
       <div class="counter-list">
-        ${leaguePlayerStatFields.map(([key, statLabel]) => counterControl(`${playerPrefix}_${key}`, statLabel, teamIndex)).join("")}
+        ${leaguePlayerStatFields
+          .filter(([key]) => !sinkAutoWin || key !== "sinks")
+          .map(([key, statLabel]) => counterControl(`${playerPrefix}_${key}`, leagueRuleStatLabel(key, statLabel), teamIndex))
+          .join("")}
       </div>
       <button class="self-sink-button" type="button" data-self-sink data-player-number="${number}" data-team-index="${teamIndex}">
         Self Sink
@@ -2449,17 +2480,30 @@ function staticPlayerStatCard(playerName, prefix) {
   `;
 }
 
-function staticBigPlayerStatCard(playerName, prefix, playerNumber, teamIndex) {
+function staticBigPlayerStatCard(playerName, prefix, playerNumber, teamIndex, sinkAutoWin = false) {
   return `
     <section class="player-stat-card compact-player-card">
       <strong>${escapeHtml(playerName)}</strong>
+      ${sinkAutoWin ? autoWinSinkButton(`${prefix}_sinks`, teamIndex) : ""}
       <div class="counter-list">
-        ${bigGameCounterFields.map(([key, statLabel]) => counterControl(`${prefix}_${key}`, statLabel, teamIndex)).join("")}
+        ${bigGameCounterFields
+          .filter(([key]) => !sinkAutoWin || key !== "sinks")
+          .map(([key, statLabel]) => counterControl(`${prefix}_${key}`, statLabel, teamIndex))
+          .join("")}
       </div>
       <button class="self-sink-button" type="button" data-self-sink data-player-number="${playerNumber}" data-team-index="${teamIndex}">
         Self Sink
       </button>
     </section>
+  `;
+}
+
+function autoWinSinkButton(inputName, teamIndex) {
+  return `
+    <button class="auto-win-sink-button" type="button" data-auto-win-sink="${inputName}" data-team-index="${teamIndex}">
+      Sink
+    </button>
+    <input name="${inputName}" type="hidden" value="0" data-auto-win-sink-input />
   `;
 }
 
@@ -2470,6 +2514,12 @@ function resetCounters(form) {
   form.querySelectorAll("[data-self-sink]").forEach((button) => {
     button.classList.remove("active");
   });
+  form.querySelectorAll("[data-auto-win-sink]").forEach((button) => {
+    button.classList.remove("active");
+  });
+  form.querySelectorAll("[data-auto-win-sink-input]").forEach((input) => {
+    input.value = 0;
+  });
   if (form.selfSinkPlayer) form.selfSinkPlayer.value = "";
   if (form.selfSinkTeam) form.selfSinkTeam.value = "";
   updateFormScoreFromCounters(form);
@@ -2478,15 +2528,77 @@ function resetCounters(form) {
 function updateFormScoreFromCounters(form) {
   if (!form?.teamAScore || !form?.teamBScore) return;
   const scores = [0, 0];
+  const statTotals = [{}, {}];
+  const leagueRules = leagueScoringRulesForForm(form);
   form.querySelectorAll(".counter-row[data-score-points]").forEach((row) => {
     const teamIndex = Number(row.dataset.teamIndex);
     const points = Number(row.dataset.scorePoints) || 0;
     const input = row.querySelector("input");
     if (!Number.isInteger(teamIndex) || teamIndex < 0 || teamIndex > 1 || !points || !input) return;
-    scores[teamIndex] += (Number(input.value) || 0) * points;
+    const count = Number(input.value) || 0;
+    const statKey = row.dataset.scoreStat;
+    statTotals[teamIndex][statKey] = (statTotals[teamIndex][statKey] || 0) + count;
+    scores[teamIndex] += count * points;
   });
+  form.querySelectorAll("[data-auto-win-sink-input]").forEach((input) => {
+    const button = form.querySelector(`[data-auto-win-sink="${input.name}"]`);
+    const teamIndex = Number(button?.dataset.teamIndex);
+    const count = Number(input.value) || 0;
+    if (!Number.isInteger(teamIndex) || teamIndex < 0 || teamIndex > 1) return;
+    statTotals[teamIndex].sinks = (statTotals[teamIndex].sinks || 0) + count;
+    scores[teamIndex] += count * scoringPointValues.sinks;
+  });
+  if (leagueRules.fifaMultiplier) {
+    scores.forEach((score, teamIndex) => {
+      const fifas = statTotals[teamIndex].fifas || 0;
+      scores[teamIndex] = score - fifas + multiplyingScore(fifas);
+    });
+  }
+  if (leagueRules.sinkAutoWin) {
+    const sinkTeams = statTotals.map((stats) => (stats.sinks || 0) > 0);
+    if (sinkTeams[0] !== sinkTeams[1]) scores[sinkTeams[0] ? 0 : 1] = Math.max(scores[sinkTeams[0] ? 0 : 1], activeLeagueGamePoint());
+  }
   form.teamAScore.value = scores[0];
   form.teamBScore.value = scores[1];
+}
+
+function multiplyingScore(count) {
+  return (count * (count + 1)) / 2;
+}
+
+function leagueScoringRules() {
+  const league = activeLeague();
+  return {
+    sinkAutoWin: Boolean(league?.sink_auto_win),
+    fifaMultiplier: Boolean(league?.fifa_multiplier),
+  };
+}
+
+function leagueScoringRulesForForm(form) {
+  const isLeagueForm = form === els.leagueGameForm || form?.matches?.(".league-tournament-match-form");
+  return isLeagueForm ? leagueScoringRules() : { sinkAutoWin: false, fifaMultiplier: false };
+}
+
+function leagueRuleStatLabel(key, label) {
+  const rules = leagueScoringRules();
+  if (key === "sinks" && rules.sinkAutoWin) return "Sinks (Auto Win)";
+  if (key === "fifas" && rules.fifaMultiplier) return "FIFAs (Multiplying)";
+  return label;
+}
+
+function leagueScoringRulesNote() {
+  const rules = leagueScoringRules();
+  const labels = [rules.sinkAutoWin ? "Sink = automatic win" : "", rules.fifaMultiplier ? "FIFAs multiply" : ""].filter(Boolean);
+  return labels.length ? `<div class="league-scoring-rules">${labels.map((label) => `<span>${label}</span>`).join("")}</div>` : "";
+}
+
+function renderLeagueScoringRulesNote() {
+  const note = document.querySelector("#leagueScoringRulesNote");
+  if (!note) return;
+  const rules = leagueScoringRules();
+  const labels = [rules.sinkAutoWin ? "Sink = automatic win" : "", rules.fifaMultiplier ? "FIFAs multiply" : ""].filter(Boolean);
+  note.classList.toggle("hidden", !labels.length);
+  note.innerHTML = labels.map((label) => `<span>${escapeHtml(label)}</span>`).join("");
 }
 
 function readRegularGameForm(form) {
@@ -2652,12 +2764,19 @@ function readBigPlayerStats(form, prefix) {
 
 function readLeaguePlayerStats(form, prefix) {
   const stats = Object.fromEntries(allStatFields.map(([key]) => [key, Number(form.get(`${prefix}_${key}`)) || 0]));
-  stats.points = pointsFromStats(stats);
+  stats.points = pointsFromLeagueStats(stats);
   return stats;
 }
 
 function pointsFromStats(stats) {
   return Object.entries(scoringPointValues).reduce((total, [key, points]) => total + (Number(stats[key]) || 0) * points, 0);
+}
+
+function pointsFromLeagueStats(stats) {
+  const points = pointsFromStats(stats);
+  if (!leagueScoringRules().fifaMultiplier) return points;
+  const fifas = Number(stats.fifas) || 0;
+  return points - fifas + multiplyingScore(fifas);
 }
 
 function playerStatsFromNames(form, teamPrefix, players) {
@@ -3401,8 +3520,17 @@ function openLeagueRules() {
   if (!league) return;
   const customRules = cleanText(league.rules);
   const rulesText = customRules || defaultLeagueRulesText();
+  const scoringRules = [
+    league.sink_auto_win ? "Sinks are an automatic win." : "",
+    league.fifa_multiplier ? "FIFAs multiply: first is 1 point, second is 2, third is 3, and so on." : "",
+  ].filter(Boolean);
   els.leagueRulesTitle.textContent = customRules ? `${league.name} Rules` : "House Rules We Play With";
   els.leagueRulesContent.innerHTML = `
+    ${
+      scoringRules.length
+        ? `<h3>League Scoring Settings</h3><ul>${scoringRules.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`
+        : ""
+    }
     <h3>${customRules ? "Custom League Rules" : "Default House Rules"}</h3>
     <ul>
       ${rulesText
@@ -3424,6 +3552,8 @@ function openLeagueRulesEditor() {
   leagueDetailTab = "rulesEdit";
   renderLeagueDetails();
   els.leagueRulesEditForm.elements.useAppRules.checked = !cleanText(league.rules);
+  els.leagueRulesEditForm.elements.sinkAutoWin.checked = Boolean(league.sink_auto_win);
+  els.leagueRulesEditForm.elements.fifaMultiplier.checked = Boolean(league.fifa_multiplier);
   els.leagueRulesEditForm.elements.rules.value = league.rules || "";
   toggleLeagueRulesFields(els.leagueRulesEditForm);
 }
@@ -4009,6 +4139,8 @@ async function createCloudLeague(form) {
     name: leagueName,
     description: cleanText(form.get("description")),
     rules: form.get("useAppRules") === "on" ? "" : cleanText(form.get("rules")),
+    sink_auto_win: form.get("sinkAutoWin") === "on",
+    fifa_multiplier: form.get("fifaMultiplier") === "on",
     privacy: form.get("privacy") === "invite" ? "invite" : "open",
     logo_top: form.get("logoTop") || "#EFBF04",
     logo_left: form.get("logoLeft") || "#ffffff",
@@ -4159,7 +4291,11 @@ async function updateCloudLeagueRules(form) {
   if (!canManageActiveLeague()) return;
   const { error } = await authClient
     .from("leagues")
-    .update({ rules: form.get("useAppRules") === "on" ? "" : cleanText(form.get("rules")) })
+    .update({
+      rules: form.get("useAppRules") === "on" ? "" : cleanText(form.get("rules")),
+      sink_auto_win: form.get("sinkAutoWin") === "on",
+      fifa_multiplier: form.get("fifaMultiplier") === "on",
+    })
     .eq("id", activeLeagueId);
   if (error) {
     alert(error.message);
@@ -4318,8 +4454,10 @@ async function promoteLeagueRosterMember(memberId) {
 async function demoteLeagueRosterMember(memberId) {
   if (!isActiveLeagueOwner()) return;
   const member = leagueMembers().find((item) => item.id === memberId);
-  if (!member || member.user_id === currentUser?.id || member.role !== "co_leader") return;
-  await updateCloudLeagueMemberRole(memberId, "ref");
+  if (!member || member.user_id === currentUser?.id) return;
+  const nextRole = member.role === "co_leader" ? "ref" : member.role === "ref" ? "member" : "";
+  if (!nextRole) return;
+  await updateCloudLeagueMemberRole(memberId, nextRole);
 }
 
 async function approveLeagueJoinRequest(memberId) {
@@ -4346,7 +4484,7 @@ async function approveLeagueJoinRequest(memberId) {
 async function removeCloudLeagueMember(memberId) {
   if (!canManageActiveLeague()) return;
   const member = leagueMembers().find((item) => item.id === memberId);
-  const allowedRoles = isActiveLeagueOwner() ? ["member", "pending", "co_leader"] : ["member", "pending"];
+  const allowedRoles = isActiveLeagueOwner() ? ["member", "pending", "ref", "co_leader"] : ["member", "pending", "ref"];
   if (!member || member.user_id === currentUser?.id || !allowedRoles.includes(member.role)) return;
   const { error } = await authClient.from("league_members").delete().eq("id", memberId).in("role", allowedRoles);
   if (error) alert(error.message);
@@ -4509,6 +4647,7 @@ async function logLeagueTournamentMatch(tournamentId, matchId, form) {
   game.source = "league_tournament";
   game.leagueId = activeLeagueId;
   game.leagueTournamentId = tournament.id;
+  applyLeagueGameRules(game);
   const seriesComplete = addTournamentGameToMatch(tournament, match, game);
   if (seriesComplete) {
     advanceWinner(tournament, match);
@@ -4580,6 +4719,7 @@ function populateLeagueGameForm(game) {
     });
   });
   updateFormScoreFromCounters(form);
+  refreshAutoWinSinkButtons(form);
 
   form.selfSinkPlayer.value = "";
   form.selfSinkTeam.value = "";
@@ -4614,7 +4754,7 @@ function readLeagueGameForm(form) {
   const teamA = buildGameTeam(players.slice(0, 2), Number(form.get("teamAScore")) || 0);
   const teamB = buildGameTeam(players.slice(2, 4), Number(form.get("teamBScore")) || 0);
   const winnerIndex = selfSinkTeam === null ? (teamA.score >= teamB.score ? 0 : 1) : selfSinkTeam === 0 ? 1 : 0;
-  return {
+  return applyLeagueGameRules({
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     source: "league",
@@ -4624,7 +4764,23 @@ function readLeagueGameForm(form) {
     playerStats: Object.fromEntries(players.map((player) => [player.name, player.stats])),
     selfSinkPlayer: selfSinkPlayer ? players[selfSinkPlayer - 1]?.name : "",
     selfSinkTeam,
-  };
+  });
+}
+
+function applyLeagueGameRules(game) {
+  const rules = leagueScoringRules();
+  if (rules.fifaMultiplier) {
+    game.teams.forEach((team) => {
+      Object.values(team.playerStats || {}).forEach((stats) => {
+        stats.points = pointsFromLeagueStats(stats);
+      });
+      team.stats = sumStats(Object.values(team.playerStats || {}));
+    });
+  }
+  if (!rules.sinkAutoWin || game.selfSinkTeam !== null) return game;
+  const sinkTeams = game.teams.map((team) => (team.stats.sinks || 0) > 0);
+  if (sinkTeams[0] !== sinkTeams[1]) game.winnerIndex = sinkTeams[0] ? 0 : 1;
+  return game;
 }
 
 function buildGameTeam(players, score) {
@@ -4894,7 +5050,6 @@ function renderBigGames() {
 }
 
 function gameCard(game) {
-  const [teamA, teamB] = game.teams;
   const winner = game.teams[game.winnerIndex];
   const selfSinkNote = game.selfSinkPlayer
     ? `<div class="meta-line self-sink-note">${escapeHtml(game.selfSinkPlayer)} self sank. ${escapeHtml(winner.name)} wins.</div>`
@@ -4912,8 +5067,6 @@ function gameCard(game) {
       ${selfSinkNote}
       <div class="meta-line logged-winner-line">Winner: ${escapeHtml(winner.name)} - ${formatDate(game.createdAt)}</div>
       <div class="card-actions game-history-actions">${deleteButton}</div>
-      <div class="meta-line">Winner: ${escapeHtml(winner.name)} · ${formatDate(game.createdAt)}</div>
-      <div class="meta-line">${statSummary(teamA)} · ${statSummary(teamB)}</div>
     </article>
   `;
 }
@@ -5069,12 +5222,12 @@ function matchCard(tournament, match) {
   `;
 }
 
-function tournamentMatchForm(match) {
+function tournamentMatchForm(match, leagueMode = false) {
   return `
     <form class="match-form tournament-big-form" data-match-id="${match.id}">
       <p class="score-helper">Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
       <div class="match-player-stats">
-        ${tournamentPlayerStatsForm(match)}
+        ${tournamentPlayerStatsForm(match, leagueMode)}
       </div>
       <input type="hidden" name="selfSinkPlayer" value="" />
       <input type="hidden" name="selfSinkTeam" value="" />
@@ -5093,13 +5246,14 @@ function tournamentMatchForm(match) {
   `;
 }
 
-function tournamentPlayerStatsForm(match) {
+function tournamentPlayerStatsForm(match, leagueMode = false) {
   let playerNumber = 1;
+  const sinkAutoWin = leagueMode && leagueScoringRules().sinkAutoWin;
   const teamAPlayers = match.teamA.players
-    .map((player, index) => staticBigPlayerStatCard(player, `tournamentPlayer${index + 1}`, playerNumber++, 0))
+    .map((player, index) => staticBigPlayerStatCard(player, `tournamentPlayer${index + 1}`, playerNumber++, 0, sinkAutoWin))
     .join("");
   const teamBPlayers = match.teamB.players
-    .map((player, index) => staticBigPlayerStatCard(player, `tournamentPlayer${match.teamA.players.length + index + 1}`, playerNumber++, 1))
+    .map((player, index) => staticBigPlayerStatCard(player, `tournamentPlayer${match.teamA.players.length + index + 1}`, playerNumber++, 1, sinkAutoWin))
     .join("");
 
   return `
@@ -5507,6 +5661,8 @@ function renderLeagueDetails() {
   });
   if (leagueDetailTab === "rulesEdit" && canManage) {
     els.leagueRulesEditForm.elements.useAppRules.checked = !cleanText(league.rules);
+    els.leagueRulesEditForm.elements.sinkAutoWin.checked = Boolean(league.sink_auto_win);
+    els.leagueRulesEditForm.elements.fifaMultiplier.checked = Boolean(league.fifa_multiplier);
     els.leagueRulesEditForm.elements.rules.value = league.rules || "";
     toggleLeagueRulesFields(els.leagueRulesEditForm);
   }
@@ -5539,6 +5695,7 @@ function renderLeagueGames() {
   const canLog = canLogActiveLeagueGames();
   els.leagueGameForm.classList.toggle("hidden", !canLog);
   renderGamePointButtons();
+  renderLeagueScoringRulesNote();
   buildLeagueGamePlayerCards();
   const games = leagueGames();
   els.leagueQuickRematchBtn.disabled = !games.length;
@@ -5662,9 +5819,13 @@ function leagueTournamentMatchCard(tournament, match, canLog) {
 }
 
 function leagueTournamentMatchForm(tournament, match) {
-  return tournamentMatchForm(match)
+  let form = tournamentMatchForm(match, true)
     .replace('class="match-form tournament-big-form"', `class="match-form tournament-big-form league-tournament-match-form" data-tournament-id="${tournament.id}"`)
     .replace("Log Tournament Game", "Log League Tournament Game");
+  const rules = leagueScoringRules();
+  if (rules.fifaMultiplier) form = form.replaceAll(">FIFAs<", ">FIFAs (Multiplying)<");
+  const note = leagueScoringRulesNote();
+  return note ? form.replace('<p class="score-helper">', `${note}<p class="score-helper">`) : form;
 }
 
 function renderLeagueGameDetail() {
@@ -5743,7 +5904,13 @@ function renderLeagueStats() {
   const stats = computeLeagueStats();
   const players = leagueMembers()
     .map((member) => ({ ...member, stats: stats.players[member.display_name.toLowerCase()] || emptyBucket() }))
-    .sort((a, b) => b.stats.wins - a.stats.wins || winPercent(b.stats) - winPercent(a.stats) || b.stats.sinks - a.stats.sinks);
+    .sort(
+      (a, b) =>
+        b.stats.wins - a.stats.wins ||
+        winPercent(b.stats) - winPercent(a.stats) ||
+        b.stats.sinks - a.stats.sinks ||
+        (a.nickname || a.display_name).localeCompare(b.nickname || b.display_name),
+    );
 
   els.leaguePlayerStats.innerHTML = players.length
     ? players.map(leagueRosterCard).join("")
@@ -6019,8 +6186,10 @@ function leagueRosterCard(member) {
   const code = normalizePlayerCode(member.player_code);
   const isSelf = member.user_id === currentUser?.id;
   const canPromote = isActiveLeagueOwner() && !isSelf && ["member", "ref"].includes(member.role);
-  const canDemote = isActiveLeagueOwner() && !isSelf && member.role === "co_leader";
-  const canKick = !isSelf && (member.role === "member" ? canManageActiveLeague() : member.role === "co_leader" && isActiveLeagueOwner());
+  const canDemote = isActiveLeagueOwner() && !isSelf && ["ref", "co_leader"].includes(member.role);
+  const canKick =
+    !isSelf &&
+    (["member", "ref"].includes(member.role) ? canManageActiveLeague() : member.role === "co_leader" && isActiveLeagueOwner());
   const actions =
     canPromote || canDemote || canKick
       ? `<div class="roster-management-actions">

@@ -828,6 +828,23 @@ legend {
   color: #ffffff;
 }
 
+.auto-win-sink-button {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--blue) 18%, transparent);
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.auto-win-sink-button.active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #ffffff;
+}
+
 .player-name input,
 .player-name select {
   min-height: 44px;
@@ -1027,9 +1044,16 @@ legend {
 .league-tournament-team-field {
   display: grid;
   gap: 10px;
+  margin-bottom: 14px;
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 900;
+}
+
+.blue-action-button {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #ffffff;
 }
 
 .league-tournament-team-builder {
@@ -1317,6 +1341,83 @@ legend {
   width: 18px;
   height: 18px;
   accent-color: var(--accent);
+}
+
+.league-rule-toggles {
+  display: grid;
+  gap: 8px;
+}
+
+.toggle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.toggle-row span,
+.toggle-row small {
+  display: block;
+}
+
+.toggle-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.toggle-row input {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  margin: 0;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  cursor: pointer;
+}
+
+.toggle-row input::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink);
+  content: "";
+  transition: transform 160ms ease;
+}
+
+.toggle-row input:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.toggle-row input:checked::after {
+  transform: translateX(20px);
+  background: var(--panel);
+}
+
+.league-scoring-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+
+.league-scoring-rules span {
+  padding: 5px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 0.7rem;
+  font-weight: 900;
 }
 
 .league-custom-rules {
@@ -2503,6 +2604,7 @@ legend {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: stretch;
+  min-height: 116px;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2519,12 +2621,12 @@ legend {
 .roster-management-actions {
   display: grid;
   width: 72px;
-  gap: 6px;
+  gap: 4px;
   align-content: center;
 }
 
 .roster-management-actions .small-button {
-  min-height: 30px;
+  min-height: 28px;
   margin: 0;
   padding: 0 6px;
   font-size: 0.68rem;
@@ -3394,4 +3496,11 @@ td {
 .logged-score-team {
   border: 0;
   background: transparent;
+}
+
+.game-card {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
 }
