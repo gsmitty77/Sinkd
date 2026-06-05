@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260604-5" />
+    <link rel="stylesheet" href="styles.css?v=20260605-3" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -57,7 +57,7 @@
       <div class="intro-sheet">
         <p class="intro-kicker">Welcome to</p>
         <img class="intro-logo" src="assets/splash-logo.svg" alt="" />
-        <h2>Sinkd</h2>
+        <h2 class="intro-wordmark">Sinkd</h2>
         <p class="intro-lead">A quick guide to what each tab does before you start tracking.</p>
         <div class="intro-grid">
           <article><strong>Quick Log</strong><span>Log fast local games and keep lifetime stats moving.</span></article>
@@ -325,11 +325,11 @@
               </label>
               <div class="league-rule-toggles">
                 <label class="toggle-row">
-                  <span><b>Sinks are an automatic win</b><small>A sink immediately wins the league game.</small></span>
+                  <span><b>Sink Auto-Win</b><small>Sink button decides the game.</small></span>
                   <input name="sinkAutoWin" type="checkbox" />
                 </label>
                 <label class="toggle-row">
-                  <span><b>FIFAs are multiplying</b><small>FIFAs score 1, then 2, then 3 points.</small></span>
+                  <span><b>FIFA Multiplier</b><small>FIFAs scale 1, 2, 3...</small></span>
                   <input name="fifaMultiplier" type="checkbox" />
                 </label>
               </div>
@@ -575,10 +575,13 @@
               <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
               <section class="league-plus-setting hidden" id="leaguePlusSetting">
                 <div>
-                  <strong id="leaguePlusTitle">League Plus</strong>
+                  <strong id="leaguePlusTitle">League Plan</strong>
                   <span id="leaguePlusStatus">Free league - up to 8 members</span>
                 </div>
-                <button class="small-button export-button compact-action-button hidden" id="leaguePlusBtn" type="button">Upgrade to League Plus</button>
+                <div class="league-plan-actions">
+                  <button class="small-button export-button compact-action-button hidden" id="leaguePlusBtn" type="button">Upgrade to League Plus</button>
+                  <button class="small-button secondary-button compact-action-button hidden" id="leagueMaxBtn" type="button">Upgrade to Leagues MAX</button>
+                </div>
               </section>
               <div class="owner-transfer manager-setting hidden" id="ownerTransferControls">
                 <label>
@@ -609,11 +612,11 @@
                 <button class="small-button secondary-button" id="disableAppRulesBtn" type="button">Disable App Rules</button>
                 <div class="league-rule-toggles">
                   <label class="toggle-row">
-                    <span><b>Sinks are an automatic win</b><small>A sink immediately wins the league game.</small></span>
+                    <span><b>Sink Auto-Win</b><small>Sink button decides the game.</small></span>
                     <input name="sinkAutoWin" type="checkbox" />
                   </label>
                   <label class="toggle-row">
-                    <span><b>FIFAs are multiplying</b><small>FIFAs score 1, then 2, then 3 points.</small></span>
+                    <span><b>FIFA Multiplier</b><small>FIFAs scale 1, 2, 3...</small></span>
                     <input name="fifaMultiplier" type="checkbox" />
                   </label>
                 </div>
@@ -1026,6 +1029,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260604-5"></script>
+    <script src="app.js?v=20260605-1"></script>
   </body>
 </html>

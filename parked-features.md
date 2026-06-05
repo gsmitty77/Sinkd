@@ -58,9 +58,9 @@ Future Supabase version should probably use:
 - linked to Supabase `auth.users.id`
 - fields like display name, nickname, avatar, role, created date.
 
-## Premium / League+
+## Premium / League Plans
 
-Concept: keep the core app useful for free, then offer a small per-league upgrade for bigger or more serious leagues.
+Concept: keep the core app useful for free, then offer per-league upgrades for bigger or more serious leagues.
 
 Free:
 - Unlimited regular game logging.
@@ -71,20 +71,49 @@ Free:
 - Stats.
 - Rankings.
 - Profile / career stats.
+- PDF exports.
+- Basic league chat.
 
-League+:
+League Plus:
 - Price idea: $0.99/month per league.
-- Increase league capacity from 8 to 50 members.
+- Increase league capacity from 8 to 24 members.
 - Owner, Co-Leader, and Ref tools.
 - League customization.
-- Advanced rankings.
-- Season history later.
-- League records later.
-- Additional future features.
+- Seasons.
+- Archived seasons.
+- Season awards.
+
+Leagues MAX:
+- Price idea: $1.99/month per league.
+- Increase league capacity from 24 to 100 members.
+- Weekly reports.
+- Commissioner tools.
+- Custom reports.
+- Up to 3 custom league badges.
+- Scheduled games.
+- League announcements.
+- League-wide polls.
+- Enhanced season awards.
 
 Notes:
 - Charge per league instead of per user so friends can join without each person needing to pay.
-- Keep this parked until the app has real league usage and the paid features feel obvious.
+- Free leagues can get a 7-day League Plus trial later.
+- League Plus leagues can get a 7-day Leagues MAX trial later.
+
+## Season Stat Rules
+
+When seasons are implemented, season data can reset without touching lifetime progress.
+
+Reset when a season ends:
+- Season stats.
+- Season rankings.
+- Season awards.
+
+Never reset when a season ends:
+- League lifetime stats.
+- Player career stats.
+- Badges.
+- Badge progress.
 
 ## 21+ Entrance Gate
 

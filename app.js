@@ -109,6 +109,7 @@ let leagueGameCache = [];
 let leagueTournamentCache = [];
 let leagueChatCache = [];
 let leaguePlusCache = new Map();
+let leaguePlanCache = new Map();
 let leagueSubscriptionCache = new Map();
 let leagueRealtimeChannel = null;
 let friendRequestCache = [];
@@ -252,6 +253,7 @@ const els = {
   leaguePlusTitle: document.querySelector("#leaguePlusTitle"),
   leaguePlusStatus: document.querySelector("#leaguePlusStatus"),
   leaguePlusBtn: document.querySelector("#leaguePlusBtn"),
+  leagueMaxBtn: document.querySelector("#leagueMaxBtn"),
   ownerTransferControls: document.querySelector("#ownerTransferControls"),
   transferOwnershipSelect: document.querySelector("#transferOwnershipSelect"),
   transferOwnershipBtn: document.querySelector("#transferOwnershipBtn"),
@@ -1275,20 +1277,30 @@ function bindEvents() {
     const form = new FormData(els.profileForm);
     const nickname = cleanText(form.get("nickname"));
     if (!nickname) return;
+    const previousProfile = state.myProfile ? { ...state.myProfile } : null;
+    const previousNickname = myProfileNickname();
+    const aliases = mergePlayerNames([...(previousProfile?.aliases || []), previousNickname].filter((name) => profileKey(name) !== profileKey(nickname)));
+    if (previousNickname && profileKey(previousNickname) !== profileKey(nickname)) {
+      migrateLocalPlayerName(previousNickname, nickname);
+    }
 
     state.myProfile = {
       name: nickname,
       nickname,
-      playerCode: normalizePlayerCode(state.myProfile?.playerCode) || generatePlayerCode(),
+      playerCode: normalizePlayerCode(previousProfile?.playerCode) || generatePlayerCode(),
       preferredPartner: cleanText(form.get("preferredPartner")),
       cupColor: form.get("cupColor") || "#d71920",
       notes: cleanText(form.get("notes")),
-      email: currentUser?.email || state.myProfile?.email || "",
+      aliases,
+      email: currentUser?.email || previousProfile?.email || "",
       updatedAt: new Date().toISOString(),
     };
     editingMyProfile = false;
     saveState();
     saveMyProfileToCloud();
+    if (previousNickname && profileKey(previousNickname) !== profileKey(nickname)) {
+      migrateCloudPlayerName(previousNickname, nickname);
+    }
     syncMyLeagueProfile();
     buildRegularPlayerCards();
     buildBigGamePlayerCards();
@@ -1581,7 +1593,7 @@ function bindEvents() {
   els.leagueCompareForm.addEventListener("change", () => {
     const stats = computeLeagueStats();
     const players = leagueMembers()
-      .map((member) => ({ ...member, stats: stats.players[member.display_name.toLowerCase()] || emptyBucket() }))
+      .map((member) => ({ ...member, stats: statsForLeagueMember(stats.players, member) }))
       .sort((a, b) => b.stats.wins - a.stats.wins || winPercent(b.stats) - winPercent(a.stats) || b.stats.sinks - a.stats.sinks);
     renderLeagueCompare(players);
   });
@@ -1606,7 +1618,8 @@ function bindEvents() {
     event.preventDefault();
     await updateCloudLeagueSettings(new FormData(els.leagueSettingsForm));
   });
-  els.leaguePlusBtn?.addEventListener("click", openLeaguePlusBilling);
+  els.leaguePlusBtn?.addEventListener("click", () => openLeagueBilling("plus"));
+  els.leagueMaxBtn?.addEventListener("click", () => openLeagueBilling("max"));
   els.openLeagueRulesBtn.addEventListener("click", openLeagueRules);
   els.editLeagueRulesBtn.addEventListener("click", openLeagueRulesEditor);
   els.disableAppRulesBtn.addEventListener("click", () => {
@@ -2333,6 +2346,67 @@ function upsertPlayerProfile(playerName, updates = {}) {
 
 function profileKey(playerName) {
   return cleanText(playerName).toLowerCase();
+}
+
+function profileNameAliases(profile = state.myProfile) {
+  return mergePlayerNames([profile?.nickname, profile?.name, ...(profile?.aliases || [])].filter(Boolean));
+}
+
+function migrateLocalPlayerName(oldName, newName) {
+  const oldKey = profileKey(oldName);
+  const cleanNew = cleanText(newName);
+  if (!oldKey || !cleanNew || oldKey === profileKey(cleanNew)) return;
+  [...state.regularGames, ...state.bigGames, ...state.tournaments.flatMap((tournament) => tournament.rounds.flatMap((round) => round.matches.flatMap(matchLoggedGames)))].forEach((game) => {
+    renamePlayerInGame(game, oldName, cleanNew);
+  });
+  state.players = mergePlayerNames([...state.players.filter((player) => profileKey(player) !== oldKey), cleanNew]);
+}
+
+function renamePlayerInGame(game, oldName, newName) {
+  const oldKey = profileKey(oldName);
+  if (!game?.teams?.length || !oldKey) return false;
+  let changed = false;
+  game.teams.forEach((team) => {
+    team.players = (team.players || []).map((player) => {
+      if (profileKey(player) !== oldKey) return player;
+      changed = true;
+      return newName;
+    });
+    if (team.playerStats) {
+      Object.keys(team.playerStats).forEach((player) => {
+        if (profileKey(player) !== oldKey) return;
+        team.playerStats[newName] = mergeSingleGameStats(team.playerStats[newName], team.playerStats[player]);
+        delete team.playerStats[player];
+        changed = true;
+      });
+    }
+    team.name = (team.players || []).join(" / ") || team.name;
+  });
+  if (game.playerStats) {
+    Object.keys(game.playerStats).forEach((player) => {
+      if (profileKey(player) !== oldKey) return;
+      game.playerStats[newName] = mergeSingleGameStats(game.playerStats[newName], game.playerStats[player]);
+      delete game.playerStats[player];
+      changed = true;
+    });
+  }
+  if (profileKey(game.selfSinkPlayer) === oldKey) {
+    game.selfSinkPlayer = newName;
+    changed = true;
+  }
+  return changed;
+}
+
+function mergeSingleGameStats(existing = {}, incoming = {}) {
+  const merged = { ...(existing || {}) };
+  allStatFields.forEach(([key]) => {
+    merged[key] = (Number(merged[key]) || 0) + (Number(incoming[key]) || 0);
+  });
+  return merged;
+}
+
+function cloneData(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function mergePlayerNames(players) {
@@ -3180,30 +3254,51 @@ function isActiveLeagueOwner() {
   return myLeagueMember()?.role === "owner";
 }
 
+function normalizeLeaguePlan(plan = "") {
+  return plan === "max" || plan === "plus" ? plan : "free";
+}
+
+function leaguePlan(leagueId = activeLeagueId) {
+  return normalizeLeaguePlan(leaguePlanCache.get(leagueId) || (leaguePlusCache.get(leagueId) ? "plus" : "free"));
+}
+
+function leaguePlanLabel(leagueId = activeLeagueId) {
+  const plan = leaguePlan(leagueId);
+  return plan === "max" ? "Leagues MAX" : plan === "plus" ? "League Plus" : "Free";
+}
+
 function leagueHasPlus(leagueId = activeLeagueId) {
-  return Boolean(leaguePlusCache.get(leagueId));
+  return ["plus", "max"].includes(leaguePlan(leagueId));
+}
+
+function leagueHasMax(leagueId = activeLeagueId) {
+  return leaguePlan(leagueId) === "max";
 }
 
 function leagueMemberCapacity(leagueId = activeLeagueId) {
-  return leagueHasPlus(leagueId) ? 24 : 8;
+  return leagueHasMax(leagueId) ? 100 : leagueHasPlus(leagueId) ? 24 : 8;
 }
 
 function leagueCapacityMessage(leagueId = activeLeagueId) {
-  return `This league is full. ${leagueHasPlus(leagueId) ? "League Plus" : "Free"} leagues are capped at ${leagueMemberCapacity(leagueId)} members.`;
+  return `This league is full. ${leaguePlanLabel(leagueId)} leagues are capped at ${leagueMemberCapacity(leagueId)} members.`;
 }
 
 async function loadLeaguePlusData(leagueIds = []) {
   leaguePlusCache = new Map();
+  leaguePlanCache = new Map();
   leagueSubscriptionCache = new Map();
   if (!authClient || !currentUser || !leagueIds.length) return;
 
-  const plusResults = await Promise.all(
+  const planResults = await Promise.all(
     leagueIds.map(async (leagueId) => {
+      const { data: plan, error: planError } = await authClient.rpc("league_subscription_plan", { target_league_id: leagueId });
+      if (!planError) return [leagueId, normalizeLeaguePlan(plan)];
       const { data } = await authClient.rpc("has_league_plus", { target_league_id: leagueId });
-      return [leagueId, Boolean(data)];
+      return [leagueId, data ? "plus" : "free"];
     }),
   );
-  leaguePlusCache = new Map(plusResults);
+  leaguePlanCache = new Map(planResults);
+  leaguePlusCache = new Map(planResults.map(([leagueId, plan]) => [leagueId, plan === "plus" || plan === "max"]));
 
   const ownedLeagueIds = leagueCache.filter((league) => league.owner_id === currentUser.id).map((league) => league.id);
   if (!ownedLeagueIds.length) return;
@@ -3264,6 +3359,7 @@ async function loadLeagueData() {
     leagueTournamentCache = [];
     leagueChatCache = [];
     leaguePlusCache = new Map();
+    leaguePlanCache = new Map();
     leagueSubscriptionCache = new Map();
     render();
     return;
@@ -3338,6 +3434,7 @@ function clearLeagueCloudState() {
   leagueTournamentCache = [];
   leagueChatCache = [];
   leaguePlusCache = new Map();
+  leaguePlanCache = new Map();
   leagueSubscriptionCache = new Map();
   activeLeagueTournamentId = "";
 }
@@ -4357,18 +4454,25 @@ async function updateCloudLeagueRules(form) {
   renderLeagueDetails();
 }
 
-async function openLeaguePlusBilling() {
+async function openLeagueBilling(plan = "plus") {
   const league = activeLeague();
   if (!league || !isActiveLeagueOwner() || !authClient) return;
-  const functionName = leagueHasPlus(league.id) ? "customer-portal" : "create-checkout";
-  const originalText = els.leaguePlusBtn.textContent;
-  els.leaguePlusBtn.disabled = true;
-  els.leaguePlusBtn.textContent = "Opening...";
-  const { data, error } = await authClient.functions.invoke(functionName, { body: { leagueId: league.id } });
-  els.leaguePlusBtn.disabled = false;
-  els.leaguePlusBtn.textContent = originalText;
+  const normalizedPlan = normalizeLeaguePlan(plan) === "max" ? "max" : "plus";
+  const button = normalizedPlan === "max" ? els.leagueMaxBtn : els.leaguePlusBtn;
+  const currentPlan = leaguePlan(league.id);
+  const functionName = currentPlan === "free" ? "create-checkout" : "customer-portal";
+  const originalText = button?.textContent || "";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Opening...";
+  }
+  const { data, error } = await authClient.functions.invoke(functionName, { body: { leagueId: league.id, plan: normalizedPlan } });
+  if (button) {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
   if (error || !data?.url) {
-    alert(data?.error || error?.message || "League Plus billing could not open.");
+    alert(data?.error || error?.message || "League billing could not open.");
     return;
   }
   window.location.assign(data.url);
@@ -4501,6 +4605,76 @@ async function syncMyLeagueProfile() {
   }
 
   await loadLeagueData();
+}
+
+async function migrateCloudPlayerName(oldName, newName) {
+  if (!authClient || !currentUser || profileKey(oldName) === profileKey(newName)) return;
+  const myLeagueIds = myActiveLeagueMemberships().map((member) => member.league_id);
+  if (!myLeagueIds.length) return;
+
+  const gameUpdates = leagueGameCache
+    .filter((game) => myLeagueIds.includes(game.league_id || game.leagueId))
+    .map((game) => ({ original: game, copy: cloneData(game) }))
+    .filter(({ copy }) => renamePlayerInGame(copy, oldName, newName));
+
+  await Promise.all(
+    gameUpdates.map(({ original, copy }) =>
+      authClient
+        .from("league_games")
+        .update({
+          team_a_players: copy.teams[0].players,
+          team_b_players: copy.teams[1].players,
+          player_stats: copy.playerStats,
+          self_sink_player: copy.selfSinkPlayer || "",
+        })
+        .eq("id", original.id),
+    ),
+  );
+
+  const tournamentUpdates = leagueTournamentCache
+    .filter((tournament) => myLeagueIds.includes(tournament.league_id || tournament.leagueId))
+    .map((tournament) => ({ original: tournament, copy: cloneData(tournament) }))
+    .filter(({ copy }) => renamePlayerInTournament(copy, oldName, newName));
+
+  await Promise.all(
+    tournamentUpdates.map(({ original, copy }) =>
+      authClient
+        .from("league_tournaments")
+        .update({ data: leagueTournamentPayload(copy), updated_at: new Date().toISOString() })
+        .eq("id", original.id),
+    ),
+  );
+
+  if (gameUpdates.length || tournamentUpdates.length) await loadLeagueData();
+}
+
+function renamePlayerInTournament(tournament, oldName, newName) {
+  let changed = false;
+  (tournament.teams || []).forEach((team) => {
+    team.players = (team.players || []).map((player) => {
+      if (profileKey(player) !== profileKey(oldName)) return player;
+      changed = true;
+      return newName;
+    });
+    team.name = (team.players || []).join(" / ") || team.name;
+  });
+  (tournament.rounds || []).forEach((round) => {
+    (round.matches || []).forEach((match) => {
+      ["teamA", "teamB", "winner"].forEach((slot) => {
+        if (!match[slot]?.players) return;
+        match[slot].players = match[slot].players.map((player) => {
+          if (profileKey(player) !== profileKey(oldName)) return player;
+          changed = true;
+          return newName;
+        });
+        match[slot].name = match[slot].players.join(" / ") || match[slot].name;
+      });
+      matchLoggedGames(match).forEach((game) => {
+        if (renamePlayerInGame(game, oldName, newName)) changed = true;
+      });
+    });
+  });
+  return changed;
 }
 
 async function updateCloudLeagueMemberRole(memberId, role) {
@@ -5686,7 +5860,7 @@ function leagueCard(league) {
         <span>
           <strong>${escapeHtml(league.name)}</strong>
           <small>${escapeHtml(league.description || "No description")} </small>
-          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/${capacity} - Tap to enter` : requested ? "Request pending" : isInAnotherLeague ? "Leave your league to join" : "Join to view data"}${leagueHasPlus(league.id) ? " - League Plus" : ""}${role ? ` - ${displayRole(role)}` : ""}</em>
+          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/${capacity} - Tap to enter` : requested ? "Request pending" : isInAnotherLeague ? "Leave your league to join" : "Join to view data"}${leagueHasPlus(league.id) ? ` - ${leaguePlanLabel(league.id)}` : ""}${role ? ` - ${displayRole(role)}` : ""}</em>
         </span>
       </button>
       ${action}
@@ -5746,7 +5920,7 @@ function renderLeagueDetails() {
       <div>
         <h2>${escapeHtml(league.name)}</h2>
         <p>${escapeHtml(league.description || "No description yet.")}</p>
-        <div class="meta-line">${member ? `${members.length}/${leagueMemberCapacity(league.id)} members` : "Join this league to view league data"} - ${league.privacy === "invite" ? "Invite Only" : "Open"}${leagueHasPlus(league.id) ? " - League Plus" : ""}${role ? ` - Your role: ${displayRole(role)}` : ""}</div>
+        <div class="meta-line">${member ? `${members.length}/${leagueMemberCapacity(league.id)} members` : "Join this league to view league data"} - ${league.privacy === "invite" ? "Invite Only" : "Open"}${leagueHasPlus(league.id) ? ` - ${leaguePlanLabel(league.id)}` : ""}${role ? ` - Your role: ${displayRole(role)}` : ""}</div>
       </div>
     </div>
   `;
@@ -5976,7 +6150,7 @@ function gamePlayerStatsFallback(player) {
 function renderLeagueStats() {
   const stats = computeLeagueStats();
   const players = leagueMembers()
-    .map((member) => ({ ...member, stats: stats.players[member.display_name.toLowerCase()] || emptyBucket() }))
+    .map((member) => ({ ...member, stats: statsForLeagueMember(stats.players, member) }))
     .sort(
       (a, b) =>
         b.stats.wins - a.stats.wins ||
@@ -6102,20 +6276,32 @@ function renderLeagueSettings() {
   els.leaveLeagueBtn.hidden = isOwner || !member || confirmingLeaveLeague;
   els.leaveLeagueConfirm.classList.toggle("hidden", isOwner || !member || !confirmingLeaveLeague);
   els.deleteLeagueBtn.hidden = !isOwner;
-  const hasPlus = leagueHasPlus(league?.id);
+  const currentPlan = leaguePlan(league?.id);
+  const hasPlus = currentPlan === "plus" || currentPlan === "max";
+  const hasMax = currentPlan === "max";
   const subscription = leagueSubscriptionCache.get(league?.id);
   els.leaguePlusSetting?.classList.toggle("hidden", !isOwner);
+  if (els.leaguePlusTitle) els.leaguePlusTitle.textContent = "League Plan";
   if (els.leaguePlusStatus) {
-    els.leaguePlusStatus.textContent = hasPlus
+    els.leaguePlusStatus.textContent = currentPlan === "max"
       ? subscription?.stripe_customer_id
-        ? "Active - up to 24 members"
-        : "Owner access - up to 24 members"
+        ? "Leagues MAX - up to 100 members"
+        : "Owner access - Leagues MAX"
+      : currentPlan === "plus"
+      ? subscription?.stripe_customer_id
+        ? "League Plus - up to 24 members"
+        : "Owner access - League Plus"
       : "Free league - up to 8 members";
   }
   if (els.leaguePlusBtn) {
-    const canOpenBilling = isOwner && (!hasPlus || Boolean(subscription?.stripe_customer_id));
+    const canOpenBilling = isOwner && currentPlan === "free";
     els.leaguePlusBtn.classList.toggle("hidden", !canOpenBilling);
-    els.leaguePlusBtn.textContent = hasPlus ? "Manage League Plus" : "Upgrade to League Plus";
+    els.leaguePlusBtn.textContent = "Upgrade to League Plus";
+  }
+  if (els.leagueMaxBtn) {
+    const canOpenMax = isOwner && (!hasMax || Boolean(subscription?.stripe_customer_id));
+    els.leagueMaxBtn.classList.toggle("hidden", !canOpenMax);
+    els.leagueMaxBtn.textContent = hasMax ? "Manage Leagues MAX" : hasPlus ? "Upgrade to Leagues MAX" : "Upgrade to Leagues MAX";
   }
   const transferCandidates = leagueMembers().filter((item) => item.role !== "owner" && item.user_id && item.user_id !== currentUser?.id);
   els.ownerTransferControls?.classList.toggle("hidden", !isOwner || !transferCandidates.length);
@@ -6145,7 +6331,7 @@ function renderLeagueMembers() {
   els.leagueInviteForm.classList.toggle("hidden", !canInvite);
   const stats = computeLeagueStats();
   const memberRows = leagueMembers()
-    .map((member) => ({ ...member, stats: stats.players[member.display_name.toLowerCase()] || emptyBucket() }))
+    .map((member) => ({ ...member, stats: statsForLeagueMember(stats.players, member) }))
     .sort((a, b) => b.stats.wins - a.stats.wins || winPercent(b.stats) - winPercent(a.stats) || b.stats.sinks - a.stats.sinks)
     .map((member) => leagueMemberRow(member, canManage, isOwner))
     .join("");
@@ -6435,7 +6621,7 @@ function rosterProfileMember() {
   if (!activeRosterProfileMemberId) return null;
   const stats = computeLeagueStats();
   return leagueMembers()
-    .map((member) => ({ ...member, stats: stats.players[member.display_name.toLowerCase()] || emptyBucket() }))
+    .map((member) => ({ ...member, stats: statsForLeagueMember(stats.players, member) }))
     .find((member) => member.id === activeRosterProfileMemberId);
 }
 
@@ -6527,18 +6713,30 @@ function computeLeagueStats() {
   return { players, teams };
 }
 
+function statsForLeagueMember(players, member) {
+  const bucket = emptyBucket();
+  const aliases = [member.display_name, member.nickname];
+  if (member.user_id === currentUser?.id) aliases.push(...profileNameAliases());
+  mergePlayerNames(aliases).forEach((name) => {
+    mergeStatBucket(bucket, players[profileKey(name)]);
+  });
+  bucket.name = member.nickname || member.display_name || bucket.name;
+  bucket.streak = currentLeagueStreak(member.display_name);
+  return bucket;
+}
+
 function computeMyLifetimeStats(nickname = myProfileNickname()) {
   const lifetime = emptyBucket();
-  const localStats = computePlayerStats()[profileKey(nickname)]?.overall;
-  mergeStatBucket(lifetime, localStats);
+  const localAllStats = computePlayerStats();
+  const localKeys = mergePlayerNames([nickname, ...profileNameAliases()]).map(profileKey);
+  localKeys.forEach((key) => mergeStatBucket(lifetime, localAllStats[key]?.overall));
 
   leagueCache.forEach((league) => {
     const member = myLeagueMember(league.id);
     if (!member) return;
     const leagueStats = computeLeagueStatsForLeague(league.id);
-    const keys = [member.display_name, member.nickname].map(profileKey).filter(Boolean);
-    const playerStats = keys.map((key) => leagueStats.players[key]).find(Boolean);
-    mergeStatBucket(lifetime, playerStats);
+    const keys = mergePlayerNames([member.display_name, member.nickname, ...profileNameAliases()]).map(profileKey).filter(Boolean);
+    keys.forEach((key) => mergeStatBucket(lifetime, leagueStats.players[key]));
   });
 
   return lifetime;
@@ -7138,6 +7336,10 @@ function exportLeagueWeeklyReport() {
   }
   if (!myLeagueMember()) {
     alert("You can only create weekly reports for leagues you are in.");
+    return;
+  }
+  if (!leagueHasMax(activeLeagueId)) {
+    alert("Weekly reports are a Leagues MAX feature.");
     return;
   }
   openStatReport(leagueWeeklyReportHtml(), "league weekly report");

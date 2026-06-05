@@ -92,12 +92,12 @@ textarea {
 
 .splash-wordmark {
   color: #ffffff;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.4rem, 13vw, 4.1rem);
-  font-style: italic;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 0.95;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: clamp(2.35rem, 12vw, 3.95rem);
+  font-style: normal;
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 0.9;
   text-shadow: 0 14px 24px rgba(0, 0, 0, 0.24);
 }
 
@@ -152,6 +152,16 @@ textarea {
   font-size: 2.05rem;
   font-style: italic;
   letter-spacing: 0.04em;
+}
+
+.intro-wordmark {
+  color: #ffffff;
+  font-family: Arial, Helvetica, sans-serif !important;
+  font-size: 2.15rem !important;
+  font-style: normal !important;
+  font-weight: 950;
+  letter-spacing: 0 !important;
+  line-height: 0.9;
 }
 
 .intro-lead {
@@ -290,12 +300,12 @@ textarea {
 
 .auth-wordmark {
   color: #ffffff;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 2.2rem;
-  font-style: italic;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 0.95;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 2.05rem;
+  font-style: normal;
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 0.9;
 }
 
 .auth-copy {
@@ -472,11 +482,11 @@ h1 {
 
 .brand-name {
   color: #ffffff;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 2.45rem;
-  font-style: italic;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 2.28rem;
+  font-style: normal;
+  font-weight: 950;
+  letter-spacing: 0;
 }
 
 h2 {
@@ -1345,21 +1355,25 @@ legend {
 
 .league-rule-toggles {
   display: grid;
-  gap: 2px;
+  gap: 7px;
 }
 
 .toggle-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
+  grid-template-columns: minmax(0, 1fr) 38px;
   gap: 10px;
   align-items: center;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
+  min-height: 42px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   color: var(--ink);
 }
 
 .toggle-row b {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  line-height: 1.1;
 }
 
 .toggle-row span,
@@ -1370,14 +1384,14 @@ legend {
 .toggle-row small {
   margin-top: 1px;
   color: var(--muted);
-  font-size: 0.66rem;
-  line-height: 1.15;
+  font-size: 0.63rem;
+  line-height: 1.12;
 }
 
 .toggle-row input {
   position: relative;
-  width: 42px;
-  height: 24px;
+  width: 38px;
+  height: 22px;
   margin: 0;
   appearance: none;
   border: 1px solid var(--line);
@@ -1390,8 +1404,8 @@ legend {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--ink);
   content: "";
@@ -1404,7 +1418,7 @@ legend {
 }
 
 .toggle-row input:checked::after {
-  transform: translateX(18px);
+  transform: translateX(16px);
   background: var(--panel);
 }
 
@@ -2674,9 +2688,20 @@ legend {
   margin: 0;
 }
 
+.league-plan-actions {
+  display: grid;
+  gap: 7px;
+  justify-items: end;
+}
+
 @media (max-width: 480px) {
   .league-plus-setting {
     grid-template-columns: 1fr;
+  }
+
+  .league-plan-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-items: stretch;
   }
 }
 

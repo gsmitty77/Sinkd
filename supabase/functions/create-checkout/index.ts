@@ -10,13 +10,15 @@ Deno.serve(async (request) => {
     const users = userClient(authorization);
     const admin = serviceClient();
     const stripe = stripeClient();
-    const priceId = Deno.env.get("STRIPE_PRICE_ID");
-    if (!priceId) return json({ error: "League Plus price is not configured." }, 500);
+    const requestBody = await request.json();
+    const plan = requestBody.plan === "max" ? "max" : "plus";
+    const priceId = plan === "max" ? Deno.env.get("STRIPE_MAX_PRICE_ID") : Deno.env.get("STRIPE_PLUS_PRICE_ID") || Deno.env.get("STRIPE_PRICE_ID");
+    if (!priceId) return json({ error: `${plan === "max" ? "Leagues MAX" : "League Plus"} price is not configured.` }, 500);
 
     const { data: authData, error: authError } = await users.auth.getUser();
     if (authError || !authData.user) return json({ error: "Sign in again before upgrading." }, 401);
 
-    const { leagueId } = await request.json();
+    const { leagueId } = requestBody;
     if (!leagueId) return json({ error: "Choose a league." }, 400);
 
     const { data: league } = await admin.from("leagues").select("id, name, owner_id").eq("id", leagueId).maybeSingle();
@@ -46,6 +48,7 @@ Deno.serve(async (request) => {
         league_id: league.id,
         stripe_customer_id: customerId,
         stripe_price_id: priceId,
+        plan,
         status: "inactive",
       });
     }
@@ -55,10 +58,10 @@ Deno.serve(async (request) => {
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
-      success_url: `${siteUrl()}/?league_plus=success`,
-      cancel_url: `${siteUrl()}/?league_plus=cancelled`,
-      metadata: { league_id: league.id, owner_id: authData.user.id },
-      subscription_data: { metadata: { league_id: league.id, owner_id: authData.user.id } },
+      success_url: `${siteUrl()}/?league_plan=success`,
+      cancel_url: `${siteUrl()}/?league_plan=cancelled`,
+      metadata: { league_id: league.id, owner_id: authData.user.id, plan },
+      subscription_data: { metadata: { league_id: league.id, owner_id: authData.user.id, plan } },
     });
 
     return json({ url: session.url });
