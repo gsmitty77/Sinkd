@@ -68,7 +68,7 @@ const customBadgeStatOptions = {
   tinks: "tinks",
   tableHits: "table hits",
   fgOffense: "FG offense",
-  fgDefense: "Return to Sender",
+  fgDefense: "FG defense",
   fifas: "FIFAs",
   selfSinks: "self sinks",
   wins: "wins",
@@ -125,6 +125,7 @@ let leagueMemberCache = [];
 let leagueGameCache = [];
 let leagueTournamentCache = [];
 let leagueChatCache = [];
+let leaguePollVoteCache = [];
 let leaguePlusCache = new Map();
 let leaguePlanCache = new Map();
 let leagueSubscriptionCache = new Map();
@@ -254,6 +255,7 @@ const els = {
   leaguePollModal: document.querySelector("#leaguePollModal"),
   leaguePollForm: document.querySelector("#leaguePollForm"),
   closeLeaguePollBtn: document.querySelector("#closeLeaguePollBtn"),
+  addPollAnswerBtn: document.querySelector("#addPollAnswerBtn"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
   leagueWeeklyReportBtn: document.querySelector("#leagueWeeklyReportBtn"),
@@ -1640,6 +1642,7 @@ function bindEvents() {
   });
   els.createLeaguePollBtn?.addEventListener("click", openLeaguePollModal);
   els.closeLeaguePollBtn?.addEventListener("click", closeLeaguePollModal);
+  els.addPollAnswerBtn?.addEventListener("click", revealNextPollAnswer);
   els.leaguePollModal?.addEventListener("click", (event) => {
     if (event.target === els.leaguePollModal) closeLeaguePollModal();
   });
@@ -1649,9 +1652,11 @@ function bindEvents() {
     const approve = event.target.closest("[data-league-request-approve]");
     const denyRequest = event.target.closest("[data-league-request-deny]");
     const pinChat = event.target.closest("[data-pin-chat]");
+    const pollVote = event.target.closest("[data-poll-vote]");
     if (approve) await approveLeagueJoinRequest(approve.dataset.leagueRequestApprove);
     if (denyRequest) await removeCloudLeagueMember(denyRequest.dataset.leagueRequestDeny);
     if (pinChat) await togglePinnedChatMessage(pinChat.dataset.pinChat);
+    if (pollVote) await voteOnLeaguePoll(pollVote.dataset.pollVote, Number(pollVote.dataset.pollOption));
   });
   els.leagueChatList.addEventListener("pointerdown", (event) => {
     const row = event.target.closest("[data-chat-row]");
@@ -1736,6 +1741,10 @@ function bindEvents() {
     });
   });
   els.saveCustomBadgesBtn?.addEventListener("click", saveCustomLeagueBadges);
+  els.customBadgeList?.addEventListener("click", async (event) => {
+    const deleteButton = event.target.closest("[data-delete-custom-badge]");
+    if (deleteButton) await deleteCustomLeagueBadge(deleteButton.dataset.deleteCustomBadge);
+  });
   els.customBadgeTiersSelect?.addEventListener("change", renderCustomBadgeThresholdInputs);
   els.postLeagueEventBtn?.addEventListener("click", postLeagueEvent);
 
@@ -3417,6 +3426,7 @@ async function loadLeagueData() {
     leagueGameCache = [];
     leagueTournamentCache = [];
     leagueChatCache = [];
+    leaguePollVoteCache = [];
     leaguePlusCache = new Map();
     leaguePlanCache = new Map();
     leagueSubscriptionCache = new Map();
@@ -3424,12 +3434,13 @@ async function loadLeagueData() {
     return;
   }
 
-  const [{ data: memberLeagues }, { data: members }, { data: games }, { data: leagueTournaments }, { data: chatMessages }] = await Promise.all([
+  const [{ data: memberLeagues }, { data: members }, { data: games }, { data: leagueTournaments }, { data: chatMessages }, { data: pollVotes }] = await Promise.all([
     leagueIds.length ? authClient.from("leagues").select("*").in("id", leagueIds) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_members").select("*").in("league_id", memberLeagueIds) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_games").select("*").in("league_id", memberLeagueIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_tournaments").select("*").in("league_id", memberLeagueIds).order("updated_at", { ascending: false }) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_chat_messages").select("*").in("league_id", memberLeagueIds).order("created_at", { ascending: false }).limit(250) : Promise.resolve({ data: [] }),
+    memberLeagueIds.length ? authClient.from("league_poll_votes").select("*").in("league_id", memberLeagueIds) : Promise.resolve({ data: [] }),
   ]);
 
   leagueCache = [...new Map([...(openLeagues || []), ...(memberLeagues || [])].map((league) => [league.id, league])).values()];
@@ -3439,6 +3450,7 @@ async function loadLeagueData() {
   leagueGameCache = (games || []).map(normalizeLeagueGame);
   leagueTournamentCache = (leagueTournaments || []).map(normalizeLeagueTournament);
   leagueChatCache = chatMessages || [];
+  leaguePollVoteCache = pollVotes || [];
   if (activeLeagueId && !leagueCache.some((league) => league.id === activeLeagueId)) activeLeagueId = "";
   if (activeLeagueTournamentId && !leagueTournamentCache.some((tournament) => tournament.id === activeLeagueTournamentId)) activeLeagueTournamentId = "";
   buildLeagueGamePlayerCards();
@@ -3478,6 +3490,7 @@ function subscribeToLeagueChanges() {
     .on("postgres_changes", { event: "*", schema: "public", table: "league_games" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_tournaments" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_chat_messages" }, loadLeagueData)
+    .on("postgres_changes", { event: "*", schema: "public", table: "league_poll_votes" }, loadLeagueData)
     .subscribe();
 }
 
@@ -3492,6 +3505,7 @@ function clearLeagueCloudState() {
   leagueGameCache = [];
   leagueTournamentCache = [];
   leagueChatCache = [];
+  leaguePollVoteCache = [];
   leaguePlusCache = new Map();
   leaguePlanCache = new Map();
   leagueSubscriptionCache = new Map();
@@ -3966,7 +3980,7 @@ async function createLeagueChatMessage(leagueId, message, type = "system", paylo
 
 function openLeaguePollModal() {
   if (!canUseLeagueMaxTools()) return;
-  els.leaguePollForm?.reset();
+  resetLeaguePollForm();
   els.leaguePollModal?.classList.remove("hidden");
   els.leaguePollModal?.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
@@ -3978,15 +3992,55 @@ function closeLeaguePollModal() {
   document.body.classList.remove("modal-open");
 }
 
+function resetLeaguePollForm() {
+  els.leaguePollForm?.reset();
+  els.leaguePollForm?.querySelectorAll("[data-poll-extra-option]").forEach((field) => field.classList.add("hidden"));
+  if (els.addPollAnswerBtn) els.addPollAnswerBtn.classList.remove("hidden");
+}
+
+function revealNextPollAnswer() {
+  const next = [...(els.leaguePollForm?.querySelectorAll("[data-poll-extra-option].hidden") || [])][0];
+  if (!next) {
+    els.addPollAnswerBtn?.classList.add("hidden");
+    return;
+  }
+  next.classList.remove("hidden");
+  next.querySelector("input")?.focus();
+  const remaining = els.leaguePollForm?.querySelectorAll("[data-poll-extra-option].hidden").length || 0;
+  els.addPollAnswerBtn?.classList.toggle("hidden", remaining === 0);
+}
+
 async function submitLeaguePoll(event) {
   event.preventDefault();
   if (!canUseLeagueMaxTools()) return;
   const form = new FormData(els.leaguePollForm);
   const question = cleanText(form.get("question"));
-  const options = [1, 2, 3, 4].map((index) => cleanText(form.get(`option${index}`))).filter(Boolean);
+  const options = [1, 2, 3, 4, 5, 6].map((index) => cleanText(form.get(`option${index}`))).filter(Boolean);
   if (!question || options.length < 2) return;
   await createLeagueChatMessage(activeLeagueId, question, "poll", { question, options });
   closeLeaguePollModal();
+  resetLeaguePollForm();
+  await loadLeagueData();
+}
+
+async function voteOnLeaguePoll(pollId, optionIndex) {
+  if (!authClient || !currentUser || !myLeagueMember() || !pollId || Number.isNaN(optionIndex)) return;
+  const poll = leagueChatMessages().find((message) => message.id === pollId && message.type === "poll");
+  const options = Array.isArray(poll?.payload?.options) ? poll.payload.options : [];
+  if (optionIndex < 0 || optionIndex >= options.length) return;
+  const { error } = await authClient.from("league_poll_votes").upsert(
+    {
+      league_id: activeLeagueId,
+      poll_id: pollId,
+      user_id: currentUser.id,
+      option_index: optionIndex,
+    },
+    { onConflict: "poll_id,user_id" },
+  );
+  if (error) {
+    alert(error.message);
+    return;
+  }
   await loadLeagueData();
 }
 
@@ -4099,8 +4153,11 @@ function renderCustomBadgeBuilder() {
           .map(
             (badge) => `
               <article class="custom-badge-summary">
-                <strong>${escapeHtml(badge.name)}</strong>
-                <span>${escapeHtml(customBadgeStatOptions[badge.stat])} - ${badge.tiers.length} tier${badge.tiers.length === 1 ? "" : "s"}</span>
+                <div>
+                  <strong>${escapeHtml(badge.name)}</strong>
+                  <span>${escapeHtml(customBadgeStatOptions[badge.stat])} - ${badge.tiers.length} tier${badge.tiers.length === 1 ? "" : "s"}</span>
+                </div>
+                <button class="text-button danger-text" type="button" data-delete-custom-badge="${escapeHtml(badge.id)}">Delete</button>
               </article>
             `,
           )
@@ -4112,6 +4169,27 @@ function renderCustomBadgeBuilder() {
     els.saveCustomBadgesBtn.textContent = badges.length >= 3 ? "3 Badge Limit" : "Add Badge";
   }
   renderCustomBadgeThresholdInputs();
+}
+
+async function deleteCustomLeagueBadge(badgeId) {
+  if (!canUseLeagueMaxTools() || !badgeId) return;
+  const league = activeLeague();
+  const badge = customBadgeDefinitions(league).find((item) => item.id === badgeId);
+  if (!badge) return;
+  showAppConfirm({
+    title: "Delete custom badge?",
+    message: `Delete ${badge.name}?`,
+    onConfirm: async () => {
+      const badges = customBadgeDefinitions(league).filter((item) => item.id !== badgeId);
+      const { error } = await authClient.from("leagues").update({ custom_badges: badges }).eq("id", activeLeagueId);
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      await createLeagueChatMessage(activeLeagueId, `Custom badge deleted: ${badge.name}`, "system");
+      await loadLeagueData();
+    },
+  });
 }
 
 async function postLeagueEvent() {
@@ -6494,10 +6572,25 @@ function leagueChatMessageBody(message) {
   const payload = message.payload || {};
   if (message.type === "poll") {
     const options = Array.isArray(payload.options) ? payload.options : [];
+    const votes = leaguePollVoteCache.filter((vote) => vote.poll_id === message.id);
+    const myVote = votes.find((vote) => vote.user_id === currentUser?.id);
+    const totalVotes = votes.length;
     return `
       <p>${escapeHtml(payload.question || message.message)}</p>
       <div class="poll-option-list">
-        ${options.map((option) => `<span>${escapeHtml(option)}</span>`).join("")}
+        ${options
+          .map((option, index) => {
+            const count = votes.filter((vote) => Number(vote.option_index) === index).length;
+            const percent = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
+            const selected = Number(myVote?.option_index) === index;
+            return `
+              <button class="poll-option-button ${selected ? "selected" : ""}" type="button" data-poll-vote="${message.id}" data-poll-option="${index}">
+                <span>${escapeHtml(option)}</span>
+                <b>${count} - ${percent}%</b>
+              </button>
+            `;
+          })
+          .join("")}
       </div>
     `;
   }
