@@ -3031,6 +3031,38 @@ legend {
   gap: 9px;
 }
 
+.custom-badge-list {
+  display: grid;
+  gap: 7px;
+}
+
+.custom-badge-summary {
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.custom-badge-summary strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.custom-badge-summary span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.custom-badge-thresholds {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .list {
   display: grid;
   gap: 10px;

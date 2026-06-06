@@ -607,10 +607,33 @@
                   <span id="commissionerToolsStatus">Leagues MAX</span>
                 </div>
                 <div class="commissioner-tool-form" id="customBadgesForm">
-                  <label>Custom Badge 1 <input name="badge1" maxlength="24" placeholder="Clutch Thrower" /></label>
-                  <label>Custom Badge 2 <input name="badge2" maxlength="24" placeholder="Table Boss" /></label>
-                  <label>Custom Badge 3 <input name="badge3" maxlength="24" placeholder="Ice Cold" /></label>
-                  <button class="small-button export-button compact-action-button" id="saveCustomBadgesBtn" type="button">Save Badges</button>
+                  <div class="custom-badge-list" id="customBadgeList"></div>
+                  <label>Badge Name <input name="badgeName" maxlength="24" placeholder="Clutch Thrower" /></label>
+                  <label>
+                    Stat
+                    <select name="badgeStat">
+                      <option value="sinks">Sinks</option>
+                      <option value="tinks">Tinks</option>
+                      <option value="tableHits">Table Hits</option>
+                      <option value="fgOffense">FG Offense</option>
+                      <option value="fgDefense">Return to Sender</option>
+                      <option value="fifas">FIFAs</option>
+                      <option value="selfSinks">Self Sinks</option>
+                      <option value="wins">Wins</option>
+                      <option value="points">Total Points</option>
+                    </select>
+                  </label>
+                  <label>
+                    Tiers
+                    <select name="badgeTiers" id="customBadgeTiersSelect">
+                      <option value="1">1 tier: Diamond only</option>
+                      <option value="2">2 tiers: Gold, Diamond</option>
+                      <option value="3">3 tiers: Silver, Gold, Diamond</option>
+                      <option value="4" selected>4 tiers: Copper, Silver, Gold, Diamond</option>
+                    </select>
+                  </label>
+                  <div class="custom-badge-thresholds" id="customBadgeThresholds"></div>
+                  <button class="small-button export-button compact-action-button" id="saveCustomBadgesBtn" type="button">Add Badge</button>
                 </div>
                 <div class="commissioner-tool-form" id="leagueEventForm">
                   <label>Scheduled Game/Event <input name="title" maxlength="40" placeholder="Friday Night Games" required /></label>

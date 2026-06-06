@@ -57,6 +57,23 @@ const secretAchievementDefinitions = [
   { key: "selfSinks", label: "L Teammate", threshold: 10, tierClass: "diamond" },
 ];
 const achievementTiers = ["Copper", "Silver", "Gold", "Diamond"];
+const customBadgeTierMap = {
+  1: ["Diamond"],
+  2: ["Gold", "Diamond"],
+  3: ["Silver", "Gold", "Diamond"],
+  4: ["Copper", "Silver", "Gold", "Diamond"],
+};
+const customBadgeStatOptions = {
+  sinks: "sinks",
+  tinks: "tinks",
+  tableHits: "table hits",
+  fgOffense: "FG offense",
+  fgDefense: "Return to Sender",
+  fifas: "FIFAs",
+  selfSinks: "self sinks",
+  wins: "wins",
+  points: "points",
+};
 
 const playerRosterKey = "beerDiePlayers";
 const themeStorageKey = "sinkdTheme";
@@ -266,6 +283,9 @@ const els = {
   commissionerTools: document.querySelector("#commissionerTools"),
   commissionerToolsStatus: document.querySelector("#commissionerToolsStatus"),
   customBadgesForm: document.querySelector("#customBadgesForm"),
+  customBadgeList: document.querySelector("#customBadgeList"),
+  customBadgeTiersSelect: document.querySelector("#customBadgeTiersSelect"),
+  customBadgeThresholds: document.querySelector("#customBadgeThresholds"),
   saveCustomBadgesBtn: document.querySelector("#saveCustomBadgesBtn"),
   leagueEventForm: document.querySelector("#leagueEventForm"),
   postLeagueEventBtn: document.querySelector("#postLeagueEventBtn"),
@@ -1716,6 +1736,7 @@ function bindEvents() {
     });
   });
   els.saveCustomBadgesBtn?.addEventListener("click", saveCustomLeagueBadges);
+  els.customBadgeTiersSelect?.addEventListener("change", renderCustomBadgeThresholdInputs);
   els.postLeagueEventBtn?.addEventListener("click", postLeagueEvent);
 
   els.leagueInviteForm.addEventListener("submit", async (event) => {
@@ -3987,17 +4008,110 @@ async function togglePinnedChatMessage(messageId) {
 
 async function saveCustomLeagueBadges() {
   if (!canUseLeagueMaxTools()) return;
-  const badges = [1, 2, 3]
-    .map((index) => cleanText(els.customBadgesForm?.querySelector(`[name="badge${index}"]`)?.value))
-    .filter(Boolean)
-    .slice(0, 3);
+  const league = activeLeague();
+  const existing = customBadgeDefinitions(league);
+  if (existing.length >= 3) {
+    alert("Leagues MAX allows 3 custom badges.");
+    return;
+  }
+  const name = cleanText(els.customBadgesForm?.querySelector('[name="badgeName"]')?.value);
+  const stat = cleanText(els.customBadgesForm?.querySelector('[name="badgeStat"]')?.value);
+  const tierCount = Math.max(1, Math.min(4, Number(els.customBadgeTiersSelect?.value) || 4));
+  const tiers = customBadgeTierMap[tierCount] || customBadgeTierMap[4];
+  const thresholds = tiers.map((tier, index) => Math.max(1, Number(els.customBadgeThresholds?.querySelector(`[name="threshold${index}"]`)?.value) || 0));
+  if (!name || !customBadgeStatOptions[stat] || thresholds.some((value) => !value)) {
+    alert("Add a badge name, stat, and a value for each tier.");
+    return;
+  }
+  for (let index = 1; index < thresholds.length; index += 1) {
+    if (thresholds[index] <= thresholds[index - 1]) {
+      alert("Each badge tier value needs to be higher than the tier before it.");
+      return;
+    }
+  }
+  const badge = {
+    id: `custom-${Date.now()}`,
+    name,
+    stat,
+    tiers,
+    thresholds,
+  };
+  const badges = [...existing, badge].slice(0, 3);
   const { error } = await authClient.from("leagues").update({ custom_badges: badges }).eq("id", activeLeagueId);
   if (error) {
     alert(error.message);
     return;
   }
-  await createLeagueChatMessage(activeLeagueId, badges.length ? `Custom league badges updated: ${badges.join(", ")}` : "Custom league badges cleared.", "system");
+  await createLeagueChatMessage(activeLeagueId, `Custom badge added: ${name}`, "system");
+  els.customBadgesForm?.querySelectorAll("input").forEach((field) => {
+    field.value = "";
+  });
+  if (els.customBadgeTiersSelect) els.customBadgeTiersSelect.value = "4";
+  renderCustomBadgeThresholdInputs();
   await loadLeagueData();
+}
+
+function customBadgeDefinitions(league = activeLeague()) {
+  return Array.isArray(league?.custom_badges)
+    ? league.custom_badges
+        .map((badge, index) => {
+          if (typeof badge === "string") {
+            return {
+              id: `legacy-${index}`,
+              name: badge,
+              stat: "sinks",
+              tiers: customBadgeTierMap[4],
+              thresholds: [10, 25, 50, 100],
+            };
+          }
+          const tierCount = Math.max(1, Math.min(4, Number(badge.tiers?.length) || Number(badge.tierCount) || 4));
+          const tiers = Array.isArray(badge.tiers) && badge.tiers.length ? badge.tiers : customBadgeTierMap[tierCount] || customBadgeTierMap[4];
+          return {
+            id: badge.id || `custom-${index}`,
+            name: cleanText(badge.name) || `Custom Badge ${index + 1}`,
+            stat: customBadgeStatOptions[badge.stat] ? badge.stat : "sinks",
+            tiers,
+            thresholds: Array.isArray(badge.thresholds) ? badge.thresholds.map((value) => Math.max(1, Number(value) || 1)).slice(0, tiers.length) : [10, 25, 50, 100].slice(0, tiers.length),
+          };
+        })
+        .slice(0, 3)
+    : [];
+}
+
+function renderCustomBadgeThresholdInputs() {
+  if (!els.customBadgeThresholds) return;
+  const tierCount = Math.max(1, Math.min(4, Number(els.customBadgeTiersSelect?.value) || 4));
+  const tiers = customBadgeTierMap[tierCount] || customBadgeTierMap[4];
+  els.customBadgeThresholds.innerHTML = tiers
+    .map(
+      (tier, index) => `
+        <label>${escapeHtml(tier)} Value <input name="threshold${index}" type="number" min="1" step="1" placeholder="${(index + 1) * 10}" /></label>
+      `,
+    )
+    .join("");
+}
+
+function renderCustomBadgeBuilder() {
+  const badges = customBadgeDefinitions();
+  if (els.customBadgeList) {
+    els.customBadgeList.innerHTML = badges.length
+      ? badges
+          .map(
+            (badge) => `
+              <article class="custom-badge-summary">
+                <strong>${escapeHtml(badge.name)}</strong>
+                <span>${escapeHtml(customBadgeStatOptions[badge.stat])} - ${badge.tiers.length} tier${badge.tiers.length === 1 ? "" : "s"}</span>
+              </article>
+            `,
+          )
+          .join("")
+      : '<p class="empty">No custom badges yet.</p>';
+  }
+  if (els.saveCustomBadgesBtn) {
+    els.saveCustomBadgesBtn.disabled = badges.length >= 3;
+    els.saveCustomBadgesBtn.textContent = badges.length >= 3 ? "3 Badge Limit" : "Add Badge";
+  }
+  renderCustomBadgeThresholdInputs();
 }
 
 async function postLeagueEvent() {
@@ -6479,13 +6593,7 @@ function renderLeagueSettings() {
   els.leagueSettingsForm.elements.logoTop.value = league.logo_top || "#EFBF04";
   els.leagueSettingsForm.elements.logoLeft.value = league.logo_left || "#ffffff";
   els.leagueSettingsForm.elements.logoRight.value = league.logo_right || "#4f7fc8";
-  if (els.customBadgesForm) {
-    const badges = Array.isArray(league.custom_badges) ? league.custom_badges : [];
-    [1, 2, 3].forEach((index) => {
-      const input = els.customBadgesForm.querySelector(`[name="badge${index}"]`);
-      if (input) input.value = badges[index - 1] || "";
-    });
-  }
+  renderCustomBadgeBuilder();
   els.leagueRulesSummary.textContent = league.rules
     ? "This league is using custom rules."
     : "This league is using the default House Rules We Play With.";
@@ -7099,14 +7207,43 @@ function achievementSection(stats, title) {
 
 function leagueBadgeSection(stats) {
   const secretCards = secretAchievementDefinitions.map((definition) => secretAchievementCard(definition, stats)).join("");
+  const customCards = customBadgeDefinitions().map((definition) => customBadgeProgressCard(definition, stats)).join("");
   return `
     <section class="achievement-section league-badge-section">
       <h3>League Badges</h3>
       <div class="league-badge-grid">
         ${achievementDefinitions.map((definition) => achievementProgressCard(definition, stats)).join("")}
         ${secretCards}
+        ${customCards}
       </div>
     </section>
+  `;
+}
+
+function customBadgeProgressCard(definition, stats) {
+  const value = Number(stats?.[definition.stat]) || 0;
+  const rank = definition.thresholds.reduce((count, threshold) => (value >= threshold ? count + 1 : count), 0);
+  const rankName = rank ? definition.tiers[rank - 1] : "Locked";
+  const tierClass = rank ? rankName.toLowerCase() : "locked";
+  const nextThreshold = definition.thresholds[Math.min(rank, definition.thresholds.length - 1)];
+  const finalThreshold = definition.thresholds.at(-1) || 1;
+  const fraction = rank >= definition.thresholds.length
+    ? `${value}/${finalThreshold} ${customBadgeStatOptions[definition.stat]}`
+    : `${value}/${nextThreshold} ${customBadgeStatOptions[definition.stat]}`;
+  return `
+    <article class="league-badge-card achievement-${tierClass}">
+      <div class="league-badge-body">
+        <img class="league-badge-single ${rank ? "earned" : "locked"}" src="${achievementBadgeSrc(tierClass)}" alt="${escapeHtml(`${rankName} ${definition.name}`)}" />
+        <strong>${escapeHtml(definition.name)}</strong>
+        <span>${escapeHtml(rankName)}</span>
+      </div>
+      <div class="league-badge-footer">
+        <div class="league-badge-dots" aria-hidden="true">
+          ${definition.tiers.map((tier, index) => `<i class="badge-dot badge-dot-${tier.toLowerCase()} ${rank >= index + 1 ? "earned" : ""}"></i>`).join("")}
+        </div>
+      </div>
+      <b class="league-badge-progress">${escapeHtml(fraction)}</b>
+    </article>
   `;
 }
 
