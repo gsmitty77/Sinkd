@@ -1405,10 +1405,14 @@ legend {
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
-  font-size: 0.72rem !important;
+  font-size: 0 !important;
   font-weight: 950;
   line-height: 1;
   text-align: center;
+}
+
+.toggle-state::before {
+  font-size: 0.72rem;
 }
 
 .toggle-row:has(input:checked) .toggle-state {
@@ -1423,10 +1427,6 @@ legend {
 
 .toggle-row:has(input:not(:checked)) .toggle-state::before {
   content: attr(data-toggle-off);
-}
-
-.toggle-state {
-  font-size: 0;
 }
 
 .league-scoring-rules {
