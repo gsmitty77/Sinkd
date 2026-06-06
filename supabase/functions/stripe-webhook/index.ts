@@ -32,15 +32,19 @@ Deno.serve(async (request) => {
       const leagueId = session.metadata?.league_id;
       if (leagueId) {
         const plan = session.metadata?.plan === "max" ? "max" : "plus";
-        await admin.from("league_subscriptions").upsert({
-          league_id: leagueId,
-          stripe_customer_id: String(session.customer || ""),
-          stripe_subscription_id: String(session.subscription || ""),
-          stripe_price_id: plan === "max" ? Deno.env.get("STRIPE_MAX_PRICE_ID") || "" : Deno.env.get("STRIPE_PLUS_PRICE_ID") || Deno.env.get("STRIPE_PRICE_ID") || "",
-          plan,
-          status: "active",
-          updated_at: new Date().toISOString(),
-        });
+        const { error } = await admin.from("league_subscriptions").upsert(
+          {
+            league_id: leagueId,
+            stripe_customer_id: String(session.customer || ""),
+            stripe_subscription_id: String(session.subscription || ""),
+            stripe_price_id: plan === "max" ? Deno.env.get("STRIPE_MAX_PRICE_ID") || "" : Deno.env.get("STRIPE_PLUS_PRICE_ID") || Deno.env.get("STRIPE_PRICE_ID") || "",
+            plan,
+            status: "active",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "league_id" },
+        );
+        if (error) throw error;
       }
     }
 
@@ -53,16 +57,23 @@ Deno.serve(async (request) => {
       const leagueId = subscription.metadata?.league_id;
       if (leagueId) {
         const priceId = subscription.items.data[0]?.price?.id || "";
-        await admin.from("league_subscriptions").upsert({
-          league_id: leagueId,
-          stripe_customer_id: String(subscription.customer),
-          stripe_subscription_id: subscription.id,
-          stripe_price_id: priceId,
-          plan: planFromPrice(priceId, subscription.metadata?.plan),
-          status: subscription.status,
-          current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+        const currentPeriodEnd = subscription.current_period_end
+          ? new Date(subscription.current_period_end * 1000).toISOString()
+          : null;
+        const { error } = await admin.from("league_subscriptions").upsert(
+          {
+            league_id: leagueId,
+            stripe_customer_id: String(subscription.customer),
+            stripe_subscription_id: subscription.id,
+            stripe_price_id: priceId,
+            plan: planFromPrice(priceId, subscription.metadata?.plan),
+            status: subscription.status,
+            current_period_end: currentPeriodEnd,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "league_id" },
+        );
+        if (error) throw error;
       }
     }
 
@@ -72,6 +83,8 @@ Deno.serve(async (request) => {
     });
   } catch (error) {
     console.error(error);
-    return new Response(error instanceof Error ? error.message : "Invalid webhook.", { status: 400 });
+    const message = error instanceof Error ? error.message : "Invalid webhook.";
+    const isSignatureError = message.toLowerCase().includes("signature") || message.toLowerCase().includes("webhook");
+    return new Response(message, { status: isSignatureError ? 400 : 500 });
   }
 });

@@ -121,6 +121,7 @@ let notificationsInitialized = false;
 let showingFriendQr = false;
 let sentFriendLeagueInviteKeys = new Set();
 const sentFriendLeagueInviteTimers = new Map();
+let chatPinPressTimer = null;
 let pendingConfirmAction = null;
 let pendingCancelAction = null;
 let lastPlayerProfileLookupSyncKey = "";
@@ -229,8 +230,13 @@ const els = {
   leagueLiabilitiesPanel: document.querySelector("#leagueLiabilitiesPanel"),
   leagueLiabilityRankings: document.querySelector("#leagueLiabilityRankings"),
   leagueChatBadge: document.querySelector("#leagueChatBadge"),
+  createLeaguePollBtn: document.querySelector("#createLeaguePollBtn"),
+  pinnedChatBox: document.querySelector("#pinnedChatBox"),
   leagueChatList: document.querySelector("#leagueChatList"),
   leagueChatForm: document.querySelector("#leagueChatForm"),
+  leaguePollModal: document.querySelector("#leaguePollModal"),
+  leaguePollForm: document.querySelector("#leaguePollForm"),
+  closeLeaguePollBtn: document.querySelector("#closeLeaguePollBtn"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
   leagueWeeklyReportBtn: document.querySelector("#leagueWeeklyReportBtn"),
@@ -257,6 +263,12 @@ const els = {
   ownerTransferControls: document.querySelector("#ownerTransferControls"),
   transferOwnershipSelect: document.querySelector("#transferOwnershipSelect"),
   transferOwnershipBtn: document.querySelector("#transferOwnershipBtn"),
+  commissionerTools: document.querySelector("#commissionerTools"),
+  commissionerToolsStatus: document.querySelector("#commissionerToolsStatus"),
+  customBadgesForm: document.querySelector("#customBadgesForm"),
+  saveCustomBadgesBtn: document.querySelector("#saveCustomBadgesBtn"),
+  leagueEventForm: document.querySelector("#leagueEventForm"),
+  postLeagueEventBtn: document.querySelector("#postLeagueEventBtn"),
   leaveLeagueBtn: document.querySelector("#leaveLeagueBtn"),
   leaveLeagueConfirm: document.querySelector("#leaveLeagueConfirm"),
   confirmLeaveLeagueBtn: document.querySelector("#confirmLeaveLeagueBtn"),
@@ -1606,12 +1618,32 @@ function bindEvents() {
     els.leagueChatForm.reset();
     await loadLeagueData();
   });
+  els.createLeaguePollBtn?.addEventListener("click", openLeaguePollModal);
+  els.closeLeaguePollBtn?.addEventListener("click", closeLeaguePollModal);
+  els.leaguePollModal?.addEventListener("click", (event) => {
+    if (event.target === els.leaguePollModal) closeLeaguePollModal();
+  });
+  els.leaguePollForm?.addEventListener("submit", submitLeaguePoll);
 
   els.leagueChatList.addEventListener("click", async (event) => {
     const approve = event.target.closest("[data-league-request-approve]");
     const denyRequest = event.target.closest("[data-league-request-deny]");
+    const pinChat = event.target.closest("[data-pin-chat]");
     if (approve) await approveLeagueJoinRequest(approve.dataset.leagueRequestApprove);
     if (denyRequest) await removeCloudLeagueMember(denyRequest.dataset.leagueRequestDeny);
+    if (pinChat) await togglePinnedChatMessage(pinChat.dataset.pinChat);
+  });
+  els.leagueChatList.addEventListener("pointerdown", (event) => {
+    const row = event.target.closest("[data-chat-row]");
+    if (!row || event.target.closest("button") || !canUseLeagueMaxTools()) return;
+    window.clearTimeout(chatPinPressTimer);
+    chatPinPressTimer = window.setTimeout(() => {
+      els.leagueChatList.querySelectorAll(".pin-ready").forEach((item) => item.classList.remove("pin-ready"));
+      row.classList.add("pin-ready");
+    }, 420);
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
+    els.leagueChatList.addEventListener(eventName, () => window.clearTimeout(chatPinPressTimer));
   });
 
   els.leagueSettingsForm.addEventListener("submit", async (event) => {
@@ -1647,7 +1679,7 @@ function bindEvents() {
     const league = activeLeague();
     if (!league || !myLeagueMember()) return;
     if (isActiveLeagueOwner()) {
-      alert("Owners need to transfer ownership or delete the league.");
+      alert("Commissioners need to transfer the league or delete it.");
       return;
     }
     confirmingLeaveLeague = true;
@@ -1678,11 +1710,13 @@ function bindEvents() {
     const memberId = els.transferOwnershipSelect?.value;
     if (!memberId) return;
     showAppConfirm({
-      title: "Transfer ownership?",
-      message: "Transfer league ownership to this member?",
+      title: "Transfer commissioner role?",
+      message: "Transfer league commissioner control to this member?",
       onConfirm: () => transferCloudLeagueOwnership(memberId),
     });
   });
+  els.saveCustomBadgesBtn?.addEventListener("click", saveCustomLeagueBadges);
+  els.postLeagueEventBtn?.addEventListener("click", postLeagueEvent);
 
   els.leagueInviteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1793,8 +1827,8 @@ function bindEvents() {
     }
     if (transfer) {
       showAppConfirm({
-        title: "Transfer ownership?",
-        message: "Transfer league ownership to this co-leader?",
+        title: "Transfer commissioner role?",
+        message: "Transfer league commissioner control to this co-leader?",
         onConfirm: () => transferCloudLeagueOwnership(transfer.dataset.leagueTransfer),
       });
     }
@@ -3275,6 +3309,10 @@ function leagueHasMax(leagueId = activeLeagueId) {
   return leaguePlan(leagueId) === "max";
 }
 
+function canUseLeagueMaxTools() {
+  return Boolean(myLeagueMember()) && canManageActiveLeague() && leagueHasMax(activeLeagueId);
+}
+
 function leagueMemberCapacity(leagueId = activeLeagueId) {
   return leagueHasMax(leagueId) ? 100 : leagueHasPlus(leagueId) ? 24 : 8;
 }
@@ -3324,7 +3362,7 @@ function friendInviteLink() {
 }
 
 function displayRole(role) {
-  return role === "co_leader" ? "Co-Leader" : role === "owner" ? "Owner" : role === "ref" ? "Ref" : role === "pending" ? "Pending" : "Member";
+  return role === "co_leader" ? "Co-Leader" : role === "owner" ? "Commissioner" : role === "ref" ? "Ref" : role === "pending" ? "Pending" : "Member";
 }
 
 async function loadLeagueData() {
@@ -3890,7 +3928,7 @@ async function createLeagueNotifications(leagueId, notification, options = {}) {
   );
 }
 
-async function createLeagueChatMessage(leagueId, message, type = "system") {
+async function createLeagueChatMessage(leagueId, message, type = "system", payload = {}) {
   if (!authClient || !currentUser || !leagueId || !cleanText(message)) return;
   const member = myLeagueMember(leagueId);
   const authorName = cleanText(member?.nickname || member?.display_name || myProfileNickname() || "A player");
@@ -3900,8 +3938,80 @@ async function createLeagueChatMessage(leagueId, message, type = "system") {
     author_name: authorName,
     type,
     message: cleanText(message),
+    payload,
   });
   if (error) console.warn(error);
+}
+
+function openLeaguePollModal() {
+  if (!canUseLeagueMaxTools()) return;
+  els.leaguePollForm?.reset();
+  els.leaguePollModal?.classList.remove("hidden");
+  els.leaguePollModal?.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeLeaguePollModal() {
+  els.leaguePollModal?.classList.add("hidden");
+  els.leaguePollModal?.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+async function submitLeaguePoll(event) {
+  event.preventDefault();
+  if (!canUseLeagueMaxTools()) return;
+  const form = new FormData(els.leaguePollForm);
+  const question = cleanText(form.get("question"));
+  const options = [1, 2, 3, 4].map((index) => cleanText(form.get(`option${index}`))).filter(Boolean);
+  if (!question || options.length < 2) return;
+  await createLeagueChatMessage(activeLeagueId, question, "poll", { question, options });
+  closeLeaguePollModal();
+  await loadLeagueData();
+}
+
+async function togglePinnedChatMessage(messageId) {
+  if (!canUseLeagueMaxTools() || !messageId) return;
+  const message = leagueChatMessages().find((item) => item.id === messageId);
+  if (!message) return;
+  const { error } = await authClient
+    .from("league_chat_messages")
+    .update({ pinned: !message.pinned })
+    .eq("id", messageId)
+    .eq("league_id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  await loadLeagueData();
+}
+
+async function saveCustomLeagueBadges() {
+  if (!canUseLeagueMaxTools()) return;
+  const badges = [1, 2, 3]
+    .map((index) => cleanText(els.customBadgesForm?.querySelector(`[name="badge${index}"]`)?.value))
+    .filter(Boolean)
+    .slice(0, 3);
+  const { error } = await authClient.from("leagues").update({ custom_badges: badges }).eq("id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  await createLeagueChatMessage(activeLeagueId, badges.length ? `Custom league badges updated: ${badges.join(", ")}` : "Custom league badges cleared.", "system");
+  await loadLeagueData();
+}
+
+async function postLeagueEvent() {
+  if (!canUseLeagueMaxTools()) return;
+  const title = cleanText(els.leagueEventForm?.querySelector('[name="title"]')?.value);
+  const date = cleanText(els.leagueEventForm?.querySelector('[name="date"]')?.value);
+  const details = cleanText(els.leagueEventForm?.querySelector('[name="details"]')?.value);
+  if (!title || !date) return;
+  const eventPayload = { title, date, details };
+  await createLeagueChatMessage(activeLeagueId, `${title} - ${formatDate(date)}${details ? `: ${details}` : ""}`, "event", eventPayload);
+  els.leagueEventForm?.querySelectorAll("input, textarea").forEach((field) => {
+    field.value = "";
+  });
+  await loadLeagueData();
 }
 
 async function markNotificationsRead(types = null) {
@@ -6203,11 +6313,19 @@ function renderLeagueRankings() {
 function renderLeagueChat() {
   const member = myLeagueMember();
   els.leagueChatForm.classList.toggle("hidden", !member);
+  els.createLeaguePollBtn?.classList.toggle("hidden", !canUseLeagueMaxTools());
   const shouldStickToBottom =
     leagueDetailTab === "chat" &&
     (els.leagueChatList.scrollHeight - els.leagueChatList.scrollTop - els.leagueChatList.clientHeight < 80 ||
       !els.leagueChatList.dataset.hasRendered);
   const messages = leagueChatMessages();
+  const pinnedMessages = messages.filter((message) => message.pinned);
+  if (els.pinnedChatBox) {
+    els.pinnedChatBox.classList.toggle("hidden", !pinnedMessages.length);
+    els.pinnedChatBox.innerHTML = pinnedMessages.length
+      ? `<strong>Pinned</strong>${pinnedMessages.slice(-2).map(pinnedChatItem).join("")}`
+      : "";
+  }
   const requests = member ? leagueJoinRequests().map((request) => ({ ...request, chatItemType: "join_request" })) : [];
   const rows = [
     ...messages.map((message) => ({ ...message, chatItemType: "message" })),
@@ -6235,16 +6353,54 @@ function renderLeagueChatBadge() {
 function leagueChatRow(message) {
   const isSystem = message.type !== "user";
   const isSent = !isSystem && message.user_id === currentUser?.id;
-  const directionClass = isSystem ? "system" : isSent ? "sent" : "received";
+  const directionClass = isSystem ? `system ${message.type === "poll" ? "poll" : message.type === "event" ? "event" : ""}` : isSent ? "sent" : "received";
+  const pinAction = canUseLeagueMaxTools()
+    ? `<button class="text-button pin-chat-button" type="button" data-pin-chat="${message.id}">${message.pinned ? "Unpin" : "Pin?"}</button>`
+    : "";
   return `
-    <article class="league-chat-row ${directionClass}">
+    <article class="league-chat-row ${directionClass}" data-chat-row="${message.id}">
       <div>
-        <strong>${escapeHtml(isSystem ? "League Update" : message.author_name || "A player")}</strong>
+        <strong>${escapeHtml(leagueChatTitle(message))}</strong>
         <span>${formatDate(message.created_at)}</span>
       </div>
-      <p>${escapeHtml(message.message)}</p>
+      ${leagueChatMessageBody(message)}
+      ${pinAction}
     </article>
   `;
+}
+
+function leagueChatTitle(message) {
+  if (message.type === "poll") return "Poll";
+  if (message.type === "event") return "Scheduled Event";
+  if (message.type !== "user") return "League Update";
+  return message.author_name || "A player";
+}
+
+function leagueChatMessageBody(message) {
+  const payload = message.payload || {};
+  if (message.type === "poll") {
+    const options = Array.isArray(payload.options) ? payload.options : [];
+    return `
+      <p>${escapeHtml(payload.question || message.message)}</p>
+      <div class="poll-option-list">
+        ${options.map((option) => `<span>${escapeHtml(option)}</span>`).join("")}
+      </div>
+    `;
+  }
+  if (message.type === "event") {
+    return `
+      <p>${escapeHtml(payload.title || message.message)}</p>
+      <div class="event-chat-meta">
+        <span>${escapeHtml(payload.date ? formatDate(payload.date) : "")}</span>
+        ${payload.details ? `<small>${escapeHtml(payload.details)}</small>` : ""}
+      </div>
+    `;
+  }
+  return `<p>${escapeHtml(message.message)}</p>`;
+}
+
+function pinnedChatItem(message) {
+  return `<p>${escapeHtml(message.type === "poll" ? message.payload?.question || message.message : message.type === "event" ? message.payload?.title || message.message : message.message)}</p>`;
 }
 
 function leagueJoinRequestChatRow(member) {
@@ -6286,11 +6442,11 @@ function renderLeagueSettings() {
     els.leaguePlusStatus.textContent = currentPlan === "max"
       ? subscription?.stripe_customer_id
         ? "Leagues MAX - up to 100 members"
-        : "Owner access - Leagues MAX"
+        : "Commissioner access - Leagues MAX"
       : currentPlan === "plus"
       ? subscription?.stripe_customer_id
         ? "League Plus - up to 24 members"
-        : "Owner access - League Plus"
+        : "Commissioner access - League Plus"
       : "Free league - up to 8 members";
   }
   if (els.leaguePlusBtn) {
@@ -6302,6 +6458,10 @@ function renderLeagueSettings() {
     const canOpenMax = isOwner && (!hasMax || Boolean(subscription?.stripe_customer_id));
     els.leagueMaxBtn.classList.toggle("hidden", !canOpenMax);
     els.leagueMaxBtn.textContent = hasMax ? "Manage Leagues MAX" : hasPlus ? "Upgrade to Leagues MAX" : "Upgrade to Leagues MAX";
+  }
+  els.commissionerTools?.classList.toggle("hidden", !canUseLeagueMaxTools());
+  if (els.commissionerToolsStatus) {
+    els.commissionerToolsStatus.textContent = hasMax ? "Leagues MAX" : "Upgrade required";
   }
   const transferCandidates = leagueMembers().filter((item) => item.role !== "owner" && item.user_id && item.user_id !== currentUser?.id);
   els.ownerTransferControls?.classList.toggle("hidden", !isOwner || !transferCandidates.length);
@@ -6319,6 +6479,13 @@ function renderLeagueSettings() {
   els.leagueSettingsForm.elements.logoTop.value = league.logo_top || "#EFBF04";
   els.leagueSettingsForm.elements.logoLeft.value = league.logo_left || "#ffffff";
   els.leagueSettingsForm.elements.logoRight.value = league.logo_right || "#4f7fc8";
+  if (els.customBadgesForm) {
+    const badges = Array.isArray(league.custom_badges) ? league.custom_badges : [];
+    [1, 2, 3].forEach((index) => {
+      const input = els.customBadgesForm.querySelector(`[name="badge${index}"]`);
+      if (input) input.value = badges[index - 1] || "";
+    });
+  }
   els.leagueRulesSummary.textContent = league.rules
     ? "This league is using custom rules."
     : "This league is using the default House Rules We Play With.";

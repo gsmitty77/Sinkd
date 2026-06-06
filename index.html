@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260605-3" />
+    <link rel="stylesheet" href="styles.css?v=20260605-4" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -503,8 +503,12 @@
 
           <section class="league-detail-panel" id="leagueChatPanel">
             <section class="panel">
-              <h3>League Chat</h3>
+              <div class="section-head compact-section-head">
+                <h3>League Chat</h3>
+                <button class="small-button export-button hidden" id="createLeaguePollBtn" type="button">Create Poll</button>
+              </div>
               <div class="league-chat-list" id="leagueChatList"></div>
+              <div class="pinned-chat-box hidden" id="pinnedChatBox"></div>
               <form class="league-chat-form" id="leagueChatForm">
                 <input name="message" maxlength="240" placeholder="Message your league..." required />
                 <button class="small-button export-button" type="submit">Send</button>
@@ -585,10 +589,10 @@
               </section>
               <div class="owner-transfer manager-setting hidden" id="ownerTransferControls">
                 <label>
-                  Transfer Ownership
+                  Transfer Commissioner Role
                   <select id="transferOwnershipSelect"></select>
                 </label>
-                <button class="small-button secondary-button compact-action-button" id="transferOwnershipBtn" type="button">Transfer Ownership</button>
+                <button class="small-button secondary-button compact-action-button" id="transferOwnershipBtn" type="button">Transfer Commissioner Role</button>
               </div>
               <div class="leave-confirm hidden" id="leaveLeagueConfirm">
                 <span>Are you sure?</span>
@@ -597,6 +601,24 @@
                   <button class="text-button" id="cancelLeaveLeagueBtn" type="button">Cancel</button>
                 </div>
               </div>
+              <section class="commissioner-tools hidden" id="commissionerTools">
+                <div class="section-head compact-section-head">
+                  <h3>Commissioner Tools</h3>
+                  <span id="commissionerToolsStatus">Leagues MAX</span>
+                </div>
+                <div class="commissioner-tool-form" id="customBadgesForm">
+                  <label>Custom Badge 1 <input name="badge1" maxlength="24" placeholder="Clutch Thrower" /></label>
+                  <label>Custom Badge 2 <input name="badge2" maxlength="24" placeholder="Table Boss" /></label>
+                  <label>Custom Badge 3 <input name="badge3" maxlength="24" placeholder="Ice Cold" /></label>
+                  <button class="small-button export-button compact-action-button" id="saveCustomBadgesBtn" type="button">Save Badges</button>
+                </div>
+                <div class="commissioner-tool-form" id="leagueEventForm">
+                  <label>Scheduled Game/Event <input name="title" maxlength="40" placeholder="Friday Night Games" required /></label>
+                  <label>Date <input name="date" type="datetime-local" required /></label>
+                  <label>Details <textarea name="details" rows="3" maxlength="180" placeholder="Table, time, teams, or anything the league needs to know."></textarea></label>
+                  <button class="small-button secondary-button compact-action-button" id="postLeagueEventBtn" type="button">Post Event</button>
+                </div>
+              </section>
             </form>
           </section>
 
@@ -845,6 +867,26 @@
       </div>
     </section>
 
+    <section class="rules-modal hidden" id="leaguePollModal" aria-hidden="true">
+      <div class="rules-sheet compact-modal-sheet">
+        <header class="rules-header">
+          <div>
+            <p>League Poll</p>
+            <h2>Create Poll</h2>
+          </div>
+          <button class="text-button" id="closeLeaguePollBtn" type="button">Close</button>
+        </header>
+        <form class="poll-form rules-card" id="leaguePollForm">
+          <label>Question <input name="question" maxlength="80" placeholder="What day should we play?" required /></label>
+          <label>Option 1 <input name="option1" maxlength="36" placeholder="Friday" required /></label>
+          <label>Option 2 <input name="option2" maxlength="36" placeholder="Saturday" required /></label>
+          <label>Option 3 <input name="option3" maxlength="36" placeholder="Sunday" /></label>
+          <label>Option 4 <input name="option4" maxlength="36" placeholder="Next week" /></label>
+          <button class="primary-button" type="submit">Post Poll</button>
+        </form>
+      </div>
+    </section>
+
     <section class="rules-modal hidden" id="rosterProfileModal" aria-hidden="true">
       <div class="rules-sheet roster-profile-sheet">
         <header class="rules-header">
@@ -962,7 +1004,7 @@
             <li>To create and manage accounts.</li>
             <li>To save profiles, stats, game history, achievements, rankings, friends, leagues, and notifications.</li>
             <li>To sync league data across users and phones.</li>
-            <li>To let league owners, co-leaders, refs, and members use the correct league permissions.</li>
+            <li>To let league commissioners, co-leaders, refs, and members use the correct league permissions.</li>
             <li>To send or show in-app notifications for achievements, friend requests, league invites, and updates about you.</li>
             <li>To maintain, debug, secure, and improve the app.</li>
           </ul>
@@ -995,7 +1037,7 @@
             <li>You can edit your profile information in My Profile.</li>
             <li>You can delete local players from Settings unless the name is tied to My Profile.</li>
             <li>You can leave leagues if you are not the owner.</li>
-            <li>League owners and co-leaders may manage league members and league data.</li>
+            <li>League commissioners and co-leaders may manage league members and league data.</li>
             <li>You can decline notification popups when the app asks for permission.</li>
             <li>You can request that account or cloud data be removed by contacting the app owner.</li>
           </ul>
@@ -1029,6 +1071,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260605-1"></script>
+    <script src="app.js?v=20260605-2"></script>
   </body>
 </html>
