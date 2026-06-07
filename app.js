@@ -51,7 +51,7 @@ const achievementDefinitions = [
   { key: "fgOffense", label: "Field General", statLabel: "FG offense", thresholds: [15, 40, 80, 150] },
   { key: "fgDefense", label: "Return to Sender", statLabel: "FG defense", thresholds: [10, 25, 50, 90] },
   { key: "fifas", label: "Soccer Player", statLabel: "FIFAs", thresholds: [25, 75, 150, 300] },
-  { key: "tableHits", label: "Table Setter", statLabel: "table hits", thresholds: [25, 100, 200, 500] },
+  { key: "tableHits", label: "Table Setter", statLabel: "table hits", thresholds: [50, 100, 150, 300] },
 ];
 const secretAchievementDefinitions = [
   { key: "selfSinks", label: "L Teammate", threshold: 10, tierClass: "diamond" },
@@ -7332,7 +7332,7 @@ function customBadgeProgressCard(definition, stats) {
       </div>
       <div class="league-badge-footer">
         <div class="league-badge-dots" aria-hidden="true">
-          ${definition.tiers.map((tier, index) => `<i class="badge-dot badge-dot-${tier.toLowerCase()} ${rank >= index + 1 ? "earned" : ""}"></i>`).join("")}
+          ${achievementTiers.map((tier) => `<i class="badge-dot badge-dot-${tier.toLowerCase()} ${definition.tiers.slice(0, rank).includes(tier) ? "earned" : ""}"></i>`).join("")}
         </div>
       </div>
       <b class="league-badge-progress">${escapeHtml(fraction)}</b>
@@ -7348,7 +7348,10 @@ function achievementProgressCard(definition, stats) {
   const tierClass = tier.toLowerCase();
   const goalIndex = Math.min(rank, definition.thresholds.length - 1);
   const goal = definition.thresholds[goalIndex];
-  const fraction = `${value}/${goal} ${definition.statLabel || definition.label}`;
+  const nextRank = rank >= achievementTiers.length ? "Diamond" : achievementTiers[goalIndex];
+  const fraction = rank >= achievementTiers.length
+    ? `${value}/${goal} ${definition.statLabel || definition.label}`
+    : `${value}/${goal} ${definition.statLabel || definition.label} to ${nextRank}`;
   const rankName = achievementRankLabel(rank) || "Locked";
   return `
     <article class="league-badge-card achievement-${rank ? tierClass : "locked"}">

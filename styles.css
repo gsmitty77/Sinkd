@@ -1936,7 +1936,12 @@ legend {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
+  background: transparent;
+  visibility: hidden;
+}
+
+.badge-dot.earned {
+  visibility: visible;
 }
 
 .badge-dot.earned.badge-dot-copper {
@@ -1948,7 +1953,7 @@ legend {
 }
 
 .badge-dot.earned.badge-dot-gold {
-  background: var(--accent);
+  background: #efbf04;
 }
 
 .badge-dot.earned.badge-dot-diamond {
