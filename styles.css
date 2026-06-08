@@ -92,10 +92,10 @@ textarea {
 
 .splash-wordmark {
   color: #ffffff;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(2.35rem, 12vw, 3.95rem);
-  font-style: normal;
-  font-weight: 950;
+  font-style: italic;
+  font-weight: 800;
   letter-spacing: 0;
   line-height: 0.9;
   text-shadow: 0 14px 24px rgba(0, 0, 0, 0.24);
@@ -156,10 +156,10 @@ textarea {
 
 .intro-wordmark {
   color: #ffffff;
-  font-family: Arial, Helvetica, sans-serif !important;
+  font-family: Georgia, "Times New Roman", serif !important;
   font-size: 2.15rem !important;
-  font-style: normal !important;
-  font-weight: 950;
+  font-style: italic !important;
+  font-weight: 800;
   letter-spacing: 0 !important;
   line-height: 0.9;
 }
@@ -300,10 +300,10 @@ textarea {
 
 .auth-wordmark {
   color: #ffffff;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Georgia, "Times New Roman", serif;
   font-size: 2.05rem;
-  font-style: normal;
-  font-weight: 950;
+  font-style: italic;
+  font-weight: 800;
   letter-spacing: 0;
   line-height: 0.9;
 }
@@ -422,7 +422,7 @@ textarea {
 .brand-block {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -482,10 +482,10 @@ h1 {
 
 .brand-name {
   color: #ffffff;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Georgia, "Times New Roman", serif;
   font-size: 2.28rem;
-  font-style: normal;
-  font-weight: 950;
+  font-style: italic;
+  font-weight: 800;
   letter-spacing: 0;
 }
 
@@ -1936,12 +1936,8 @@ legend {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: transparent;
-  visibility: hidden;
-}
-
-.badge-dot.earned {
-  visibility: visible;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .badge-dot.earned.badge-dot-copper {
@@ -2888,6 +2884,19 @@ legend {
   padding-right: 2px;
 }
 
+.league-chat-header-actions {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 8px;
+  justify-content: end;
+  align-items: center;
+}
+
+.league-chat-header-actions .small-button {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
 .league-chat-row {
   display: grid;
   gap: 5px;
@@ -2920,14 +2929,26 @@ legend {
   border-color: var(--accent);
 }
 
-.pin-chat-button {
+.chat-row-actions {
+  display: none !important;
+  justify-content: end !important;
+  gap: 10px !important;
+}
+
+.pin-chat-button,
+.delete-chat-button {
   display: none;
   justify-self: end;
   padding: 0;
   font-size: 0.72rem;
 }
 
-.league-chat-row.pin-ready .pin-chat-button {
+.league-chat-row.pin-ready .chat-row-actions {
+  display: flex !important;
+}
+
+.league-chat-row.pin-ready .pin-chat-button,
+.league-chat-row.pin-ready .delete-chat-button {
   display: inline-flex;
 }
 

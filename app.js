@@ -248,6 +248,7 @@ const els = {
   leagueLiabilitiesPanel: document.querySelector("#leagueLiabilitiesPanel"),
   leagueLiabilityRankings: document.querySelector("#leagueLiabilityRankings"),
   leagueChatBadge: document.querySelector("#leagueChatBadge"),
+  clearLeagueChatBtn: document.querySelector("#clearLeagueChatBtn"),
   createLeaguePollBtn: document.querySelector("#createLeaguePollBtn"),
   pinnedChatBox: document.querySelector("#pinnedChatBox"),
   leagueChatList: document.querySelector("#leagueChatList"),
@@ -1640,6 +1641,25 @@ function bindEvents() {
     els.leagueChatForm.reset();
     await loadLeagueData();
   });
+  els.clearLeagueChatBtn?.addEventListener("click", () => {
+    const count = clearableLeagueChatMessages().length;
+    if (!count) {
+      showAppConfirm({
+        title: "Chat is clean",
+        message: "There are no old chat messages to clear.",
+        confirmLabel: "OK",
+        cancelLabel: "Close",
+      });
+      return;
+    }
+    showAppConfirm({
+      title: "Clear chat?",
+      message: `This will clear ${count} old chat ${count === 1 ? "message" : "messages"} but keep pinned chats, recent polls/events, and join request updates.`,
+      confirmLabel: "Clear",
+      cancelLabel: "Cancel",
+      onConfirm: clearLeagueChat,
+    });
+  });
   els.createLeaguePollBtn?.addEventListener("click", openLeaguePollModal);
   els.closeLeaguePollBtn?.addEventListener("click", closeLeaguePollModal);
   els.addPollAnswerBtn?.addEventListener("click", revealNextPollAnswer);
@@ -1652,18 +1672,34 @@ function bindEvents() {
     const approve = event.target.closest("[data-league-request-approve]");
     const denyRequest = event.target.closest("[data-league-request-deny]");
     const pinChat = event.target.closest("[data-pin-chat]");
+    const deleteChat = event.target.closest("[data-delete-chat]");
     const pollVote = event.target.closest("[data-poll-vote]");
     if (approve) await approveLeagueJoinRequest(approve.dataset.leagueRequestApprove);
     if (denyRequest) await removeCloudLeagueMember(denyRequest.dataset.leagueRequestDeny);
     if (pinChat) await togglePinnedChatMessage(pinChat.dataset.pinChat);
+    if (deleteChat) {
+      showAppConfirm({
+        title: "Delete chat?",
+        message: "Remove this chat message?",
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+        onConfirm: () => deleteLeagueChatMessage(deleteChat.dataset.deleteChat),
+      });
+      return;
+    }
     if (pollVote) await voteOnLeaguePoll(pollVote.dataset.pollVote, Number(pollVote.dataset.pollOption));
   });
   els.leagueChatList.addEventListener("pointerdown", (event) => {
     const row = event.target.closest("[data-chat-row]");
-    if (!row || event.target.closest("button") || !canUseLeagueMaxTools()) return;
+    const message = row ? leagueChatMessages().find((item) => item.id === row.dataset.chatRow) : null;
+    if (!row || event.target.closest("button") || (!canUseLeagueMaxTools() && !canDeleteLeagueChatMessage(message))) return;
     window.clearTimeout(chatPinPressTimer);
-    chatPinPressTimer = window.setTimeout(() => {
+    chatPinPressTimer = window.setTimeout(async () => {
       els.leagueChatList.querySelectorAll(".pin-ready").forEach((item) => item.classList.remove("pin-ready"));
+      if (message?.pinned && canUseLeagueMaxTools()) {
+        await togglePinnedChatMessage(message.id);
+        return;
+      }
       row.classList.add("pin-ready");
     }, 420);
   });
@@ -1704,7 +1740,7 @@ function bindEvents() {
     const league = activeLeague();
     if (!league || !myLeagueMember()) return;
     if (isActiveLeagueOwner()) {
-      alert("Commissioners need to transfer the league or delete it.");
+      alert(`${displayRole("owner")}s need to transfer the league or delete it.`);
       return;
     }
     confirmingLeaveLeague = true;
@@ -1735,8 +1771,8 @@ function bindEvents() {
     const memberId = els.transferOwnershipSelect?.value;
     if (!memberId) return;
     showAppConfirm({
-      title: "Transfer commissioner role?",
-      message: "Transfer league commissioner control to this member?",
+      title: "Transfer ownership?",
+      message: "Transfer league ownership to this member?",
       onConfirm: () => transferCloudLeagueOwnership(memberId),
     });
   });
@@ -1857,8 +1893,8 @@ function bindEvents() {
     }
     if (transfer) {
       showAppConfirm({
-        title: "Transfer commissioner role?",
-        message: "Transfer league commissioner control to this co-leader?",
+        title: "Transfer ownership?",
+        message: "Transfer league ownership to this co-leader?",
         onConfirm: () => transferCloudLeagueOwnership(transfer.dataset.leagueTransfer),
       });
     }
@@ -3391,8 +3427,8 @@ function friendInviteLink() {
   return url.toString();
 }
 
-function displayRole(role) {
-  return role === "co_leader" ? "Co-Leader" : role === "owner" ? "Commissioner" : role === "ref" ? "Ref" : role === "pending" ? "Pending" : "Member";
+function displayRole(role, leagueId = activeLeagueId) {
+  return role === "co_leader" ? "Co-Leader" : role === "owner" ? (leagueHasMax(leagueId) ? "Commissioner" : "Owner") : role === "ref" ? "Ref" : role === "pending" ? "Pending" : "Member";
 }
 
 async function loadLeagueData() {
@@ -4057,6 +4093,62 @@ async function togglePinnedChatMessage(messageId) {
     alert(error.message);
     return;
   }
+  await loadLeagueData();
+}
+
+function clearableLeagueChatMessages() {
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+  return leagueChatMessages().filter((message) => {
+    if (message.pinned) return false;
+    if (["poll", "event"].includes(message.type) && new Date(message.created_at).getTime() >= cutoff) return false;
+    if (isProtectedLeagueChatUpdate(message)) return false;
+    return true;
+  });
+}
+
+function isProtectedLeagueChatUpdate(message) {
+  if (message.type !== "system") return false;
+  const text = `${message.message || ""} ${JSON.stringify(message.payload || {})}`.toLowerCase();
+  return (
+    text.includes("accepted into the league") ||
+    text.includes("request approved") ||
+    text.includes("request accepted") ||
+    text.includes("request denied") ||
+    text.includes("denied from the league")
+  );
+}
+
+async function clearLeagueChat() {
+  if (!canManageActiveLeague()) return;
+  const ids = clearableLeagueChatMessages().map((message) => message.id).filter(Boolean);
+  if (!ids.length) return;
+  const { error } = await authClient.from("league_chat_messages").delete().in("id", ids).eq("league_id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  leagueChatCache = leagueChatCache.filter((message) => !ids.includes(message.id));
+  renderLeagueChat();
+  renderLeagueChatBadge();
+  await loadLeagueData();
+}
+
+function canDeleteLeagueChatMessage(message) {
+  if (!message || !myLeagueMember(message.league_id)) return false;
+  return message.user_id === currentUser?.id || isActiveLeagueOwner();
+}
+
+async function deleteLeagueChatMessage(messageId) {
+  const message = leagueChatMessages().find((item) => item.id === messageId);
+  if (!canDeleteLeagueChatMessage(message)) return;
+  const { error } = await authClient.from("league_chat_messages").delete().eq("id", messageId).eq("league_id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  leagueChatCache = leagueChatCache.filter((item) => item.id !== messageId);
+  renderLeagueChat();
+  renderLeagueChatBadge();
   await loadLeagueData();
 }
 
@@ -5034,6 +5126,9 @@ async function removeCloudLeagueMember(memberId) {
   const member = leagueMembers().find((item) => item.id === memberId);
   const allowedRoles = isActiveLeagueOwner() ? ["member", "pending", "ref", "co_leader"] : ["member", "pending", "ref"];
   if (!member || member.user_id === currentUser?.id || !allowedRoles.includes(member.role)) return;
+  if (member.role === "pending") {
+    await createLeagueChatMessage(activeLeagueId, `${member.nickname || member.display_name || "A player"} request denied from the league.`, "system");
+  }
   const { error } = await authClient.from("league_members").delete().eq("id", memberId).in("role", allowedRoles);
   if (error) alert(error.message);
   await loadLeagueData();
@@ -6162,7 +6257,7 @@ function leagueCard(league) {
         <span>
           <strong>${escapeHtml(league.name)}</strong>
           <small>${escapeHtml(league.description || "No description")} </small>
-          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/${capacity} - Tap to enter` : requested ? "Request pending" : isInAnotherLeague ? "Leave your league to join" : "Join to view data"}${leagueHasPlus(league.id) ? ` - ${leaguePlanLabel(league.id)}` : ""}${role ? ` - ${displayRole(role)}` : ""}</em>
+          <em>${league.privacy === "invite" ? "Invite Only" : "Open"} - ${isMember ? `${members.length}/${capacity} - Tap to enter` : requested ? "Request pending" : isInAnotherLeague ? "Leave your league to join" : "Join to view data"}${leagueHasPlus(league.id) ? ` - ${leaguePlanLabel(league.id)}` : ""}${role ? ` - ${displayRole(role, league.id)}` : ""}</em>
         </span>
       </button>
       ${action}
@@ -6222,7 +6317,7 @@ function renderLeagueDetails() {
       <div>
         <h2>${escapeHtml(league.name)}</h2>
         <p>${escapeHtml(league.description || "No description yet.")}</p>
-        <div class="meta-line">${member ? `${members.length}/${leagueMemberCapacity(league.id)} members` : "Join this league to view league data"} - ${league.privacy === "invite" ? "Invite Only" : "Open"}${leagueHasPlus(league.id) ? ` - ${leaguePlanLabel(league.id)}` : ""}${role ? ` - Your role: ${displayRole(role)}` : ""}</div>
+        <div class="meta-line">${member ? `${members.length}/${leagueMemberCapacity(league.id)} members` : "Join this league to view league data"} - ${league.privacy === "invite" ? "Invite Only" : "Open"}${leagueHasPlus(league.id) ? ` - ${leaguePlanLabel(league.id)}` : ""}${role ? ` - Your role: ${displayRole(role, league.id)}` : ""}</div>
       </div>
     </div>
   `;
@@ -6505,6 +6600,7 @@ function renderLeagueRankings() {
 function renderLeagueChat() {
   const member = myLeagueMember();
   els.leagueChatForm.classList.toggle("hidden", !member);
+  els.clearLeagueChatBtn?.classList.toggle("hidden", !canManageActiveLeague() || !leagueChatMessages().length);
   els.createLeaguePollBtn?.classList.toggle("hidden", !canUseLeagueMaxTools());
   const shouldStickToBottom =
     leagueDetailTab === "chat" &&
@@ -6549,6 +6645,9 @@ function leagueChatRow(message) {
   const pinAction = canUseLeagueMaxTools()
     ? `<button class="text-button pin-chat-button" type="button" data-pin-chat="${message.id}">${message.pinned ? "Unpin" : "Pin?"}</button>`
     : "";
+  const deleteAction = canDeleteLeagueChatMessage(message)
+    ? `<button class="text-button danger-text delete-chat-button" type="button" data-delete-chat="${message.id}">Delete</button>`
+    : "";
   return `
     <article class="league-chat-row ${directionClass}" data-chat-row="${message.id}">
       <div>
@@ -6556,7 +6655,7 @@ function leagueChatRow(message) {
         <span>${formatDate(message.created_at)}</span>
       </div>
       ${leagueChatMessageBody(message)}
-      ${pinAction}
+      ${(pinAction || deleteAction) ? `<div class="chat-row-actions">${pinAction}${deleteAction}</div>` : ""}
     </article>
   `;
 }
@@ -6653,7 +6752,7 @@ function renderLeagueSettings() {
       : currentPlan === "plus"
       ? subscription?.stripe_customer_id
         ? "League Plus - up to 24 members"
-        : "Commissioner access - League Plus"
+        : "Owner access - League Plus"
       : "Free league - up to 8 members";
   }
   if (els.leaguePlusBtn) {
@@ -7766,7 +7865,7 @@ function leagueWeeklyReportHtml() {
   const standings = [...weeklyPlayers].sort(sortPlayersByRecord).slice(0, 4);
   const mvp = [...weeklyPlayers].sort(sortWeeklyMvp).at(0) || standings[0] || { name: "No games yet", ...emptyBucket() };
   const sinkLeader = topPlayerBy(weeklyPlayers, "sinks");
-  const fifaLeader = topPlayerBy(weeklyPlayers, "fifas");
+  const scoreLeader = topPlayerBy(weeklyPlayers, "points");
   const returnLeader = topPlayerBy(weeklyPlayers, "fgDefense");
   const hotStreak = topStreak(weeklyPlayers, "W");
   const coldStreak = topStreak(weeklyPlayers, "L");
@@ -7882,7 +7981,7 @@ function leagueWeeklyReportHtml() {
               <h2 class="panel-title blue-title">Stat Leaders</h2>
               <div class="leaders">
                 ${weeklyLeaderBox("Sink Leader", sinkLeader, "sinks")}
-                ${weeklyLeaderBox("FIFA King", fifaLeader, "fifas")}
+                ${weeklyLeaderBox("Total Score", scoreLeader, "points")}
                 ${weeklyLeaderBox("Return to Sender Leader", returnLeader, "fgDefense")}
               </div>
             </article>

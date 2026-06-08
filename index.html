@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260606-2" />
+    <link rel="stylesheet" href="styles.css?v=20260607-1" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -507,7 +507,10 @@
             <section class="panel">
               <div class="section-head compact-section-head">
                 <h3>League Chat</h3>
-                <button class="small-button export-button hidden" id="createLeaguePollBtn" type="button">Create Poll</button>
+                <div class="league-chat-header-actions">
+                  <button class="small-button secondary-button hidden" id="clearLeagueChatBtn" type="button">Clear Chat</button>
+                  <button class="small-button export-button hidden" id="createLeaguePollBtn" type="button">Create Poll</button>
+                </div>
               </div>
               <div class="league-chat-list" id="leagueChatList"></div>
               <div class="pinned-chat-box hidden" id="pinnedChatBox"></div>
@@ -591,10 +594,10 @@
               </section>
               <div class="owner-transfer manager-setting hidden" id="ownerTransferControls">
                 <label>
-                  Transfer Commissioner Role
+                  Transfer Ownership
                   <select id="transferOwnershipSelect"></select>
                 </label>
-                <button class="small-button secondary-button compact-action-button" id="transferOwnershipBtn" type="button">Transfer Commissioner Role</button>
+                <button class="small-button secondary-button compact-action-button" id="transferOwnershipBtn" type="button">Transfer Ownership</button>
               </div>
               <div class="leave-confirm hidden" id="leaveLeagueConfirm">
                 <span>Are you sure?</span>
@@ -1034,7 +1037,7 @@
             <li>To create and manage accounts.</li>
             <li>To save profiles, stats, game history, achievements, rankings, friends, leagues, and notifications.</li>
             <li>To sync league data across users and phones.</li>
-            <li>To let league commissioners, co-leaders, refs, and members use the correct league permissions.</li>
+            <li>To let league owners, co-leaders, refs, and members use the correct league permissions.</li>
             <li>To send or show in-app notifications for achievements, friend requests, league invites, and updates about you.</li>
             <li>To maintain, debug, secure, and improve the app.</li>
           </ul>
@@ -1067,7 +1070,7 @@
             <li>You can edit your profile information in My Profile.</li>
             <li>You can delete local players from Settings unless the name is tied to My Profile.</li>
             <li>You can leave leagues if you are not the owner.</li>
-            <li>League commissioners and co-leaders may manage league members and league data.</li>
+            <li>League owners and co-leaders may manage league members and league data.</li>
             <li>You can decline notification popups when the app asks for permission.</li>
             <li>You can request that account or cloud data be removed by contacting the app owner.</li>
           </ul>
@@ -1101,6 +1104,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260606-2"></script>
+    <script src="app.js?v=20260607-2"></script>
   </body>
 </html>
