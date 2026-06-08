@@ -1696,10 +1696,6 @@ function bindEvents() {
     window.clearTimeout(chatPinPressTimer);
     chatPinPressTimer = window.setTimeout(async () => {
       els.leagueChatList.querySelectorAll(".pin-ready").forEach((item) => item.classList.remove("pin-ready"));
-      if (message?.pinned && canUseLeagueMaxTools()) {
-        await togglePinnedChatMessage(message.id);
-        return;
-      }
       row.classList.add("pin-ready");
     }, 420);
   });
@@ -6643,10 +6639,10 @@ function leagueChatRow(message) {
   const isSent = !isSystem && message.user_id === currentUser?.id;
   const directionClass = isSystem ? `system ${message.type === "poll" ? "poll" : message.type === "event" ? "event" : ""}` : isSent ? "sent" : "received";
   const pinAction = canUseLeagueMaxTools()
-    ? `<button class="text-button pin-chat-button" type="button" data-pin-chat="${message.id}">${message.pinned ? "Unpin" : "Pin?"}</button>`
+    ? `<button class="chat-action-button pin-chat-button" type="button" data-pin-chat="${message.id}">${message.pinned ? "Unpin" : "Pin"}</button>`
     : "";
   const deleteAction = canDeleteLeagueChatMessage(message)
-    ? `<button class="text-button danger-text delete-chat-button" type="button" data-delete-chat="${message.id}">Delete</button>`
+    ? `<button class="chat-action-button danger delete-chat-button" type="button" data-delete-chat="${message.id}">Delete</button>`
     : "";
   return `
     <article class="league-chat-row ${directionClass}" data-chat-row="${message.id}">
@@ -6706,7 +6702,11 @@ function leagueChatMessageBody(message) {
 }
 
 function pinnedChatItem(message) {
-  return `<p>${escapeHtml(message.type === "poll" ? message.payload?.question || message.message : message.type === "event" ? message.payload?.title || message.message : message.message)}</p>`;
+  const label = message.type === "poll" ? message.payload?.question || message.message : message.type === "event" ? message.payload?.title || message.message : message.message;
+  const unpin = canUseLeagueMaxTools()
+    ? `<button class="chat-action-button pinned-unpin-button" type="button" data-pin-chat="${message.id}">Unpin</button>`
+    : "";
+  return `<div class="pinned-chat-item"><p>${escapeHtml(label)}</p>${unpin}</div>`;
 }
 
 function leagueJoinRequestChatRow(member) {
@@ -6845,22 +6845,40 @@ async function copyLeagueInviteLink() {
 }
 
 function cubeBadge(league = {}) {
+  const topColor = league.logo_top || "#EFBF04";
+  const leftColor = league.logo_left || "#ffffff";
+  const rightColor = league.logo_right || "#4f7fc8";
   return `
     <span class="die-badge-shell">
       ${diceLogo({
-        topColor: league.logo_top || "#EFBF04",
-        leftColor: league.logo_left || "#ffffff",
-        rightColor: league.logo_right || "#4f7fc8",
+        topColor,
+        leftColor,
+        rightColor,
+        outlineColor: leagueCubeOutlineColor([topColor, leftColor, rightColor]),
       })}
     </span>
   `;
+}
+
+function leagueCubeOutlineColor(colors = []) {
+  const allLight = colors.every((color) => colorBrightness(color) > 218);
+  return allLight ? "rgba(3, 9, 21, 0.96)" : "#ffffff";
+}
+
+function colorBrightness(color = "") {
+  const hex = cleanText(color).replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return 0;
+  const red = parseInt(hex.slice(0, 2), 16);
+  const green = parseInt(hex.slice(2, 4), 16);
+  const blue = parseInt(hex.slice(4, 6), 16);
+  return (red * 299 + green * 587 + blue * 114) / 1000;
 }
 
 function diceLogo({
   topColor = "#EFBF04",
   leftColor = "#ffffff",
   rightColor = "#4f7fc8",
-  outlineColor = "rgba(3, 9, 21, 0.96)",
+  outlineColor = leagueCubeOutlineColor([topColor, leftColor, rightColor]),
   size = 128,
 } = {}) {
   return `
@@ -7963,7 +7981,7 @@ function leagueWeeklyReportHtml() {
                   <div class="mvp-name">${escapeHtml(mvp.name)}</div>
                   <div class="mvp-lines">
                     <div class="metric-line"><b>${mvp.sinks || 0}</b><span>sinks</span></div>
-                    <div class="metric-line"><b>${mvp.fifas || 0}</b><span>FIFAs</span></div>
+                    <div class="metric-line"><b>${mvp.points || 0}</b><span>total score</span></div>
                     <div class="metric-line"><b>${mvp.wins || 0}-${mvp.losses || 0}</b><span>record</span></div>
                   </div>
                 </div>

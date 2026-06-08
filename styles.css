@@ -1933,6 +1933,7 @@ legend {
 }
 
 .badge-dot {
+  display: block;
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -2932,15 +2933,27 @@ legend {
 .chat-row-actions {
   display: none !important;
   justify-content: end !important;
-  gap: 10px !important;
+  gap: 8px !important;
 }
 
-.pin-chat-button,
-.delete-chat-button {
+.chat-action-button {
   display: none;
-  justify-self: end;
-  padding: 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--background);
   font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.chat-action-button.danger {
+  border-color: var(--red);
+  background: var(--red);
+  color: #ffffff;
 }
 
 .league-chat-row.pin-ready .chat-row-actions {
@@ -2967,6 +2980,17 @@ legend {
   font-size: 0.72rem;
   font-weight: 950;
   text-transform: uppercase;
+}
+
+.pinned-chat-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.pinned-chat-item .pinned-unpin-button {
+  display: inline-flex;
 }
 
 .pinned-chat-box p {
