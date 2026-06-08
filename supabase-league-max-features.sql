@@ -39,6 +39,20 @@ to authenticated
 using (public.can_manage_league(league_id))
 with check (public.can_manage_league(league_id));
 
+drop policy if exists "managers can delete league chat" on public.league_chat_messages;
+create policy "managers can delete league chat"
+on public.league_chat_messages
+for delete
+to authenticated
+using (public.can_manage_league(league_id));
+
+drop policy if exists "authors can delete own league chat" on public.league_chat_messages;
+create policy "authors can delete own league chat"
+on public.league_chat_messages
+for delete
+to authenticated
+using (public.is_league_member(league_id) and user_id = auth.uid());
+
 drop policy if exists "members can view league poll votes" on public.league_poll_votes;
 create policy "members can view league poll votes"
 on public.league_poll_votes

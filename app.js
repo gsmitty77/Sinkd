@@ -6845,40 +6845,22 @@ async function copyLeagueInviteLink() {
 }
 
 function cubeBadge(league = {}) {
-  const topColor = league.logo_top || "#EFBF04";
-  const leftColor = league.logo_left || "#ffffff";
-  const rightColor = league.logo_right || "#4f7fc8";
   return `
     <span class="die-badge-shell">
       ${diceLogo({
-        topColor,
-        leftColor,
-        rightColor,
-        outlineColor: leagueCubeOutlineColor([topColor, leftColor, rightColor]),
+        topColor: league.logo_top || "#EFBF04",
+        leftColor: league.logo_left || "#ffffff",
+        rightColor: league.logo_right || "#4f7fc8",
       })}
     </span>
   `;
-}
-
-function leagueCubeOutlineColor(colors = []) {
-  const allLight = colors.every((color) => colorBrightness(color) > 218);
-  return allLight ? "rgba(3, 9, 21, 0.96)" : "#ffffff";
-}
-
-function colorBrightness(color = "") {
-  const hex = cleanText(color).replace("#", "");
-  if (!/^[0-9a-f]{6}$/i.test(hex)) return 0;
-  const red = parseInt(hex.slice(0, 2), 16);
-  const green = parseInt(hex.slice(2, 4), 16);
-  const blue = parseInt(hex.slice(4, 6), 16);
-  return (red * 299 + green * 587 + blue * 114) / 1000;
 }
 
 function diceLogo({
   topColor = "#EFBF04",
   leftColor = "#ffffff",
   rightColor = "#4f7fc8",
-  outlineColor = leagueCubeOutlineColor([topColor, leftColor, rightColor]),
+  outlineColor = "rgba(3, 9, 21, 0.96)",
   size = 128,
 } = {}) {
   return `
