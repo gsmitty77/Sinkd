@@ -913,6 +913,75 @@ legend {
   line-height: 36px;
 }
 
+#bigGamePlayerGrid .regular-team-group,
+#leagueGamePlayerGrid .regular-team-group,
+.tournament-big-form .match-player-stats .regular-team-group {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+#bigGamePlayerGrid .regular-team-group h3,
+#leagueGamePlayerGrid .regular-team-group h3,
+.tournament-big-form .match-player-stats .regular-team-group h3 {
+  grid-column: 1 / -1;
+}
+
+#bigGamePlayerGrid .player-stat-card,
+#leagueGamePlayerGrid .player-stat-card,
+.tournament-big-form .player-stat-card {
+  gap: 9px;
+  padding: 10px;
+}
+
+#bigGamePlayerGrid .counter-list,
+#leagueGamePlayerGrid .counter-list,
+.tournament-big-form .counter-list {
+  gap: 6px;
+}
+
+#bigGamePlayerGrid .counter-row,
+#leagueGamePlayerGrid .counter-row,
+.tournament-big-form .counter-row {
+  min-height: 44px;
+}
+
+#bigGamePlayerGrid .counter-label,
+#leagueGamePlayerGrid .counter-label,
+.tournament-big-form .counter-label {
+  font-size: 0.64rem;
+  line-height: 1.05;
+}
+
+#bigGamePlayerGrid .counter-control,
+#leagueGamePlayerGrid .counter-control,
+.tournament-big-form .counter-control {
+  grid-template-columns: 34px minmax(36px, 1fr) 34px;
+}
+
+#bigGamePlayerGrid .counter-control button,
+#leagueGamePlayerGrid .counter-control button,
+.tournament-big-form .counter-control button {
+  min-height: 30px;
+}
+
+#bigGamePlayerGrid .counter-control input,
+#leagueGamePlayerGrid .counter-control input,
+.tournament-big-form .counter-control input {
+  min-height: 30px;
+  height: 30px;
+  line-height: 30px;
+}
+
+#bigGamePlayerGrid .self-sink-button,
+#leagueGamePlayerGrid .self-sink-button,
+.tournament-big-form .self-sink-button,
+#leagueGamePlayerGrid .auto-win-sink-button,
+.tournament-big-form .auto-win-sink-button {
+  min-height: 34px;
+  font-size: 0.78rem;
+}
+
 .team-stat-grid.compact {
   margin: 10px 0;
 }
