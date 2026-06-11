@@ -1689,6 +1689,10 @@ function bindEvents() {
     }
     if (pollVote) await voteOnLeaguePoll(pollVote.dataset.pollVote, Number(pollVote.dataset.pollOption));
   });
+  els.pinnedChatBox?.addEventListener("click", async (event) => {
+    const pinChat = event.target.closest("[data-pin-chat]");
+    if (pinChat) await togglePinnedChatMessage(pinChat.dataset.pinChat);
+  });
   els.leagueChatList.addEventListener("pointerdown", (event) => {
     const row = event.target.closest("[data-chat-row]");
     const message = row ? leagueChatMessages().find((item) => item.id === row.dataset.chatRow) : null;

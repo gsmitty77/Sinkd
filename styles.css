@@ -3590,43 +3590,89 @@ td {
   }
 
   .regular-player-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
   }
 
   .regular-team-group {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    display: contents;
   }
 
   .regular-team-group h3 {
-    grid-column: 1 / -1;
+    display: none;
   }
 
   .player-stat-card {
-    padding: 12px;
+    gap: 6px;
+    padding: 7px;
   }
 
   .counter-list {
-    gap: 6px;
+    gap: 3px;
   }
 
   .counter-row {
-    min-height: 46px;
+    min-height: 34px;
+    gap: 2px;
+  }
+
+  .counter-label {
+    font-size: 0.58rem;
+    line-height: 1;
   }
 
   .counter-control {
-    grid-template-columns: 38px 1fr 38px;
+    grid-template-columns: 26px minmax(24px, 1fr) 26px;
+    border-radius: 6px;
   }
 
   .counter-control button {
-    min-height: 32px;
+    min-height: 24px;
+    font-size: 0.82rem;
   }
 
   .counter-control input {
+    min-height: 24px;
+    height: 24px;
+    line-height: 24px;
+    font-size: 0.82rem;
+  }
+
+  .self-sink-button,
+  .auto-win-sink-button {
+    min-height: 28px;
+    border-radius: 6px;
+    font-size: 0.68rem;
+  }
+
+  .compact-player-card strong {
+    font-size: 0.74rem;
+    line-height: 1;
+  }
+
+  .player-name input,
+  .player-name select {
+    min-height: 32px;
+    height: 32px;
+    font-size: 0.78rem;
+  }
+
+  .score-helper,
+  .league-scoring-rules {
+    margin-bottom: 6px;
+    font-size: 0.68rem;
+  }
+
+  .score-grid-bottom {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .score-grid-bottom input[type="number"] {
     min-height: 34px;
     height: 34px;
-    line-height: 34px;
   }
 }
 
