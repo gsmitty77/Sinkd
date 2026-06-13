@@ -1464,6 +1464,7 @@ function bindEvents() {
   els.friendsList.addEventListener("click", async (event) => {
     const inviteToLeague = event.target.closest("[data-invite-friend-league]");
     const preferredPartner = event.target.closest("[data-preferred-partner]");
+    const seeProfile = event.target.closest("[data-friend-profile]");
     const unfriend = event.target.closest("[data-unfriend]");
     const confirmUnfriend = event.target.closest("[data-unfriend-confirm]");
     const cancelUnfriend = event.target.closest("[data-unfriend-cancel]");
@@ -1474,6 +1475,10 @@ function bindEvents() {
     }
     if (preferredPartner) {
       setPreferredPartnerFromFriend(preferredPartner.dataset.preferredPartner);
+      return;
+    }
+    if (seeProfile) {
+      await openFriendProfile(seeProfile.dataset.friendProfile);
       return;
     }
     if (confirmUnfriend) {
@@ -6203,7 +6208,7 @@ function friendRow(request) {
             ${
               confirming
                 ? `<div class="friend-confirm"><span>Are you sure?</span><div class="friend-actions"><button class="small-button danger-button" type="button" data-unfriend-confirm="${request.id}">Yes</button><button class="small-button secondary-button" type="button" data-unfriend-cancel="${request.id}">Cancel</button></div></div>`
-                : `<div class="friend-actions friend-actions-stacked"><button class="small-button secondary-button preferred-partner-button" type="button" data-preferred-partner="${request.id}">Preferred Partner</button>${inviteButton}<button class="small-button danger-button" type="button" data-unfriend="${request.id}">Unfriend</button></div>`
+                : `<div class="friend-actions friend-actions-stacked"><button class="primary-button roster-profile-button" type="button" data-friend-profile="${request.id}">See Profile</button><button class="small-button secondary-button preferred-partner-button" type="button" data-preferred-partner="${request.id}">Preferred Partner</button>${inviteButton}<button class="small-button danger-button" type="button" data-unfriend="${request.id}">Unfriend</button></div>`
             }
           `
           : ""
@@ -6227,6 +6232,66 @@ function friendInfo(request) {
 
 function publicFriendRequestName(request) {
   return cleanText(request.requester_name) || "A player";
+}
+
+async function openFriendProfile(requestId) {
+  const request = friendRequestCache.find((item) => item.id === requestId);
+  if (!request) return;
+  const friend = friendInfo(request);
+  const cloudProfile = await loadFriendPublicProfile(friend.userId);
+  const name = cleanText(cloudProfile?.nickname || friend.name || "Friend");
+  const code = normalizePlayerCode(cloudProfile?.player_code);
+  const stats = localStatsForPlayer(friend.name);
+  const statItems = [
+    ["Games", stats.games],
+    ["Record", `${stats.wins}-${stats.losses}`],
+    ["Win %", formatPercent(winPercent(stats))],
+    ["Current Streak", streakLabel(stats)],
+    ["Score", stats.points],
+    ["Table Hits", stats.tableHits],
+    ["Sinks", stats.sinks],
+    ["Tinks", stats.tinks],
+    ["FG Offense", stats.fgOffense],
+    ["FG Defense", stats.fgDefense],
+    ["FIFAs", stats.fifas],
+    ["Self Sinks", stats.selfSinks],
+    ["Tourney Record", `${stats.tournamentWins || 0}-${stats.tournamentLosses || 0}`],
+  ];
+
+  els.rosterProfileTitle.textContent = name;
+  els.rosterProfileContent.innerHTML = `
+    <article class="profile-card roster-profile-card">
+      <div class="profile-identity">
+        <span class="profile-cup-badge" style="--cup-color:${escapeHtml(cloudProfile?.cup_color || "#d71920")}">${cupSvg()}</span>
+        <div>
+          <strong>${escapeHtml(name)}</strong>
+          <span>${escapeHtml(friend.name === name ? "Friend" : friend.name)}</span>
+          ${code ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
+        </div>
+      </div>
+      <div class="profile-stat-grid">
+        ${statItems.map(([label, value]) => `<div><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("")}
+      </div>
+    </article>
+  `;
+  els.rosterProfileModal.classList.remove("hidden");
+  els.rosterProfileModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+async function loadFriendPublicProfile(userId) {
+  if (!authClient || !userId) return null;
+  const { data, error } = await authClient
+    .from("player_profiles")
+    .select("user_id, player_code, nickname, cup_color")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.warn(error);
+    return null;
+  }
+  return data;
 }
 
 function friendLeagueInviteKey(requestId, leagueId) {
