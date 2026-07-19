@@ -95,8 +95,8 @@ const themePresets = [
   { name: "Redline", background: "#2a0508", panel: "#4a0b10", accent: "#ffffff", text: "#ffffff" },
   { name: "Blacktop", background: "#050505", panel: "#171717", accent: "#efbf04", text: "#ffffff" },
 ];
-const supabaseUrl = "https://egkdplyqrkoqgysgossd.supabase.co";
-const supabaseKey = "sb_publishable_0tPe5tBwnSAsBf_8OgB68g_362B5XPV";
+const supabaseUrl = "https://cmjruqcuqwalitvqdhkm.supabase.co";
+const supabaseKey = "sb_publishable_j-OTlOg3kvkG5CNHqHB0OQ_wx6dWOEC";
 const vapidPublicKey = "BKu6165rw3XPcgaASzQ2lfauLSALUx9NP6I5Q718K45iCkDLoix74gylYXYr_saA8NwzKbSOZS0NrsCZb_YyBzc";
 let authClient = window.supabase?.createClient(supabaseUrl, supabaseKey) || null;
 const authDisabledForPreview = false;
