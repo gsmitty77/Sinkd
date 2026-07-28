@@ -1,0 +1,1151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#111827" />
+    <title>Sinkd</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #111827;
+      }
+    </style>
+    <script>
+      (() => {
+        try {
+          const theme = JSON.parse(localStorage.getItem("sinkdTheme") || "{}");
+          const color = /^#[0-9a-f]{6}$/i.test(theme.background || "") ? theme.background : "#111827";
+          document.documentElement.style.background = color;
+          document.documentElement.style.backgroundColor = color;
+          document.addEventListener("DOMContentLoaded", () => {
+            document.body.style.background = color;
+            document.body.style.backgroundColor = color;
+            document.querySelector('meta[name="theme-color"]')?.setAttribute("content", color);
+          });
+        } catch {
+          document.documentElement.style.background = "#111827";
+        }
+      })();
+    </script>
+    <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
+    <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
+    <link rel="manifest" href="site.webmanifest" />
+    <link rel="stylesheet" href="styles.css?v=20260727-4" />
+  </head>
+  <body>
+    <section class="splash-screen" id="splashScreen" aria-hidden="true">
+      <div class="splash-content">
+        <img class="splash-logo" src="assets/splash-logo.svg" alt="" />
+        <div class="splash-wordmark">Sinkd</div>
+      </div>
+    </section>
+    <script>
+      window.setTimeout(() => {
+        const splash = document.getElementById("splashScreen");
+        if (!splash) return;
+        splash.classList.add("is-hidden");
+        splash.style.opacity = "0";
+        splash.style.visibility = "hidden";
+        splash.style.pointerEvents = "none";
+      }, 2400);
+    </script>
+    <div class="notification-toast-wrap" id="notificationToastWrap" aria-live="polite"></div>
+
+    <section class="intro-modal hidden" id="introModal" aria-hidden="true">
+      <div class="intro-sheet">
+        <p class="intro-kicker">Welcome to</p>
+        <img class="intro-logo" src="assets/splash-logo.svg" alt="" />
+        <h2 class="intro-wordmark">Sinkd</h2>
+        <p class="intro-lead">A quick guide to what each tab does before you start tracking.</p>
+        <div class="intro-grid">
+          <article><strong>Quick Log</strong><span>Log fast local games and keep lifetime stats moving.</span></article>
+          <article><strong>Tournaments</strong><span>Create brackets, play one match at a time, and track tournament runs.</span></article>
+          <article><strong>Leagues</strong><span>Join friends, sync shared games, rankings, rosters, and badges.</span></article>
+          <article><strong>Player Stats</strong><span>View local-only stats from games saved on this device.</span></article>
+          <article><strong>My Profile</strong><span>Set your nickname, cup color, partner, and see lifetime totals.</span></article>
+          <article><strong>Settings</strong><span>Export PDFs, manage players, read rules, and send feedback.</span></article>
+        </div>
+        <button class="primary-button" id="closeIntroBtn" type="button">Track Stats Now</button>
+      </div>
+    </section>
+
+    <section class="intro-modal hidden" id="confirmModal" aria-hidden="true">
+      <div class="intro-sheet confirm-sheet">
+        <h2 id="confirmTitle">Are you sure?</h2>
+        <p class="intro-lead" id="confirmMessage"></p>
+        <input class="confirm-input hidden" id="confirmInput" type="text" />
+        <div class="confirm-choice-list hidden" id="confirmChoiceList"></div>
+        <div class="age-gate-actions">
+          <button class="primary-button" id="confirmYesBtn" type="button">Yes</button>
+          <button class="small-button danger-button" id="confirmCancelBtn" type="button">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="intro-modal hidden" id="gamePointModal" aria-hidden="true">
+      <div class="intro-sheet confirm-sheet game-point-sheet">
+        <h2>Game Point</h2>
+        <p class="intro-lead">Set what score this game plays to.</p>
+        <div class="game-point-stepper">
+          <button class="small-button secondary-button" id="decreaseGamePointBtn" type="button">-</button>
+          <strong id="gamePointValue">11</strong>
+          <button class="small-button secondary-button" id="increaseGamePointBtn" type="button">+</button>
+        </div>
+        <button class="primary-button" id="saveGamePointBtn" type="button">Save</button>
+      </div>
+    </section>
+
+    <section class="auth-shell hidden" id="authShell">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <img class="auth-icon" src="assets/sinkr-logo.svg" alt="" onerror="this.style.display='none'" />
+          <div class="auth-wordmark">Sinkd</div>
+        </div>
+        <div class="auth-copy">
+          <h1>Welcome Back</h1>
+          <p>Sign in or create an account to sync leagues, friends, rankings, and stats.</p>
+        </div>
+        <button class="small-button google-button auth-google-primary" id="googleBtn" type="button">Sign in / create with Google</button>
+        <div class="auth-divider"><span></span><b>or use email</b><span></span></div>
+        <form id="authForm">
+          <label>
+            <input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Email" required />
+          </label>
+          <label>
+            <input id="authPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required />
+          </label>
+          <div class="auth-actions">
+            <button class="primary-button" id="signInBtn" type="button">Sign In</button>
+          </div>
+        </form>
+        <div class="auth-secondary-actions">
+          <button class="text-button auth-link-button" id="signUpBtn" type="button">Create account</button>
+          <span></span>
+          <button class="text-button auth-link-button" id="forgotPasswordBtn" type="button">Forgot password?</button>
+        </div>
+        <p class="auth-message" id="authMessage"></p>
+      </div>
+    </section>
+
+    <div class="app-shell" id="appShell">
+      <header class="topbar">
+        <div class="brand-block">
+          <img class="app-icon" src="assets/sinkr-logo.svg" alt="" onerror="this.style.display='none'" />
+          <div>
+          <h1 class="brand-name">Sinkd</h1>
+          </div>
+        </div>
+        <div class="account-block">
+          <span id="userEmail"></span>
+          <button class="small-button secondary-button" id="signOutBtn" type="button" hidden>Sign Out</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Primary sections">
+        <button class="tab active" data-view="regular">Quick Log</button>
+        <button class="tab" data-view="tournaments">Tournaments</button>
+        <button class="tab" data-view="leagues">Leagues</button>
+        <button class="tab" data-view="players">Player Stats</button>
+        <button class="tab profile-tab-button" data-view="profiles">
+          My Profile
+          <span class="notification-badge profile-tab-badge hidden" id="profileTabBadge">0</span>
+        </button>
+        <button class="tab" data-view="settings">Settings</button>
+      </nav>
+
+      <main>
+        <section class="view active" id="regularView">
+          <div class="section-head">
+            <div>
+              <h2>Quick Log</h2>
+              <p>Log head-to-head games and keep overall player totals current.</p>
+            </div>
+            <div class="section-actions">
+              <button class="tiny-action-button" id="localGamePointBtn" type="button">Game Point: 11</button>
+              <button class="small-button export-button" id="openBigGameBtn" type="button">Big Game?</button>
+            </div>
+          </div>
+
+          <form class="panel stat-form" id="regularGameForm">
+            <div class="score-grid">
+              <label>
+                Team 1 Score
+                <input name="teamAScore" type="number" min="0" value="0" required />
+              </label>
+              <label>
+                Team 2 Score
+                <input name="teamBScore" type="number" min="0" value="0" required />
+              </label>
+            </div>
+            <p class="score-helper">Game point: <span id="localGamePointText">11</span>. Plus and minus buttons update the score automatically. You can still type the score manually.</p>
+
+            <div class="regular-player-grid" id="regularPlayerGrid"></div>
+            <input type="hidden" name="selfSinkPlayer" value="" />
+            <input type="hidden" name="selfSinkTeam" value="" />
+            <div class="form-actions">
+              <button class="small-button export-button" id="quickRematchBtn" type="button">Quick Rematch</button>
+            </div>
+            <button class="primary-button" type="submit">Quick Log</button>
+          </form>
+
+          <div class="history-grid">
+            <section class="panel">
+              <h3>Recent Regular Games</h3>
+              <div class="list" id="regularGamesList"></div>
+            </section>
+            <section class="panel">
+              <h3>Overall Leaders</h3>
+              <div class="leaderboard" id="overallLeaders"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="bigView">
+          <div class="section-head">
+            <div>
+              <h2>Big Games</h2>
+              <p>Track long-format games with expanded individual player stats.</p>
+            </div>
+          </div>
+          <button class="small-button secondary-button back-nav-button" id="backToRegularBtn" type="button">Back to Quick Log</button>
+
+          <form class="panel stat-form" id="bigGameForm">
+            <p class="score-helper">Game point: <span id="bigGamePointText">11</span>. Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
+            <div class="regular-player-grid" id="bigGamePlayerGrid"></div>
+            <input type="hidden" name="selfSinkPlayer" value="" />
+            <input type="hidden" name="selfSinkTeam" value="" />
+            <div class="score-grid score-grid-bottom">
+              <label>
+                Team 1 Final Score
+                <input name="teamAScore" type="number" min="0" value="0" required />
+              </label>
+              <label>
+                Team 2 Final Score
+                <input name="teamBScore" type="number" min="0" value="0" required />
+              </label>
+            </div>
+            <button class="primary-button" type="submit">Log Big Game</button>
+          </form>
+
+          <div class="history-grid">
+            <section class="panel">
+              <h3>Recent Big Games</h3>
+              <div class="list" id="bigGamesList"></div>
+            </section>
+            <section class="panel">
+              <h3>Big Game Leaders</h3>
+              <div class="leaderboard" id="bigGameLeaders"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="tournamentsView">
+          <div class="section-head">
+            <div>
+              <h2>Tournaments</h2>
+              <p>Create a bracket, log matches, and track tournament-only totals.</p>
+            </div>
+          </div>
+
+          <div class="tournament-layout">
+            <form class="panel" id="tournamentForm">
+              <h3>New Tournament</h3>
+              <label>
+                Tournament Name
+                <input name="name" placeholder="Friday Night Classic" required />
+              </label>
+              <label>
+                Teams
+                <textarea name="teams" rows="8" placeholder="Red Cups: Alex, Jordan&#10;Blue Dies: Casey, Morgan&#10;Table Kings: Sam, Riley&#10;Last Call: Taylor, Drew" required></textarea>
+              </label>
+              <label>
+                Games to Win by Round
+                <input name="gamesToWin" type="text" value="1" placeholder="1, 1, 2" required />
+              </label>
+              <p class="form-help">Separate rounds with commas. Example: 1, 1, 2 means early rounds are one game and the final is best of 3.</p>
+              <button class="primary-button compact-action-button" type="submit">Create Bracket</button>
+            </form>
+
+            <section class="panel">
+              <h3>Active Tournament</h3>
+              <label>
+                Select Tournament
+                <select id="tournamentSelect"></select>
+              </label>
+              <button class="small-button danger-button" id="deleteTournamentBtn" type="button">Delete Tournament</button>
+              <div id="tournamentSummary" class="summary-strip"></div>
+            </section>
+          </div>
+
+          <section class="bracket-wrap" id="bracket"></section>
+
+          <div class="history-grid">
+            <section class="panel">
+              <h3>Tournament Match Log</h3>
+              <div class="list" id="tournamentMatchesList"></div>
+            </section>
+            <section class="panel">
+              <h3>Tournament Stats</h3>
+              <div class="leaderboard" id="tournamentStats"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="leaguesView">
+          <div class="section-head">
+            <div>
+              <h2>Leagues</h2>
+              <p>Shared cloud leagues for synced games, stats, rankings, and history.</p>
+            </div>
+          </div>
+
+          <section class="panel league-create-card">
+            <button class="primary-button" id="showLeagueCreateBtn" type="button">Create League</button>
+            <form class="league-create-form hidden" id="leagueForm">
+              <label>
+                League Name
+                <input name="name" maxlength="32" placeholder="Table Kings" required />
+              </label>
+              <label>
+                Description
+                <textarea name="description" rows="3" placeholder="Home table league, Friday nights, house rules"></textarea>
+              </label>
+              <label>
+                Join Type
+                <select name="privacy" required>
+                  <option value="open">Open</option>
+                  <option value="invite">Invite Only</option>
+                </select>
+              </label>
+              <label class="checkbox-row">
+                <input name="useAppRules" type="checkbox" checked />
+                Use app rules
+              </label>
+              <div class="league-rule-toggles">
+                <label class="toggle-row">
+                  <span><b>Sink Auto-Win</b><small>Sink button decides the game.</small></span>
+                  <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                  <input name="sinkAutoWin" type="checkbox" />
+                </label>
+                <label class="toggle-row">
+                  <span><b>FIFA Ladder</b><small>Called FIFAs score 1, 2, then 3 max.</small></span>
+                  <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                  <input name="fifaMultiplier" type="checkbox" />
+                </label>
+              </div>
+              <label class="league-custom-rules hidden">
+                League Rules
+                <textarea name="rules" rows="7" placeholder="Type your league rules here if your group plays different."></textarea>
+              </label>
+              <div class="cube-color-grid">
+                <label>Top <input name="logoTop" type="color" value="#EFBF04" /></label>
+                <label>Left <input name="logoLeft" type="color" value="#ffffff" /></label>
+                <label>Right <input name="logoRight" type="color" value="#4f7fc8" /></label>
+              </div>
+              <button class="primary-button" type="submit">Save League</button>
+            </form>
+          </section>
+
+          <form class="panel league-tab-invite-form hidden" id="leagueTabInviteForm">
+            <h3>Invite to League</h3>
+            <label>
+              League
+              <select name="leagueId" required></select>
+            </label>
+            <label>Player Code <input name="playerCode" type="text" placeholder="SINK-XXXX" maxlength="9" required /></label>
+            <button class="small-button export-button compact-action-button" type="submit">Send Invite</button>
+          </form>
+
+          <label class="league-search-field">
+            Search Leagues
+            <input id="leagueSearchInput" type="search" placeholder="Search by league name..." autocomplete="off" />
+          </label>
+
+          <section class="league-list" id="leagueList"></section>
+        </section>
+
+        <section class="view" id="notificationsView">
+          <div class="section-head">
+            <div>
+              <h2>Notifications</h2>
+              <p>Achievements, invites, friend requests, and personal updates.</p>
+            </div>
+          </div>
+          <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromNotificationsBtn" type="button">Back to My Profile</button>
+          <section class="panel">
+            <div class="notification-head">
+              <h3>Inbox</h3>
+              <div class="notification-actions">
+                <button class="small-button secondary-button" id="markNotificationsReadBtn" type="button">Mark All Read</button>
+                <button class="small-button danger-button" id="deleteAllNotificationsBtn" type="button">Delete All</button>
+              </div>
+            </div>
+            <div class="notification-list" id="notificationList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="friendsView">
+          <div class="section-head">
+            <div>
+              <h2>Friends</h2>
+              <p>Invite players, answer requests, and see your friends.</p>
+            </div>
+          </div>
+          <button class="small-button secondary-button back-nav-button" id="backToLeaguesFromFriendsBtn" type="button">Back to My Profile</button>
+
+          <section class="panel">
+            <h3>Invite Friend</h3>
+            <form class="friend-invite-form" id="friendInviteForm">
+              <label>Player Code <input name="playerCode" type="text" placeholder="SINK-XXXX" maxlength="9" required /></label>
+              <button class="primary-button compact-action-button" type="submit">Invite</button>
+            </form>
+          </section>
+
+          <section class="panel friend-section">
+            <h3>My Friends</h3>
+            <div class="friend-list" id="friendsList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="leagueDetailsView">
+          <section class="panel league-detail-hero" id="leagueDetailHero"></section>
+          <button class="small-button secondary-button back-nav-button" id="backToLeaguesBtn" type="button">Back to Leagues</button>
+
+          <nav class="tabs sub-tabs" aria-label="League sections">
+            <button class="tab active" data-league-detail-tab="games" type="button">League Games</button>
+            <button class="tab" data-league-detail-tab="tournaments" type="button">Tournaments</button>
+            <button class="tab" data-league-detail-tab="stats" type="button">Roster</button>
+            <button class="tab" data-league-detail-tab="leagueStats" type="button">League Stats</button>
+            <button class="tab" data-league-detail-tab="rankings" type="button">Rankings</button>
+            <button class="tab league-chat-tab" data-league-detail-tab="chat" type="button">
+              Chat
+              <span class="notification-badge chat-badge hidden" id="leagueChatBadge">0</span>
+            </button>
+            <button class="tab" data-league-detail-tab="past" type="button">Seasons</button>
+            <button class="tab" data-league-detail-tab="settings" type="button">Settings</button>
+          </nav>
+
+          <section class="league-detail-panel active" id="leagueGamesPanel">
+            <form class="panel stat-form" id="leagueGameForm">
+              <h3 id="leagueGameFormTitle">Log League Game</h3>
+              <button class="tiny-action-button league-game-point-button hidden" id="leagueGamePointBtn" type="button">Game Point: 11</button>
+              <button class="small-button export-button" id="leagueQuickRematchBtn" type="button">Quick Rematch</button>
+              <p class="score-helper">Game point: <span id="leagueGamePointText">11</span>. Track the scoring plays first. Final scores are at the bottom and still update automatically, or you can type them manually.</p>
+              <div class="league-scoring-rules hidden" id="leagueScoringRulesNote"></div>
+              <div class="regular-player-grid" id="leagueGamePlayerGrid"></div>
+              <input type="hidden" name="selfSinkPlayer" value="" />
+              <input type="hidden" name="selfSinkTeam" value="" />
+              <input type="hidden" name="editingLeagueGameId" value="" />
+              <div class="score-grid score-grid-bottom">
+                <label>Team 1 Score <input name="teamAScore" type="number" min="0" value="0" required /></label>
+                <label>Team 2 Score <input name="teamBScore" type="number" min="0" value="0" required /></label>
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" id="leagueGameSubmitBtn" type="submit">Log League Game</button>
+                <button class="small-button secondary-button hidden" id="cancelLeagueGameEditBtn" type="button">Cancel Edit</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="league-detail-panel" id="leagueTournamentsPanel">
+            <div class="tournament-layout">
+              <form class="panel" id="leagueTournamentForm">
+                <h3>Create League Tournament</h3>
+                <label>Tournament Name <input name="name" maxlength="32" placeholder="Friday bracket" required /></label>
+                <div class="league-tournament-team-field">
+                  <span>Teams</span>
+                  <div class="league-tournament-team-builder" id="leagueTournamentTeamBuilder"></div>
+                  <button class="small-button blue-action-button compact-action-button" id="addLeagueTournamentTeamBtn" type="button">Add Team</button>
+                </div>
+                <label>
+                  Games to Win by Round
+                  <input name="gamesToWin" type="text" value="1" placeholder="1, 1, 2" required />
+                </label>
+                <p class="form-help">Separate rounds with commas. The last number repeats if the bracket has more rounds.</p>
+                <button class="primary-button compact-action-button" type="submit">Create Bracket</button>
+              </form>
+
+              <section class="panel">
+                <h3>Current League Tournament</h3>
+                <div class="tournament-toolbar">
+                  <label>
+                    Tournament
+                    <select id="leagueTournamentSelect"></select>
+                  </label>
+                  <button class="small-button danger-button" id="deleteLeagueTournamentBtn" type="button">Delete</button>
+                </div>
+                <div id="leagueTournamentSummary" class="summary-strip"></div>
+                <div id="leagueTournamentBracket"></div>
+              </section>
+
+              <section class="panel">
+                <h3>League Tournament History</h3>
+                <div class="list" id="leagueTournamentMatchesList"></div>
+              </section>
+            </div>
+          </section>
+
+          <section class="league-detail-panel" id="leagueStatsPanel">
+            <section class="panel">
+              <h3>Roster</h3>
+              <form class="league-compare-form" id="leagueCompareForm">
+                <label>Compare <select name="playerA"></select></label>
+                <label>With <select name="playerB"></select></label>
+              </form>
+              <div class="league-compare-result" id="leagueCompareResult"></div>
+              <div class="league-roster-list" id="leaguePlayerStats"></div>
+              <div class="league-roster-detail" id="leagueRosterDetail"></div>
+            </section>
+          </section>
+
+          <section class="league-detail-panel" id="leagueRankingsPanel">
+            <div class="history-grid">
+              <section class="panel"><h3>Top 5 Players</h3><div class="leaderboard" id="leagueOverallRankings"></div></section>
+              <section class="panel"><h3>Sinks</h3><div class="leaderboard" id="leagueSinkRankings"></div></section>
+              <section class="panel"><h3>Total Points</h3><div class="leaderboard" id="leaguePlayerRankings"></div></section>
+              <section class="panel"><h3>Soccer Players</h3><div class="leaderboard" id="leagueWinRankings"></div></section>
+              <section class="panel hidden" id="leagueLiabilitiesPanel"><h3>Liabilities</h3><div class="leaderboard" id="leagueLiabilityRankings"></div></section>
+            </div>
+          </section>
+
+          <section class="league-detail-panel" id="leaguePastPanel">
+            <section class="panel">
+              <h3>Seasons</h3>
+              <div class="season-lock" id="leagueSeasonLock"></div>
+              <div class="league-season-tools hidden" id="leagueSeasonTools">
+                <div class="season-status-card" id="leagueSeasonStatus"></div>
+                <div class="season-action-row" id="leagueSeasonOwnerControls">
+                  <button class="small-button export-button compact-action-button" id="startLeagueSeasonBtn" type="button">Start Season</button>
+                  <button class="small-button danger-button compact-action-button" id="endLeagueSeasonBtn" type="button">End Season</button>
+                </div>
+                <form class="season-schedule-form hidden" id="leagueSeasonScheduleForm">
+                  <label>Season Name <input name="seasonName" maxlength="40" placeholder="Fall Season" /></label>
+                  <label>Start Date <input name="seasonDate" type="datetime-local" /></label>
+                  <button class="small-button secondary-button compact-action-button" type="submit">Schedule Season</button>
+                </form>
+                <form class="season-schedule-form hidden" id="leagueScheduleForm">
+                  <label>
+                    Schedule Type
+                    <select name="scheduleType">
+                      <option value="match">Match</option>
+                      <option value="tournament">Tournament</option>
+                    </select>
+                  </label>
+                  <label>Title <input name="title" maxlength="40" placeholder="Friday Matchups" required /></label>
+                  <label>Date <input name="date" type="datetime-local" required /></label>
+                  <label>Details <textarea name="details" rows="3" maxlength="180" placeholder="Teams, table, time, or tournament notes."></textarea></label>
+                  <button class="small-button export-button compact-action-button" type="submit">Schedule</button>
+                </form>
+                <div class="scheduled-list" id="leagueScheduledList"></div>
+              </div>
+              <button class="small-button secondary-button compact-action-button" id="openPastSeasonsBtn" type="button">Past Seasons</button>
+              <div class="list league-past-games" id="leagueGameHistory"></div>
+            </section>
+          </section>
+
+          <section class="league-detail-panel" id="leagueChatPanel">
+            <section class="panel">
+              <div class="section-head compact-section-head">
+                <h3>League Chat</h3>
+                <div class="league-chat-header-actions">
+                  <button class="small-button secondary-button hidden" id="clearLeagueChatBtn" type="button">Clear Chat</button>
+                  <button class="small-button export-button hidden" id="createLeaguePollBtn" type="button">Create Poll</button>
+                </div>
+              </div>
+              <div class="league-chat-list" id="leagueChatList"></div>
+              <div class="pinned-chat-box hidden" id="pinnedChatBox"></div>
+              <form class="league-chat-form" id="leagueChatForm">
+                <input name="message" maxlength="240" placeholder="Message your league..." required />
+                <button class="small-button export-button" type="submit">Send</button>
+              </form>
+            </section>
+          </section>
+
+          <section class="league-detail-panel" id="leagueLeagueStatsPanel">
+            <section class="panel">
+              <div class="section-head compact-section-head">
+                <h3>League Stats</h3>
+                <div class="league-stat-actions">
+                  <button class="small-button export-button" id="leagueExportBtn" type="button">Export PDF</button>
+                  <button class="small-button secondary-button" id="leagueWeeklyReportBtn" type="button">Weekly Report</button>
+                </div>
+              </div>
+              <div class="table-scroll league-stats-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>League W-L</th>
+                      <th>Win %</th>
+                      <th>Current Streak</th>
+                      <th>Table Hits</th>
+                      <th>Sinks</th>
+                      <th>Tinks</th>
+                      <th>FG Off</th>
+                      <th>FG Def</th>
+                      <th>FIFAs</th>
+                      <th>Self Sinks</th>
+                      <th>Tourney W/L</th>
+                    </tr>
+                  </thead>
+                  <tbody id="leagueStatsTable"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="league-detail-panel" id="leagueSettingsPanel">
+            <section class="panel">
+              <h3>League Rules</h3>
+              <p class="meta-line" id="leagueRulesSummary">Use the default house rules or save custom rules for this league.</p>
+              <div class="league-rule-actions">
+                <button class="small-button export-button" id="openLeagueRulesBtn" type="button">View Rules</button>
+                <button class="small-button secondary-button manager-setting" id="editLeagueRulesBtn" type="button">Edit Rules</button>
+              </div>
+            </section>
+            <form class="panel" id="leagueSettingsForm">
+              <h3>League Settings</h3>
+              <label class="manager-setting">League Name <input name="name" maxlength="32" required /></label>
+              <label class="manager-setting">Description <textarea name="description" rows="3"></textarea></label>
+              <label class="manager-setting">
+                Join Type
+                <select name="privacy" required>
+                  <option value="open">Open</option>
+                  <option value="invite">Invite Only</option>
+                </select>
+              </label>
+              <div class="cube-color-grid manager-setting">
+                <label>Top <input name="logoTop" type="color" /></label>
+                <label>Left <input name="logoLeft" type="color" /></label>
+                <label>Right <input name="logoRight" type="color" /></label>
+              </div>
+              <button class="small-button secondary-button compact-action-button leave-league-compact" id="leaveLeagueBtn" type="button">Leave League</button>
+              <button class="primary-button compact-action-button manager-setting" type="submit">Save Settings</button>
+              <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
+              <section class="league-plus-setting hidden" id="leaguePlusSetting">
+                <div>
+                  <strong id="leaguePlusTitle">League Plan</strong>
+                  <span id="leaguePlusStatus">Free league - up to 8 members</span>
+                </div>
+                <div class="league-plan-actions">
+                  <button class="small-button compact-action-button plan-upgrade-button plus-plan-button hidden" id="leaguePlusBtn" type="button">Upgrade to League Plus</button>
+                  <button class="small-button compact-action-button plan-upgrade-button max-plan-button hidden" id="leagueMaxBtn" type="button">Upgrade to Leagues MAX</button>
+                </div>
+              </section>
+              <div class="owner-transfer manager-setting hidden" id="ownerTransferControls">
+                <label>
+                  Transfer Ownership
+                  <select id="transferOwnershipSelect"></select>
+                </label>
+                <button class="small-button secondary-button compact-action-button" id="transferOwnershipBtn" type="button">Transfer Ownership</button>
+              </div>
+              <div class="leave-confirm hidden" id="leaveLeagueConfirm">
+                <span>Are you sure?</span>
+                <div class="friend-actions">
+                  <button class="text-button danger-text" id="confirmLeaveLeagueBtn" type="button">Yes</button>
+                  <button class="text-button" id="cancelLeaveLeagueBtn" type="button">Cancel</button>
+                </div>
+              </div>
+              <section class="commissioner-tools hidden" id="commissionerTools">
+                <div class="section-head compact-section-head">
+                  <h3>Commissioner Tools</h3>
+                  <span id="commissionerToolsStatus">Leagues MAX</span>
+                </div>
+                <div class="commissioner-tool-form" id="customBadgesForm">
+                  <div class="custom-badge-list" id="customBadgeList"></div>
+                  <label>Badge Name <input name="badgeName" maxlength="24" placeholder="Clutch Thrower" /></label>
+                  <label>
+                    Stat
+                    <select name="badgeStat">
+                      <option value="sinks">Sinks</option>
+                      <option value="tinks">Tinks</option>
+                      <option value="tableHits">Table Hits</option>
+                      <option value="fgOffense">FG Offense</option>
+                      <option value="fgDefense">FG Defense</option>
+                      <option value="fifas">FIFAs</option>
+                      <option value="selfSinks">Self Sinks</option>
+                      <option value="wins">Wins</option>
+                      <option value="points">Total Points</option>
+                    </select>
+                  </label>
+                  <label>
+                    Tiers
+                    <select name="badgeTiers" id="customBadgeTiersSelect">
+                      <option value="1">1 tier: Diamond only</option>
+                      <option value="2">2 tiers: Gold, Diamond</option>
+                      <option value="3">3 tiers: Silver, Gold, Diamond</option>
+                      <option value="4" selected>4 tiers: Copper, Silver, Gold, Diamond</option>
+                    </select>
+                  </label>
+                  <div class="custom-badge-thresholds" id="customBadgeThresholds"></div>
+                  <button class="small-button export-button compact-action-button" id="saveCustomBadgesBtn" type="button">Add Badge</button>
+                </div>
+                <div class="commissioner-tool-form" id="leagueEventForm">
+                  <label>Scheduled Game/Event <input name="title" maxlength="40" placeholder="Friday Night Games" required /></label>
+                  <label>Date <input name="date" type="datetime-local" required /></label>
+                  <label>Details <textarea name="details" rows="3" maxlength="180" placeholder="Table, time, teams, or anything the league needs to know."></textarea></label>
+                  <button class="small-button secondary-button compact-action-button" id="postLeagueEventBtn" type="button">Post Event</button>
+                </div>
+              </section>
+            </form>
+          </section>
+
+          <section class="league-detail-panel" id="leagueRulesEditPanel">
+            <section class="panel">
+              <h3>Edit League Rules</h3>
+              <p class="meta-line">Use Sinkd's app rules, or disable them and write exactly how your league plays.</p>
+              <form class="league-rules-edit-form" id="leagueRulesEditForm">
+                <label class="checkbox-row">
+                  <input name="useAppRules" type="checkbox" checked />
+                  Use app rules
+                </label>
+                <button class="small-button secondary-button" id="disableAppRulesBtn" type="button">Disable App Rules</button>
+                <div class="league-rule-toggles">
+                  <label class="toggle-row">
+                    <span><b>Sink Auto-Win</b><small>Sink button decides the game.</small></span>
+                    <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                    <input name="sinkAutoWin" type="checkbox" />
+                  </label>
+                  <label class="toggle-row">
+                    <span><b>FIFA Ladder</b><small>Called FIFAs score 1, 2, then 3 max.</small></span>
+                    <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                    <input name="fifaMultiplier" type="checkbox" />
+                  </label>
+                </div>
+                <label class="league-custom-rules hidden">
+                  Custom League Rules
+                  <textarea name="rules" rows="14" placeholder="Type your league rules here. Example: table rules, scoring notes, house penalties, toss-back rules, and anything your group argues about."></textarea>
+                </label>
+                <div class="theme-actions">
+                  <button class="small-button export-button" type="submit">Save Rules</button>
+                  <button class="small-button secondary-button" id="backToLeagueSettingsBtn" type="button">Back to Settings</button>
+                </div>
+              </form>
+            </section>
+          </section>
+
+          <section class="league-detail-panel" id="leagueInvitePanel">
+            <form class="panel" id="leagueInviteForm">
+              <h3>Invite Members</h3>
+              <label>Player Code <input name="playerCode" type="text" placeholder="SINK-XXXX" maxlength="9" required /></label>
+              <button class="primary-button" type="submit">Send Invite</button>
+            </form>
+            <section class="panel">
+              <h3>Members</h3>
+              <div class="league-member-list" id="leagueMemberList"></div>
+            </section>
+          </section>
+        </section>
+
+        <section class="view" id="leagueGameDetailView">
+          <div class="section-head">
+            <div>
+              <h2>League Game</h2>
+              <p>Review the full match log.</p>
+            </div>
+          </div>
+          <button class="small-button secondary-button back-nav-button" id="backToLeagueGamesBtn" type="button">Back to Seasons</button>
+          <section class="panel" id="leagueGameDetail"></section>
+        </section>
+
+        <section class="view" id="playersView">
+          <div class="section-head">
+            <div>
+              <h2>Player Stats</h2>
+              <p>Local stats from this phone only. League games stay separate inside each league.</p>
+            </div>
+            <button class="small-button export-button" id="exportBtn" type="button">Export PDF</button>
+          </div>
+          <section class="panel">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Overall W-L</th>
+                    <th>Tournament W-L</th>
+                    <th>Current Streak</th>
+                    <th>Score</th>
+                    <th>Table Hits</th>
+                    <th>Sinks</th>
+                    <th>Tinks</th>
+                    <th>FG Off</th>
+                    <th>FG Def</th>
+                    <th>FIFAs</th>
+                    <th>Self Sinks</th>
+                  </tr>
+                </thead>
+                <tbody id="playerStatsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="profilesView">
+          <div class="section-head">
+            <div>
+              <h2>My Profile</h2>
+              <p>Your local profile and career stats. League profiles live in league rosters.</p>
+            </div>
+          </div>
+          <form class="panel stat-form" id="profileForm">
+            <label>
+              Nickname
+              <input name="nickname" placeholder="Nickname" required />
+            </label>
+            <label>
+              Preferred Partner
+              <input name="preferredPartner" placeholder="Optional" />
+            </label>
+            <label class="field-heading">Customize Cup</label>
+            <label>
+              <input name="cupColor" type="color" value="#d71920" />
+            </label>
+            <label>
+              Notes
+              <textarea name="notes" rows="3" placeholder="Optional"></textarea>
+            </label>
+            <button class="primary-button compact-action-button" type="submit">Save My Profile</button>
+          </form>
+          <section class="panel">
+            <h3>Profile & Stats</h3>
+            <div class="profile-list" id="profileList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="settingsView">
+          <div class="section-head">
+            <div>
+              <h2>Settings</h2>
+              <p>Manage players saved in this tracker.</p>
+            </div>
+          </div>
+          <section class="panel">
+            <div class="settings-actions">
+              <button class="small-button secondary-button" id="openPrivacyBtn" type="button">Privacy Policy</button>
+              <button class="small-button secondary-button" id="openRulesBtn" type="button">Rules</button>
+              <button class="small-button secondary-button" id="openFeedbackBtn" type="button">Send Feedback</button>
+              <button class="small-button secondary-button" id="openAboutBtn" type="button">About Sinkd</button>
+              <button class="small-button secondary-button" id="openThemeBtn" type="button">Customize Theme</button>
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Players</h3>
+            <div class="settings-player-list" id="settingsPlayersList"></div>
+          </section>
+          <section class="panel">
+            <h3>Data</h3>
+            <div class="settings-actions">
+              <button class="small-button danger-button" id="resetBtn" type="button">Reset Games</button>
+              <button class="small-button danger-button" id="deleteAccountBtn" type="button">Delete Account</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="themeView">
+          <div class="section-head">
+            <div>
+              <h2>Themes</h2>
+              <p>Pick a clean preset for this device only.</p>
+            </div>
+          </div>
+          <button class="small-button secondary-button back-nav-button" id="backToSettingsBtn" type="button">Back to Settings</button>
+
+          <section class="panel">
+            <form class="theme-form" id="themeForm">
+              <div class="theme-preset-grid" id="themePresetGrid"></div>
+              <div class="theme-actions">
+                <button class="small-button export-button" type="submit">Save Theme</button>
+                <button class="small-button secondary-button" type="button" data-reset-theme>Reset</button>
+              </div>
+            </form>
+          </section>
+        </section>
+
+      </main>
+    </div>
+
+    <section class="rules-modal hidden" id="rulesModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>Sinkd Rules</p>
+            <h2>House Rules We Play With</h2>
+          </div>
+          <button class="text-button" id="closeRulesBtn" type="button">Close</button>
+        </header>
+
+        <section class="rules-card scoring-card">
+          <h3>Scoring</h3>
+          <div class="rules-score-grid">
+            <div><b>1</b><span>Table Hit</span></div>
+            <div><b>3</b><span>Sink (bounce-ins count)</span></div>
+            <div><b>2</b><span>Tink</span></div>
+            <div><b>2</b><span>FG Off</span></div>
+            <div><b>2</b><span>FG Def</span></div>
+            <div><b>1</b><span>FIFA</span></div>
+          </div>
+          <p>Self Sink is an automatic loss. Bounce-ins count.</p>
+        </section>
+
+        <section class="rules-card">
+          <h3>Throw Requirements</h3>
+          <ul>
+            <li>The die has to be at least 10 feet over the table.</li>
+            <li>The die has to hit the line or the opponent's side.</li>
+            <li>Body catches are awarded the point.</li>
+          </ul>
+        </section>
+
+        <section class="rules-card">
+          <h3>FIFAs & Field Goals</h3>
+          <ul>
+            <li>FIFAs are playable off the side of the table.</li>
+            <li>No knees allowed for FIFAs.</li>
+            <li>Defensive field goals have to be blocked before they fall off the table.</li>
+            <li>Defensive FIFAs do not have to hit the table, but they are allowed to.</li>
+            <li>Call FIFA and hit the table: house penalty.</li>
+            <li>You can call FIFA as many times as you want, but scoring is capped at three successful FIFA points per turn: three standard FIFAs, two field goal FIFAs, two standard plus one field goal FIFA, or one field goal plus one standard FIFA.</li>
+          </ul>
+        </section>
+
+        <section class="rules-card">
+          <h3>Throwbacks & Table Stays</h3>
+          <ul>
+            <li>If your toss is short and you catch it on the back of your hand, you are awarded your throw back.</li>
+            <li>If the die hits the opponent's side and stays on, the thrower can guess the die number without looking. If correct, the thrower gets their toss back.</li>
+            <li>If the die hits the opponent's side, stays on, and lands on 5, group penalty.</li>
+          </ul>
+        </section>
+        <section class="rules-card">
+          <h3>Responsible Use</h3>
+          <p>Sinkd is intended for responsible, legal-age players. Follow your local laws, know your limits, and use house penalties responsibly.</p>
+        </section>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="leagueRulesModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>League Rules</p>
+            <h2 id="leagueRulesTitle">League Rules</h2>
+          </div>
+          <button class="text-button" id="closeLeagueRulesBtn" type="button">Close</button>
+        </header>
+        <section class="rules-card" id="leagueRulesContent"></section>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="leaguePollModal" aria-hidden="true">
+      <div class="rules-sheet compact-modal-sheet">
+        <header class="rules-header">
+          <div>
+            <p>League Poll</p>
+            <h2>Create Poll</h2>
+          </div>
+          <button class="text-button" id="closeLeaguePollBtn" type="button">Close</button>
+        </header>
+        <form class="poll-form rules-card" id="leaguePollForm">
+          <label>Question <input name="question" maxlength="80" placeholder="What day should we play?" required /></label>
+          <label>Option 1 <input name="option1" maxlength="36" placeholder="Friday" required /></label>
+          <label>Option 2 <input name="option2" maxlength="36" placeholder="Saturday" required /></label>
+          <label class="hidden" data-poll-extra-option>Option 3 <input name="option3" maxlength="36" placeholder="Sunday" /></label>
+          <label class="hidden" data-poll-extra-option>Option 4 <input name="option4" maxlength="36" placeholder="Next week" /></label>
+          <label class="hidden" data-poll-extra-option>Option 5 <input name="option5" maxlength="36" placeholder="Next week" /></label>
+          <label class="hidden" data-poll-extra-option>Option 6 <input name="option6" maxlength="36" placeholder="Another day" /></label>
+          <button class="small-button secondary-button compact-action-button" id="addPollAnswerBtn" type="button">Add Answer</button>
+          <button class="primary-button" type="submit">Post Poll</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="rosterProfileModal" aria-hidden="true">
+      <div class="rules-sheet roster-profile-sheet">
+        <header class="rules-header">
+          <div>
+            <p>League Profile</p>
+            <h2 id="rosterProfileTitle">Player Profile</h2>
+          </div>
+          <button class="text-button" id="closeRosterProfileBtn" type="button">Close</button>
+        </header>
+        <section id="rosterProfileContent"></section>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="pastSeasonsModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>League Archive</p>
+            <h2>Past Seasons</h2>
+          </div>
+          <button class="text-button" id="closePastSeasonsBtn" type="button">Close</button>
+        </header>
+        <section class="rules-card">
+          <div class="list" id="pastSeasonsList"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="feedbackModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>Sinkd Feedback</p>
+            <h2>Send Feedback</h2>
+          </div>
+          <button class="text-button" id="closeFeedbackBtn" type="button">Close</button>
+        </header>
+
+        <form class="rules-card feedback-form" id="feedbackForm">
+          <label>
+            Topic
+            <input name="topic" placeholder="Bug, feature request, league issue, account help, stats correction, other" required />
+          </label>
+          <label>
+            Message
+            <textarea name="message" rows="6" placeholder="Tell me what happened or what you want added." required></textarea>
+          </label>
+          <label>
+            Contact
+            <input name="contact" placeholder="Optional" />
+          </label>
+          <button class="primary-button compact-action-button" type="submit">Send Feedback</button>
+          <p class="auth-message" id="feedbackMessage"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="aboutModal" aria-hidden="true">
+      <div class="rules-sheet">
+        <header class="rules-header">
+          <div>
+            <p>About Sinkd</p>
+            <h2>Built For The Group Chat</h2>
+          </div>
+          <button class="text-button" id="closeAboutBtn" type="button">Close</button>
+        </header>
+
+        <section class="rules-card">
+          <h3>Why Sinkd Exists</h3>
+          <p>Sinkd was built by a college student who wanted game nights to feel less messy and a lot more official.</p>
+          <p>It started with a simple problem: friends were tracking scores in the Notes app, arguing over who had the better record, and forgetting the details that made each match worth talking about later.</p>
+          <p>Sinkd keeps the stats, records, leagues, tournaments, and bragging rights in one place, so the group can settle debates with real numbers and get back to playing.</p>
+        </section>
+
+        <section class="rules-card">
+          <h3>The Vibe</h3>
+          <p>Built for friendly competition, day time matchups, house rules, and the kind of stat lines that keep a group chat alive.</p>
+          <p>Have fun, keep it responsible, and let the numbers do the talking.</p>
+        </section>
+      </div>
+    </section>
+
+    <section class="rules-modal hidden" id="privacyModal" aria-hidden="true">
+      <div class="rules-sheet privacy-sheet">
+        <header class="rules-header">
+          <div>
+            <p>Sinkd Privacy</p>
+            <h2>Privacy Policy</h2>
+          </div>
+          <button class="text-button" id="closePrivacyBtn" type="button">Close</button>
+        </header>
+
+        <section class="rules-card privacy-card">
+          <h3>Overview</h3>
+          <p>Sinkd is a dice game stat tracking app for regular games, tournaments, leagues, friends, achievements, rankings, and notifications. This Privacy Policy explains what information the app collects, how it is used, and the choices you have.</p>
+          <p>By using Sinkd, you agree to this Privacy Policy. If you do not agree, do not use the app.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Information We Collect</h3>
+          <ul>
+            <li>Account information, such as your email address and login provider.</li>
+            <li>Profile information you choose to add, including nickname, preferred partner, cup color, and notes.</li>
+            <li>Game and stat information, including scores, wins, losses, sinks, tinks, table hits, field goals, FIFAs, self sinks, achievements, rankings, and game history.</li>
+            <li>League information, including league name, description, logo colors, membership, roles, invites, roster data, rankings, league chat messages, and league game logs.</li>
+            <li>Friend information, including friend requests, accepted friends, invite emails, and display names.</li>
+            <li>Notification information, including league invites, friend requests, achievement unlocks, personal updates, read status, and timestamps.</li>
+            <li>Device/browser information that may be collected automatically by hosting, authentication, database, or analytics infrastructure, such as IP address, browser type, device type, and basic logs.</li>
+          </ul>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>How We Use Information</h3>
+          <ul>
+            <li>To create and manage accounts.</li>
+            <li>To save profiles, stats, game history, achievements, rankings, friends, leagues, and notifications.</li>
+            <li>To sync league data across users and phones.</li>
+            <li>To let league owners, co-leaders, refs, and members use the correct league permissions.</li>
+            <li>To send or show in-app notifications for achievements, friend requests, league invites, and updates about you.</li>
+            <li>To maintain, debug, secure, and improve the app.</li>
+          </ul>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Local Data vs Cloud Data</h3>
+          <p>Some app data is stored locally on your device, such as local player lists, regular games, big games, tournament data, and local profile stats. Local data may not sync across devices.</p>
+          <p>League data is stored in a shared cloud database so league members can see synced rosters, league games, rankings, stats, invites, and league chat updates.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Sharing With Other Users</h3>
+          <p>Information you add to a league may be visible to other league members, including your nickname, cup color, role, league stats, achievements, rankings, and league game history. Friend requests and league invites may show your nickname, display name, or email to the other person.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Service Providers</h3>
+          <p>Sinkd uses third-party services to operate the app, including Supabase for authentication/database services, Netlify for hosting, and Google sign-in if you use Google authentication. These providers may process information according to their own privacy practices.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Notifications</h3>
+          <p>Sinkd may show in-app notifications for friend requests, league invites, achievements, and updates about you. Browser or phone notification popups require device/browser permission. Notification records are automatically cleared after a short period so your inbox stays current.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Your Choices</h3>
+          <ul>
+            <li>You can edit your profile information in My Profile.</li>
+            <li>You can delete local players from Settings unless the name is tied to My Profile.</li>
+            <li>You can leave leagues if you are not the owner.</li>
+            <li>League owners and co-leaders may manage league members and league data.</li>
+            <li>You can decline notification popups when the app asks for permission.</li>
+            <li>You can request that account or cloud data be removed by contacting the app owner.</li>
+          </ul>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Data Security</h3>
+          <p>Sinkd uses account authentication and database access rules to help protect cloud data. No system is perfect, so do not add sensitive personal information to profiles, notes, league descriptions, or game logs.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Children</h3>
+          <p>Sinkd is not intended for children. If users apply house penalties or legal-age activities while playing, they are responsible for following local laws and using the app responsibly.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Responsible Use</h3>
+          <p>Sinkd does not require or encourage unsafe behavior. Use the app as a stat tracker, follow local laws, and make responsible choices during gameplay.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Changes To This Policy</h3>
+          <p>This Privacy Policy may be updated as Sinkd changes. Updates will be posted in the app. Continued use of the app after updates means you accept the updated policy.</p>
+        </section>
+
+        <section class="rules-card privacy-card">
+          <h3>Contact</h3>
+          <p>For privacy questions or data removal requests, contact the Sinkd app owner.</p>
+        </section>
+      </div>
+    </section>
+
+    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js?v=20260727-4"></script>
+  </body>
+</html>
