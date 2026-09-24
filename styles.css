@@ -1401,7 +1401,7 @@ legend {
 
 .league-stat-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1411,6 +1411,34 @@ legend {
   margin-top: 0;
   padding: 0 8px;
   font-size: 0.74rem;
+}
+
+.league-season-stats-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.league-season-stats-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.league-season-stats-toggle:has(input:checked) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #002147;
+}
+
+.league-season-stats-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .league-rules-edit-form {

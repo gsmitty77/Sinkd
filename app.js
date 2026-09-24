@@ -126,6 +126,7 @@ let showingLeagueQr = false;
 let leagueDetailTab = "games";
 let leagueSearchQuery = "";
 let editingLeagueScheduleEventId = "";
+let showLeagueSeasonStats = false;
 let editingMyProfile = false;
 let authBusy = false;
 let gamePointDraft = 11;
@@ -284,6 +285,7 @@ const els = {
   addPollAnswerBtn: document.querySelector("#addPollAnswerBtn"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
+  leagueSeasonStatsToggle: document.querySelector("#leagueSeasonStatsToggle"),
   leagueWeeklyReportBtn: document.querySelector("#leagueWeeklyReportBtn"),
   openLeagueRulesBtn: document.querySelector("#openLeagueRulesBtn"),
   editLeagueRulesBtn: document.querySelector("#editLeagueRulesBtn"),
@@ -1581,7 +1583,7 @@ function bindEvents() {
   els.pastSeasonsModal?.addEventListener("click", (event) => {
     if (event.target === els.pastSeasonsModal) closePastSeasons();
   });
-  els.startLeagueSeasonBtn?.addEventListener("click", startLeagueSeasonNow);
+  els.startLeagueSeasonBtn?.addEventListener("click", () => startLeagueSeasonNow());
   els.endLeagueSeasonBtn?.addEventListener("click", () => {
     const season = activeLeagueSeason();
     if (!season) return;
@@ -1997,6 +1999,10 @@ function bindEvents() {
 
   els.exportBtn.addEventListener("click", exportData);
   els.leagueExportBtn.addEventListener("click", exportLeagueStats);
+  els.leagueSeasonStatsToggle?.addEventListener("change", () => {
+    showLeagueSeasonStats = Boolean(els.leagueSeasonStatsToggle.checked && activeLeagueSeason());
+    renderLeagueStatsTable();
+  });
   els.leagueWeeklyReportBtn.addEventListener("click", exportLeagueWeeklyReport);
   els.openThemeBtn.addEventListener("click", openThemePage);
   els.backToSettingsBtn.addEventListener("click", () => switchView("settings"));
@@ -2199,6 +2205,7 @@ function openBigGamePage() {
 
 function openLeagueDetails(leagueId) {
   activeLeagueId = leagueId;
+  showLeagueSeasonStats = false;
   selectedLeagueRosterMemberId = "";
   selectedLeagueAchievementsMemberId = "";
   activeLeagueGameDetailId = "";
@@ -3605,6 +3612,10 @@ function displayRole(role, leagueId = activeLeagueId) {
 
 async function loadLeagueData() {
   if (!authClient || !currentUser) return;
+  const { error: seasonAutomationError } = await authClient.rpc("process_due_league_seasons");
+  if (seasonAutomationError && !["PGRST202", "42883"].includes(seasonAutomationError.code)) {
+    console.warn("Season automation check failed", seasonAutomationError);
+  }
   const email = currentUser.email || "";
   const { data: memberships, error: membershipError } = await authClient
     .from("league_members")
@@ -3717,11 +3728,13 @@ function clearLeagueCloudState() {
   leagueGameCache = [];
   leagueTournamentCache = [];
   leagueChatCache = [];
+  leagueSeasonCache = [];
   leaguePollVoteCache = [];
   leaguePlusCache = new Map();
   leaguePlanCache = new Map();
   leagueSubscriptionCache = new Map();
   activeLeagueTournamentId = "";
+  showLeagueSeasonStats = false;
 }
 
 async function loadFriendData() {
@@ -7240,18 +7253,31 @@ function renderLeagueStats() {
 }
 
 function renderLeagueStatsTable() {
+  const activeSeason = activeLeagueSeason();
+  if (!activeSeason) showLeagueSeasonStats = false;
+  if (els.leagueSeasonStatsToggle) {
+    els.leagueSeasonStatsToggle.disabled = !activeSeason;
+    els.leagueSeasonStatsToggle.checked = Boolean(activeSeason && showLeagueSeasonStats);
+    els.leagueSeasonStatsToggle.title = activeSeason ? `Show stats from ${activeSeason.name}` : "Start a season to view season-only stats";
+  }
+
   if (!myLeagueMember()) {
     els.leagueExportBtn.classList.add("hidden");
+    els.leagueSeasonStatsToggle?.closest("label")?.classList.add("hidden");
+    els.leagueWeeklyReportBtn.classList.add("hidden");
     els.leagueStatsTable.innerHTML = '<tr><td colspan="12">Join this league to view or export league stats.</td></tr>';
     return;
   }
 
   els.leagueExportBtn.classList.remove("hidden");
-  const stats = computeLeagueStats(leagueDisplayStatGames());
+  els.leagueSeasonStatsToggle?.closest("label")?.classList.remove("hidden");
+  els.leagueWeeklyReportBtn.classList.remove("hidden");
+  const games = showLeagueSeasonStats ? leagueSeasonStatGames(activeLeagueId, activeSeason?.id) : leagueStatGames();
+  const stats = computeLeagueStats(games);
   const players = Object.values(stats.players).sort((a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.sinks - a.sinks);
   els.leagueStatsTable.innerHTML = players.length
     ? players.map(leaguePlayerStatsRow).join("")
-    : '<tr><td colspan="12">No league games logged yet.</td></tr>';
+    : `<tr><td colspan="12">${showLeagueSeasonStats ? "No games logged in the active season yet." : "No league games logged yet."}</td></tr>`;
 }
 
 function renderLeagueRankings() {

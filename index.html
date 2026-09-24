@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=6" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=6" />
     <link rel="manifest" href="site.webmanifest?v=6" />
-    <link rel="stylesheet" href="styles.css?v=20260924-1" />
+    <link rel="stylesheet" href="styles.css?v=20260924-3" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -525,7 +525,7 @@
                     <label>Planned Start <input name="seasonDate" type="datetime-local" required /></label>
                     <label>Planned End <input name="seasonEndDate" type="datetime-local" /></label>
                   </div>
-                  <p class="form-help">Dates are reminders only. The Owner still starts and ends the season manually.</p>
+                  <p class="form-help">Scheduled seasons start and end automatically. The Owner can still start early or end the active season at any time.</p>
                   <button class="small-button secondary-button compact-action-button" type="submit">Save Schedule</button>
                 </form>
                 <form class="season-schedule-form hidden" id="leagueScheduleForm">
@@ -575,6 +575,10 @@
                 <h3>League Stats</h3>
                 <div class="league-stat-actions">
                   <button class="small-button export-button" id="leagueExportBtn" type="button">Export PDF</button>
+                  <label class="small-button secondary-button league-season-stats-toggle" for="leagueSeasonStatsToggle">
+                    <input id="leagueSeasonStatsToggle" type="checkbox" />
+                    <span>Season Stats</span>
+                  </label>
                   <button class="small-button secondary-button" id="leagueWeeklyReportBtn" type="button">Weekly Report</button>
                 </div>
               </div>
@@ -1207,6 +1211,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260924-2"></script>
+    <script src="app.js?v=20260924-3"></script>
   </body>
 </html>
