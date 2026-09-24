@@ -1,0 +1,13 @@
+.git
+.git/**
+.github
+.github/**
+.vscode
+.vscode/**
+.wrangler
+.wrangler/**
+node_modules
+node_modules/**
+supabase
+supabase/**
+*.log

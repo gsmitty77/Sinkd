@@ -1370,6 +1370,20 @@ legend {
   gap: 10px;
 }
 
+.account-data-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 390px) {
+  .account-data-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-data-actions #resetBtn {
+    grid-column: 1 / -1;
+  }
+}
+
 #openThemeBtn {
   grid-column: 1 / -1;
   border-color: var(--theme-button-border, var(--accent));
@@ -1427,6 +1441,104 @@ legend {
   gap: 1px;
   margin: 2px 0 4px;
   border-block: 1px solid var(--line);
+}
+
+.league-scoring-editor {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.league-scoring-editor legend {
+  margin-bottom: 2px;
+  padding: 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.league-scoring-editor > .form-help {
+  margin: 0 0 8px;
+}
+
+.league-scoring-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+
+.league-scoring-option:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.scoring-enabled-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.scoring-enabled-toggle span,
+.scoring-enabled-toggle small {
+  display: block;
+}
+
+.scoring-enabled-toggle b {
+  font-size: 0.72rem;
+}
+
+.scoring-enabled-toggle small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.59rem;
+  line-height: 1.15;
+}
+
+.scoring-enabled-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scoring-enabled-toggle:has(input:checked) .toggle-state {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--panel);
+}
+
+.scoring-enabled-toggle:has(input:checked) .toggle-state::before {
+  content: attr(data-toggle-on);
+}
+
+.scoring-enabled-toggle:has(input:not(:checked)) .toggle-state::before {
+  content: attr(data-toggle-off);
+}
+
+.league-scoring-option:has(.scoring-enabled-toggle input:not(:checked)) .scoring-points-field {
+  opacity: 0.48;
+}
+
+.scoring-points-field {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+
+.scoring-points-field input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  text-align: center;
 }
 
 .toggle-row {
@@ -1824,8 +1936,31 @@ legend {
 }
 
 #friendInviteForm button[type="submit"],
-#leagueInviteForm button[type="submit"] {
+#leagueInviteForm button[type="submit"],
+#leagueTabInviteForm button[type="submit"] {
   margin-top: 8px;
+}
+
+.league-tab-invite-form {
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.league-tab-invite-form h3 {
+  margin-bottom: 2px;
+}
+
+.league-search-field {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.league-search-field input {
+  width: 100%;
 }
 
 .field-heading {
@@ -2741,9 +2876,10 @@ legend {
   gap: 12px;
   align-items: center;
   margin-top: 18px;
-  padding: 12px 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 78%, var(--panel));
 }
 
 .league-plus-setting div,
@@ -2753,6 +2889,8 @@ legend {
 
 .league-plus-setting strong {
   color: var(--accent-strong);
+  font-size: 0.92rem;
+  letter-spacing: 0;
 }
 
 .league-plus-setting span {
@@ -2768,23 +2906,172 @@ legend {
 
 .league-plan-actions {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   justify-items: end;
+}
+
+.plan-upgrade-button {
+  position: relative;
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 9px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.plus-plan-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #002147;
+}
+
+.max-plan-button {
+  border-color: color-mix(in srgb, var(--accent) 70%, #ffffff);
+  background: #ffffff;
+  color: #002147;
+}
+
+.plan-upgrade-button::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 7px;
+  border: 1px solid rgba(0, 33, 71, 0.16);
+  pointer-events: none;
 }
 
 @media (max-width: 480px) {
   .league-plus-setting {
     grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .league-plan-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-items: stretch;
   }
+
+  .plan-upgrade-button {
+    width: 100%;
+    max-width: none;
+    padding: 0 8px;
+    font-size: 0.68rem;
+  }
 }
 
 .league-past-games {
   margin-top: 14px;
+}
+
+.season-lock {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 14px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.season-lock strong,
+.season-status-card strong,
+.season-schedule-card strong {
+  color: var(--accent-strong);
+}
+
+.season-lock span,
+.season-status-card span,
+.season-schedule-card span,
+.season-schedule-card small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+.league-season-tools {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.season-status-card,
+.season-schedule-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.season-status-card {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-surface);
+}
+
+.season-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.season-action-row .compact-action-button,
+.season-schedule-form .compact-action-button {
+  width: 100%;
+  max-width: none;
+  justify-self: stretch;
+}
+
+.season-action-row .danger-button {
+  margin-top: 0;
+}
+
+.season-schedule-form {
+  display: grid;
+  gap: 9px;
+  padding-top: 2px;
+}
+
+.season-date-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.season-schedule-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.season-schedule-actions .small-button {
+  width: auto;
+  min-width: 76px;
+}
+
+@media (max-width: 520px) {
+  .season-date-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scheduled-list {
+  display: grid;
+  gap: 8px;
+}
+
+.season-schedule-card b {
+  color: var(--accent);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.season-schedule-card div {
+  display: grid;
+  gap: 3px;
 }
 
 .league-roster-card.selected {

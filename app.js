@@ -45,6 +45,14 @@ const scoringPointValues = {
   fgDefense: 2,
   fifas: 1,
 };
+const leagueScoringSettingFields = [
+  ["tableHits", "Table Hit"],
+  ["sinks", "Sink"],
+  ["tinks", "Tink"],
+  ["fgOffense", "Field Goal Offense"],
+  ["fgDefense", "Field Goal Defense"],
+  ["fifas", "FIFA"],
+];
 const achievementDefinitions = [
   { key: "sinks", label: "Cup Hunter", statLabel: "sinks", thresholds: [10, 15, 30, 50] },
   { key: "tinks", label: "Rim Rattler", statLabel: "tinks", thresholds: [15, 30, 60, 100] },
@@ -116,6 +124,7 @@ let passwordRecoveryMode = false;
 let pendingLeagueInviteId = "";
 let showingLeagueQr = false;
 let leagueDetailTab = "games";
+let leagueSearchQuery = "";
 let editingMyProfile = false;
 let authBusy = false;
 let gamePointDraft = 11;
@@ -125,6 +134,7 @@ let leagueMemberCache = [];
 let leagueGameCache = [];
 let leagueTournamentCache = [];
 let leagueChatCache = [];
+let leagueSeasonCache = [];
 let leaguePollVoteCache = [];
 let leaguePlusCache = new Map();
 let leaguePlanCache = new Map();
@@ -179,6 +189,7 @@ const els = {
   forgotPasswordBtn: document.querySelector("#forgotPasswordBtn"),
   googleBtn: document.querySelector("#googleBtn"),
   signOutBtn: document.querySelector("#signOutBtn"),
+  settingsSignOutBtn: document.querySelector("#settingsSignOutBtn"),
   authMessage: document.querySelector("#authMessage"),
   userEmail: document.querySelector("#userEmail"),
   tabs: document.querySelectorAll(".tab"),
@@ -209,6 +220,8 @@ const els = {
   friendsList: document.querySelector("#friendsList"),
   showLeagueCreateBtn: document.querySelector("#showLeagueCreateBtn"),
   leagueForm: document.querySelector("#leagueForm"),
+  leagueTabInviteForm: document.querySelector("#leagueTabInviteForm"),
+  leagueSearchInput: document.querySelector("#leagueSearchInput"),
   leagueList: document.querySelector("#leagueList"),
   backToLeaguesBtn: document.querySelector("#backToLeaguesBtn"),
   backToLeagueGamesBtn: document.querySelector("#backToLeagueGamesBtn"),
@@ -224,6 +237,15 @@ const els = {
   cancelLeagueGameEditBtn: document.querySelector("#cancelLeagueGameEditBtn"),
   leagueGamePlayerGrid: document.querySelector("#leagueGamePlayerGrid"),
   leagueGameHistory: document.querySelector("#leagueGameHistory"),
+  leagueSeasonLock: document.querySelector("#leagueSeasonLock"),
+  leagueSeasonTools: document.querySelector("#leagueSeasonTools"),
+  leagueSeasonStatus: document.querySelector("#leagueSeasonStatus"),
+  leagueSeasonOwnerControls: document.querySelector("#leagueSeasonOwnerControls"),
+  startLeagueSeasonBtn: document.querySelector("#startLeagueSeasonBtn"),
+  endLeagueSeasonBtn: document.querySelector("#endLeagueSeasonBtn"),
+  leagueSeasonScheduleForm: document.querySelector("#leagueSeasonScheduleForm"),
+  leagueScheduleForm: document.querySelector("#leagueScheduleForm"),
+  leagueScheduledList: document.querySelector("#leagueScheduledList"),
   openPastSeasonsBtn: document.querySelector("#openPastSeasonsBtn"),
   pastSeasonsModal: document.querySelector("#pastSeasonsModal"),
   closePastSeasonsBtn: document.querySelector("#closePastSeasonsBtn"),
@@ -275,6 +297,7 @@ const els = {
   rosterProfileTitle: document.querySelector("#rosterProfileTitle"),
   rosterProfileContent: document.querySelector("#rosterProfileContent"),
   leagueSettingsForm: document.querySelector("#leagueSettingsForm"),
+  saveLeagueSettingsBtn: document.querySelector("#saveLeagueSettingsBtn"),
   leaguePlusSetting: document.querySelector("#leaguePlusSetting"),
   leaguePlusTitle: document.querySelector("#leaguePlusTitle"),
   leaguePlusStatus: document.querySelector("#leaguePlusStatus"),
@@ -632,6 +655,7 @@ function setAuthView(user) {
   els.authShell.classList.toggle("hidden", isSignedIn);
   els.appShell.classList.toggle("auth-locked", !isSignedIn);
   els.signOutBtn.hidden = !isSignedIn;
+  if (els.settingsSignOutBtn) els.settingsSignOutBtn.hidden = !isSignedIn;
   updateAccountLabel();
   if (isSignedIn) showAuthMessage("");
   if (isSignedIn && !passwordRecoveryMode) restoreAuthButtons();
@@ -1264,6 +1288,7 @@ function bindEvents() {
   els.forgotPasswordBtn.addEventListener("click", sendPasswordReset);
   els.googleBtn.addEventListener("click", signInWithGoogle);
   els.signOutBtn.addEventListener("click", signOut);
+  els.settingsSignOutBtn?.addEventListener("click", signOut);
   els.authForm.addEventListener("submit", (event) => {
     event.preventDefault();
     signInWithEmail();
@@ -1393,12 +1418,28 @@ function bindEvents() {
   els.leagueForm.addEventListener("change", (event) => {
     if (event.target.name === "useAppRules") toggleLeagueRulesFields(els.leagueForm);
   });
+  els.leagueSearchInput?.addEventListener("input", () => {
+    leagueSearchQuery = cleanText(els.leagueSearchInput.value);
+    renderLeagues();
+  });
 
   document.addEventListener("click", (event) => {
     if (event.target.closest("#showFriendsBtn")) switchView("friends");
     if (event.target.closest("#showNotificationsBtn")) {
       switchView("notifications");
       renderNotifications();
+    }
+    if (event.target.closest("[data-season-max-upgrade]")) openLeagueBilling("max");
+    const startScheduledSeasonButton = event.target.closest("[data-start-scheduled-season]");
+    if (startScheduledSeasonButton) startLeagueSeasonNow(startScheduledSeasonButton.dataset.startScheduledSeason);
+    const cancelScheduledSeasonButton = event.target.closest("[data-cancel-scheduled-season]");
+    if (cancelScheduledSeasonButton) {
+      showAppConfirm({
+        title: "Cancel scheduled season?",
+        message: "Remove this season from the league schedule?",
+        confirmLabel: "Cancel Season",
+        onConfirm: () => cancelScheduledLeagueSeason(cancelScheduledSeasonButton.dataset.cancelScheduledSeason),
+      });
     }
   });
 
@@ -1506,6 +1547,10 @@ function bindEvents() {
     event.preventDefault();
     await createCloudLeague(new FormData(els.leagueForm));
   });
+  els.leagueTabInviteForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await invitePlayerFromLeagueTab(new FormData(els.leagueTabInviteForm));
+  });
 
   els.leagueList.addEventListener("click", (event) => {
     const join = event.target.closest("[data-join-league]");
@@ -1533,6 +1578,27 @@ function bindEvents() {
   els.closePastSeasonsBtn?.addEventListener("click", closePastSeasons);
   els.pastSeasonsModal?.addEventListener("click", (event) => {
     if (event.target === els.pastSeasonsModal) closePastSeasons();
+  });
+  els.startLeagueSeasonBtn?.addEventListener("click", startLeagueSeasonNow);
+  els.endLeagueSeasonBtn?.addEventListener("click", () => {
+    const season = activeLeagueSeason();
+    if (!season) return;
+    const unfinishedCount = unfinishedLeagueTournamentsForSeason(season.id).length;
+    showAppConfirm({
+      title: "End season?",
+      message: unfinishedCount
+        ? `This season has ${unfinishedCount} unfinished tournament${unfinishedCount === 1 ? "" : "s"}. Completed games will remain saved. End and archive the season anyway?`
+        : "End the active season and archive it? Season stats will be preserved in Past Seasons.",
+      onConfirm: endActiveLeagueSeason,
+    });
+  });
+  els.leagueSeasonScheduleForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await scheduleLeagueSeason(new FormData(els.leagueSeasonScheduleForm));
+  });
+  els.leagueScheduleForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await scheduleLeagueMatchOrTournament(new FormData(els.leagueScheduleForm));
   });
 
   els.leagueDetailTabs.forEach((tab) => {
@@ -1716,6 +1782,8 @@ function bindEvents() {
     event.preventDefault();
     await updateCloudLeagueSettings(new FormData(els.leagueSettingsForm));
   });
+  els.leagueSettingsForm.addEventListener("input", updateLeagueSettingsSaveVisibility);
+  els.leagueSettingsForm.addEventListener("change", updateLeagueSettingsSaveVisibility);
   els.leaguePlusBtn?.addEventListener("click", () => openLeagueBilling("plus"));
   els.leagueMaxBtn?.addEventListener("click", () => openLeagueBilling("max"));
   els.openLeagueRulesBtn.addEventListener("click", openLeagueRules);
@@ -1731,6 +1799,12 @@ function bindEvents() {
   });
   els.leagueRulesEditForm.addEventListener("change", (event) => {
     if (event.target.name === "useAppRules") toggleLeagueRulesFields(els.leagueRulesEditForm);
+    if (event.target.name === "sinkAutoWin" && event.target.checked) {
+      els.leagueRulesEditForm.elements.scoreEnabled_sinks.checked = true;
+    }
+    if (event.target.name === "fifaMultiplier" && event.target.checked) {
+      els.leagueRulesEditForm.elements.scoreEnabled_fifas.checked = true;
+    }
   });
   els.leagueRulesEditForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -2300,7 +2374,8 @@ function playerStatCard(number, label) {
 function leagueGamePlayerStatCard(number, label) {
   const playerPrefix = `leaguePlayer${number}`;
   const teamIndex = number <= 2 ? 0 : 1;
-  const sinkAutoWin = leagueScoringRules().sinkAutoWin;
+  const rules = leagueScoringRules();
+  const sinkAutoWin = rules.sinkAutoWin;
   return `
     <section class="player-stat-card">
       <label class="player-name">
@@ -2312,8 +2387,8 @@ function leagueGamePlayerStatCard(number, label) {
       ${sinkAutoWin ? autoWinSinkButton(`${playerPrefix}_sinks`, teamIndex) : ""}
       <div class="counter-list">
         ${leaguePlayerStatFields
-          .filter(([key]) => !sinkAutoWin || key !== "sinks")
-          .map(([key, statLabel]) => counterControl(`${playerPrefix}_${key}`, leagueRuleStatLabel(key, statLabel), teamIndex))
+          .filter(([key]) => rules.scoring[key]?.enabled && (!sinkAutoWin || key !== "sinks"))
+          .map(([key, statLabel]) => counterControl(`${playerPrefix}_${key}`, leagueRuleStatLabel(key, statLabel), teamIndex, rules.scoring[key]))
           .join("")}
       </div>
       <button class="self-sink-button" type="button" data-self-sink data-player-number="${number}" data-team-index="${teamIndex}">
@@ -2638,9 +2713,9 @@ function gameHasPlayers(game) {
   return game.teams.every((team) => team.players.length > 0);
 }
 
-function counterControl(name, label, teamIndex = "") {
+function counterControl(name, label, teamIndex = "", scoringRule = null) {
   const statKey = name.split("_").pop();
-  const scorePoints = scoringPointValues[statKey] || 0;
+  const scorePoints = scoringRule?.points ?? scoringPointValues[statKey] ?? 0;
   const teamAttribute = teamIndex === "" ? "" : ` data-team-index="${teamIndex}"`;
   return `
     <div class="counter-row"${teamAttribute} data-score-stat="${statKey}" data-score-points="${scorePoints}">
@@ -2666,15 +2741,16 @@ function staticPlayerStatCard(playerName, prefix) {
   `;
 }
 
-function staticBigPlayerStatCard(playerName, prefix, playerNumber, teamIndex, sinkAutoWin = false) {
+function staticBigPlayerStatCard(playerName, prefix, playerNumber, teamIndex, sinkAutoWin = false, leagueMode = false) {
+  const rules = leagueMode ? leagueScoringRules() : { scoring: normalizeLeagueScoringConfig() };
   return `
     <section class="player-stat-card compact-player-card">
       <strong>${escapeHtml(playerName)}</strong>
       ${sinkAutoWin ? autoWinSinkButton(`${prefix}_sinks`, teamIndex) : ""}
       <div class="counter-list">
         ${bigGameCounterFields
-          .filter(([key]) => !sinkAutoWin || key !== "sinks")
-          .map(([key, statLabel]) => counterControl(`${prefix}_${key}`, statLabel, teamIndex))
+          .filter(([key]) => (!leagueMode || rules.scoring[key]?.enabled) && (!sinkAutoWin || key !== "sinks"))
+          .map(([key, statLabel]) => counterControl(`${prefix}_${key}`, leagueMode ? leagueRuleStatLabel(key, statLabel) : statLabel, teamIndex, rules.scoring[key]))
           .join("")}
       </div>
       <button class="self-sink-button" type="button" data-self-sink data-player-number="${playerNumber}" data-team-index="${teamIndex}">
@@ -2732,12 +2808,13 @@ function updateFormScoreFromCounters(form) {
     const count = Number(input.value) || 0;
     if (!Number.isInteger(teamIndex) || teamIndex < 0 || teamIndex > 1) return;
     statTotals[teamIndex].sinks = (statTotals[teamIndex].sinks || 0) + count;
-    scores[teamIndex] += count * scoringPointValues.sinks;
+    scores[teamIndex] += count * (leagueRules.scoring.sinks?.points ?? scoringPointValues.sinks);
   });
   if (leagueRules.fifaMultiplier) {
     scores.forEach((score, teamIndex) => {
       const fifas = statTotals[teamIndex].fifas || 0;
-      scores[teamIndex] = score - fifas + multiplyingScore(fifas);
+      const fifaPoints = leagueRules.scoring.fifas?.points ?? scoringPointValues.fifas;
+      scores[teamIndex] = score - fifas * fifaPoints + multiplyingScore(fifas, fifaPoints);
     });
   }
   if (leagueRules.sinkAutoWin) {
@@ -2748,8 +2825,25 @@ function updateFormScoreFromCounters(form) {
   form.teamBScore.value = scores[1];
 }
 
-function multiplyingScore(count) {
-  return (count * (count + 1)) / 2;
+function multiplyingScore(count, basePoints = 1) {
+  const safeCount = Math.max(0, Number(count) || 0);
+  const ladderCount = Math.min(safeCount, 3);
+  const cappedExtra = Math.max(0, safeCount - 3) * 3;
+  return ((ladderCount * (ladderCount + 1)) / 2 + cappedExtra) * Math.max(0, Number(basePoints) || 0);
+}
+
+function normalizeLeagueScoringConfig(rawConfig = {}) {
+  const config = rawConfig && typeof rawConfig === "object" && !Array.isArray(rawConfig) ? rawConfig : {};
+  return Object.fromEntries(
+    leagueScoringSettingFields.map(([key]) => {
+      const saved = config[key] && typeof config[key] === "object" ? config[key] : {};
+      const requestedPoints = Number(saved.points);
+      const points = Number.isFinite(requestedPoints)
+        ? Math.max(0, Math.min(20, Math.round(requestedPoints)))
+        : scoringPointValues[key];
+      return [key, { enabled: saved.enabled !== false, points }];
+    }),
+  );
 }
 
 function leagueScoringRules() {
@@ -2757,32 +2851,45 @@ function leagueScoringRules() {
   return {
     sinkAutoWin: Boolean(league?.sink_auto_win),
     fifaMultiplier: Boolean(league?.fifa_multiplier),
+    scoring: normalizeLeagueScoringConfig(league?.scoring_rules),
   };
 }
 
 function leagueScoringRulesForForm(form) {
   const isLeagueForm = form === els.leagueGameForm || form?.matches?.(".league-tournament-match-form");
-  return isLeagueForm ? leagueScoringRules() : { sinkAutoWin: false, fifaMultiplier: false };
+  return isLeagueForm
+    ? leagueScoringRules()
+    : { sinkAutoWin: false, fifaMultiplier: false, scoring: normalizeLeagueScoringConfig() };
 }
 
 function leagueRuleStatLabel(key, label) {
   const rules = leagueScoringRules();
   if (key === "sinks" && rules.sinkAutoWin) return "Sinks (Auto Win)";
-  if (key === "fifas" && rules.fifaMultiplier) return "FIFAs (Multiplying)";
+  if (key === "fifas" && rules.fifaMultiplier) return "Laddering FIFAs";
   return label;
 }
 
-function leagueScoringRulesNote() {
+function leagueScoringNoteLabels() {
   const rules = leagueScoringRules();
-  const labels = [rules.fifaMultiplier ? "FIFAs multiply" : ""].filter(Boolean);
+  const scoringLabels = leagueScoringSettingFields
+    .filter(([key]) => rules.scoring[key]?.enabled)
+    .map(([key, label]) => `${label}: ${rules.scoring[key].points}`);
+  return [
+    rules.sinkAutoWin ? "Sink: Auto Win" : "",
+    rules.fifaMultiplier ? "Laddering FIFAs: On" : "",
+    ...scoringLabels,
+  ].filter(Boolean);
+}
+
+function leagueScoringRulesNote() {
+  const labels = leagueScoringNoteLabels();
   return labels.length ? `<div class="league-scoring-rules">${labels.map((label) => `<span>${label}</span>`).join("")}</div>` : "";
 }
 
 function renderLeagueScoringRulesNote() {
   const note = document.querySelector("#leagueScoringRulesNote");
   if (!note) return;
-  const rules = leagueScoringRules();
-  const labels = [rules.fifaMultiplier ? "FIFAs multiply" : ""].filter(Boolean);
+  const labels = leagueScoringNoteLabels();
   note.classList.toggle("hidden", !labels.length);
   note.innerHTML = labels.map((label) => `<span>${escapeHtml(label)}</span>`).join("");
 }
@@ -2959,10 +3066,15 @@ function pointsFromStats(stats) {
 }
 
 function pointsFromLeagueStats(stats) {
-  const points = pointsFromStats(stats);
-  if (!leagueScoringRules().fifaMultiplier) return points;
+  const rules = leagueScoringRules();
+  const points = Object.entries(rules.scoring).reduce(
+    (total, [key, rule]) => total + (rule.enabled ? (Number(stats[key]) || 0) * rule.points : 0),
+    0,
+  );
+  if (!rules.fifaMultiplier || !rules.scoring.fifas.enabled) return points;
   const fifas = Number(stats.fifas) || 0;
-  return points - fifas + multiplyingScore(fifas);
+  const fifaPoints = rules.scoring.fifas.points;
+  return points - fifas * fifaPoints + multiplyingScore(fifas, fifaPoints);
 }
 
 function playerStatsFromNames(form, teamPrefix, players) {
@@ -3305,7 +3417,14 @@ function leagueTournamentGames(leagueId = activeLeagueId) {
       tournament.rounds.flatMap((round) =>
         round.matches
           .flatMap(matchLoggedGames)
-          .map((game) => ({ ...game, source: "league_tournament", leagueId, leagueTournamentId: tournament.id })),
+          .map((game) => ({
+            ...game,
+            source: "league_tournament",
+            leagueId,
+            leagueTournamentId: tournament.id,
+            seasonId: tournament.seasonId || null,
+            season_id: tournament.seasonId || null,
+          })),
       ),
     )
     .sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
@@ -3315,6 +3434,17 @@ function leagueStatGames(leagueId = activeLeagueId) {
   return [...leagueGames(leagueId), ...leagueTournamentGames(leagueId)].sort(
     (a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at),
   );
+}
+
+function leagueSeasonStatGames(leagueId = activeLeagueId, seasonId = activeLeagueSeason(leagueId)?.id) {
+  if (!seasonId) return [];
+  return leagueStatGames(leagueId).filter((game) => (game.seasonId || game.season_id || null) === seasonId);
+}
+
+function leagueDisplayStatGames(leagueId = activeLeagueId) {
+  const hasSeasonHistory = leagueSeasonCache.some((season) => season.league_id === leagueId);
+  if (!leagueHasMax(leagueId) || !hasSeasonHistory) return leagueStatGames(leagueId);
+  return leagueSeasonStatGames(leagueId);
 }
 
 function myLeagueMember(leagueId = activeLeagueId) {
@@ -3467,6 +3597,7 @@ async function loadLeagueData() {
     leagueGameCache = [];
     leagueTournamentCache = [];
     leagueChatCache = [];
+    leagueSeasonCache = [];
     leaguePollVoteCache = [];
     leaguePlusCache = new Map();
     leaguePlanCache = new Map();
@@ -3475,13 +3606,14 @@ async function loadLeagueData() {
     return;
   }
 
-  const [{ data: memberLeagues }, { data: members }, { data: games }, { data: leagueTournaments }, { data: chatMessages }, { data: pollVotes }] = await Promise.all([
+  const [{ data: memberLeagues }, { data: members }, { data: games }, { data: leagueTournaments }, { data: chatMessages }, { data: pollVotes }, { data: seasons }] = await Promise.all([
     leagueIds.length ? authClient.from("leagues").select("*").in("id", leagueIds) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_members").select("*").in("league_id", memberLeagueIds) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_games").select("*").in("league_id", memberLeagueIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_tournaments").select("*").in("league_id", memberLeagueIds).order("updated_at", { ascending: false }) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_chat_messages").select("*").in("league_id", memberLeagueIds).order("created_at", { ascending: false }).limit(250) : Promise.resolve({ data: [] }),
     memberLeagueIds.length ? authClient.from("league_poll_votes").select("*").in("league_id", memberLeagueIds) : Promise.resolve({ data: [] }),
+    memberLeagueIds.length ? authClient.from("league_seasons").select("*").in("league_id", memberLeagueIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
   ]);
 
   leagueCache = [...new Map([...(openLeagues || []), ...(memberLeagues || [])].map((league) => [league.id, league])).values()];
@@ -3491,6 +3623,7 @@ async function loadLeagueData() {
   leagueGameCache = (games || []).map(normalizeLeagueGame);
   leagueTournamentCache = (leagueTournaments || []).map(normalizeLeagueTournament);
   leagueChatCache = chatMessages || [];
+  leagueSeasonCache = seasons || [];
   leaguePollVoteCache = pollVotes || [];
   if (activeLeagueId && !leagueCache.some((league) => league.id === activeLeagueId)) activeLeagueId = "";
   if (activeLeagueTournamentId && !leagueTournamentCache.some((tournament) => tournament.id === activeLeagueTournamentId)) activeLeagueTournamentId = "";
@@ -3530,6 +3663,7 @@ function subscribeToLeagueChanges() {
     .on("postgres_changes", { event: "*", schema: "public", table: "league_members" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_games" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_tournaments" }, loadLeagueData)
+    .on("postgres_changes", { event: "*", schema: "public", table: "league_seasons" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_chat_messages" }, loadLeagueData)
     .on("postgres_changes", { event: "*", schema: "public", table: "league_poll_votes" }, loadLeagueData)
     .subscribe();
@@ -3756,9 +3890,25 @@ function closeRules() {
   document.body.classList.remove("modal-open");
 }
 
-function defaultLeagueRulesText() {
+function leagueScoringSummaryLines(league = activeLeague()) {
+  const rules = {
+    sinkAutoWin: Boolean(league?.sink_auto_win),
+    fifaMultiplier: Boolean(league?.fifa_multiplier),
+    scoring: normalizeLeagueScoringConfig(league?.scoring_rules),
+  };
+  return leagueScoringSettingFields.map(([key, label]) => {
+    const rule = rules.scoring[key];
+    if (!rule.enabled) return `${label}: Off`;
+    if (key === "sinks" && rules.sinkAutoWin) return `${label}: Automatic win (${rule.points} points recorded)`;
+    if (key === "fifas" && rules.fifaMultiplier) return `Laddering FIFAs: ${rule.points} point base (1x, 2x, then 3x max)`;
+    return `${label}: ${rule.points} point${rule.points === 1 ? "" : "s"}`;
+  });
+}
+
+function defaultLeagueRulesText(league = activeLeague()) {
+  const scoringLine = `Scoring: ${leagueScoringSummaryLines(league).join(", ")}.`;
   return [
-    "Scoring: Table Hit = 1, Sink = 3, Tink = 2, FG Off = 2, FG Def = 2, FIFA = 1.",
+    scoringLine,
     "Self Sink is an automatic loss. Bounce-ins count as sinks.",
     "The die has to be at least 10 feet over the table.",
     "The die has to hit the line or the opponent's side.",
@@ -3777,10 +3927,11 @@ function openLeagueRules() {
   const league = activeLeague();
   if (!league) return;
   const customRules = cleanText(league.rules);
-  const rulesText = customRules || defaultLeagueRulesText();
+  const rulesText = customRules || defaultLeagueRulesText(league);
   const scoringRules = [
     league.sink_auto_win ? "Sinks are an automatic win." : "",
-    league.fifa_multiplier ? "FIFAs multiply: first is 1 point, second is 2, third is 3, and so on." : "",
+    league.fifa_multiplier ? "Laddering FIFAs are enabled." : "",
+    ...leagueScoringSummaryLines(league),
   ].filter(Boolean);
   els.leagueRulesTitle.textContent = customRules ? `${league.name} Rules` : "House Rules We Play With";
   els.leagueRulesContent.innerHTML = `
@@ -3812,8 +3963,35 @@ function openLeagueRulesEditor() {
   els.leagueRulesEditForm.elements.useAppRules.checked = !cleanText(league.rules);
   els.leagueRulesEditForm.elements.sinkAutoWin.checked = Boolean(league.sink_auto_win);
   els.leagueRulesEditForm.elements.fifaMultiplier.checked = Boolean(league.fifa_multiplier);
+  syncLeagueScoringEditor(els.leagueRulesEditForm, league);
   els.leagueRulesEditForm.elements.rules.value = league.rules || "";
   toggleLeagueRulesFields(els.leagueRulesEditForm);
+}
+
+function syncLeagueScoringEditor(form, league = activeLeague()) {
+  if (!form) return;
+  const scoring = normalizeLeagueScoringConfig(league?.scoring_rules);
+  leagueScoringSettingFields.forEach(([key]) => {
+    const enabledField = form.elements[`scoreEnabled_${key}`];
+    const pointsField = form.elements[`scorePoints_${key}`];
+    if (enabledField) enabledField.checked = scoring[key].enabled;
+    if (pointsField) pointsField.value = scoring[key].points;
+  });
+}
+
+function leagueScoringConfigFromForm(form) {
+  const config = Object.fromEntries(
+    leagueScoringSettingFields.map(([key]) => [
+      key,
+      {
+        enabled: form.get(`scoreEnabled_${key}`) === "on",
+        points: Math.max(0, Math.min(20, Math.round(Number(form.get(`scorePoints_${key}`)) || 0))),
+      },
+    ]),
+  );
+  if (form.get("sinkAutoWin") === "on") config.sinks.enabled = true;
+  if (form.get("fifaMultiplier") === "on") config.fifas.enabled = true;
+  return config;
 }
 
 function closeLeagueRules() {
@@ -4842,6 +5020,7 @@ async function updateCloudLeagueRules(form) {
       rules: form.get("useAppRules") === "on" ? "" : cleanText(form.get("rules")),
       sink_auto_win: form.get("sinkAutoWin") === "on",
       fifa_multiplier: form.get("fifaMultiplier") === "on",
+      scoring_rules: leagueScoringConfigFromForm(form),
     })
     .eq("id", activeLeagueId);
   if (error) {
@@ -4893,14 +5072,28 @@ async function deleteCloudLeague() {
 
 async function addCloudLeagueMember(form) {
   if (!canInviteActiveLeague()) return;
-  const members = leagueMembers();
-  if (members.length >= leagueMemberCapacity()) {
-    alert(leagueCapacityMessage());
+  await invitePlayerToLeagueByCode(activeLeagueId, form.get("playerCode"), els.leagueInviteForm);
+}
+
+async function invitePlayerFromLeagueTab(form) {
+  const leagueId = cleanText(form.get("leagueId"));
+  if (!leagueId || !myLeagueMember(leagueId)) {
+    alert("Choose one of your leagues first.");
+    return;
+  }
+  await invitePlayerToLeagueByCode(leagueId, form.get("playerCode"), els.leagueTabInviteForm);
+}
+
+async function invitePlayerToLeagueByCode(leagueId, playerCode, formElement = null) {
+  if (!authClient || !currentUser || !leagueId || !myLeagueMember(leagueId)) return;
+  const members = leagueMembers(leagueId);
+  if (members.length >= leagueMemberCapacity(leagueId)) {
+    alert(leagueCapacityMessage(leagueId));
     return;
   }
 
   await savePlayerProfileLookup();
-  const player = await findPlayerByCode(form.get("playerCode"));
+  const player = await findPlayerByCode(playerCode);
   if (!player) return;
   if (player.user_id === currentUser?.id) {
     alert("You are already in this league.");
@@ -4912,18 +5105,31 @@ async function addCloudLeagueMember(form) {
   }
 
   const { error } = await authClient.rpc("invite_player_to_league", {
-    target_league_id: activeLeagueId,
+    target_league_id: leagueId,
     target_user_id: player.user_id,
   });
   if (error) alert(error.message);
-  els.leagueInviteForm.reset();
+  const league = leagueCache.find((item) => item.id === leagueId);
+  if (formElement && !error) {
+    const button = formElement.querySelector('button[type="submit"]');
+    const originalText = button?.textContent || "Send Invite";
+    formElement.reset();
+    if (button) {
+      button.textContent = "Sent";
+      button.disabled = true;
+      window.setTimeout(() => {
+        button.textContent = originalText;
+        button.disabled = false;
+      }, 2300);
+    }
+  }
   if (!error) {
     await createNotification({
       recipientId: player.user_id,
-      leagueId: activeLeagueId,
+      leagueId,
       type: "league_invite",
       title: "League invite",
-      message: `${currentPublicName()} invited you to ${activeLeague()?.name || "a league"}.`,
+      message: `${currentPublicName()} invited you to ${league?.name || "a league"}.`,
       linkTarget: "friends",
     });
   }
@@ -5165,10 +5371,12 @@ async function logCloudLeagueGame(form) {
   if (!canLogActiveLeagueGames()) return false;
   const beforeStats = computeLeagueStats();
   const beforeAchievementRanks = leagueAchievementRanks(beforeStats);
-  const beforeLeaders = leagueRankingLeaders(beforeStats);
+  const beforeLeaders = leagueRankingLeaders(computeLeagueStats(leagueDisplayStatGames()));
   const game = readLeagueGameForm(form);
+  const existingGame = editingLeagueGameId ? leagueGames().find((item) => item.id === editingLeagueGameId) : null;
   const payload = {
     league_id: activeLeagueId,
+    season_id: existingGame?.seasonId || activeLeagueSeason()?.id || null,
     logged_by: currentUser.id,
     team_a_players: game.teams[0].players,
     team_b_players: game.teams[1].players,
@@ -5191,10 +5399,11 @@ async function logCloudLeagueGame(form) {
   resetLeagueGameForm();
   await loadLeagueData();
   const afterStats = computeLeagueStats();
+  const afterSeasonStats = computeLeagueStats(leagueDisplayStatGames());
   const winner = game.teams[game.winnerIndex];
   await createLeagueChatMessage(activeLeagueId, `${winner.name} logged a ${winner.score}-${game.teams[game.winnerIndex === 0 ? 1 : 0].score} league win.`, "system");
   await notifyLeagueAchievementUnlocks(beforeAchievementRanks, afterStats);
-  await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
+  await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterSeasonStats));
   return true;
 }
 
@@ -5219,6 +5428,7 @@ async function createCloudLeagueTournament(form) {
   const tournament = createTournament(name, teams, form.get("gamesToWin"));
   const payload = {
     league_id: activeLeagueId,
+    season_id: activeLeagueSeason()?.id || null,
     created_by: currentUser.id,
     data: leagueTournamentPayload(tournament),
   };
@@ -5290,7 +5500,7 @@ async function logLeagueTournamentMatch(tournamentId, matchId, form) {
 
   const beforeStats = computeLeagueStats();
   const beforeAchievementRanks = leagueAchievementRanks(beforeStats);
-  const beforeLeaders = leagueRankingLeaders(beforeStats);
+  const beforeLeaders = leagueRankingLeaders(computeLeagueStats(leagueDisplayStatGames()));
   const game = readTournamentGameForm(form, match, tournament.id);
   game.source = "league_tournament";
   game.leagueId = activeLeagueId;
@@ -5305,9 +5515,10 @@ async function logLeagueTournamentMatch(tournamentId, matchId, form) {
   await saveCloudLeagueTournament(tournament);
   await loadLeagueData();
   const afterStats = computeLeagueStats();
+  const afterSeasonStats = computeLeagueStats(leagueDisplayStatGames());
   await createLeagueChatMessage(activeLeagueId, `${match.winner?.name || game.teams[game.winnerIndex].name} ${seriesComplete ? "advanced" : "won a game"} in ${tournament.name}.`, "system");
   await notifyLeagueAchievementUnlocks(beforeAchievementRanks, afterStats);
-  await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterStats));
+  await notifyLeagueRankingChanges(beforeLeaders, leagueRankingLeaders(afterSeasonStats));
   return true;
 }
 
@@ -5417,14 +5628,12 @@ function readLeagueGameForm(form) {
 
 function applyLeagueGameRules(game) {
   const rules = leagueScoringRules();
-  if (rules.fifaMultiplier) {
-    game.teams.forEach((team) => {
-      Object.values(team.playerStats || {}).forEach((stats) => {
-        stats.points = pointsFromLeagueStats(stats);
-      });
-      team.stats = sumStats(Object.values(team.playerStats || {}));
+  game.teams.forEach((team) => {
+    Object.values(team.playerStats || {}).forEach((stats) => {
+      stats.points = pointsFromLeagueStats(stats);
     });
-  }
+    team.stats = sumStats(Object.values(team.playerStats || {}));
+  });
   if (!rules.sinkAutoWin || game.selfSinkTeam !== null) return game;
   const sinkTeams = game.teams.map((team) => (team.stats.sinks || 0) > 0);
   if (sinkTeams[0] !== sinkTeams[1]) game.winnerIndex = sinkTeams[0] ? 0 : 1;
@@ -5454,6 +5663,8 @@ function normalizeLeagueGame(row) {
     source: "league",
     leagueId: row.league_id,
     league_id: row.league_id,
+    seasonId: row.season_id || null,
+    season_id: row.season_id || null,
     loggedBy: row.logged_by || "",
     logged_by: row.logged_by || "",
     teams: [
@@ -5486,6 +5697,8 @@ function normalizeLeagueTournament(row) {
     id: row.id,
     leagueId: row.league_id,
     league_id: row.league_id,
+    seasonId: row.season_id || null,
+    season_id: row.season_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
@@ -5898,10 +6111,10 @@ function tournamentPlayerStatsForm(match, leagueMode = false) {
   let playerNumber = 1;
   const sinkAutoWin = leagueMode && leagueScoringRules().sinkAutoWin;
   const teamAPlayers = match.teamA.players
-    .map((player, index) => staticBigPlayerStatCard(player, `tournamentPlayer${index + 1}`, playerNumber++, 0, sinkAutoWin))
+    .map((player, index) => staticBigPlayerStatCard(player, `tournamentPlayer${index + 1}`, playerNumber++, 0, sinkAutoWin, leagueMode))
     .join("");
   const teamBPlayers = match.teamB.players
-    .map((player, index) => staticBigPlayerStatCard(player, `tournamentPlayer${match.teamA.players.length + index + 1}`, playerNumber++, 1, sinkAutoWin))
+    .map((player, index) => staticBigPlayerStatCard(player, `tournamentPlayer${match.teamA.players.length + index + 1}`, playerNumber++, 1, sinkAutoWin, leagueMode))
     .join("");
 
   return `
@@ -5984,13 +6197,38 @@ function renderMatchHistory() {
 
 function renderLeagues() {
   if (!currentUser) {
+    els.leagueTabInviteForm?.classList.add("hidden");
+    els.leagueSearchInput?.closest(".league-search-field")?.classList.add("hidden");
     els.leagueList.innerHTML = '<p class="empty">Sign in to view leagues.</p>';
     return;
   }
 
-  els.leagueList.innerHTML = leagueCache.length
-    ? leagueCache.map(leagueCard).join("")
-    : '<section class="panel"><p class="empty">No leagues yet. Create one to get started.</p></section>';
+  renderLeagueTabInviteForm();
+  els.leagueSearchInput?.closest(".league-search-field")?.classList.toggle("hidden", !leagueCache.length);
+  if (els.leagueSearchInput && els.leagueSearchInput.value !== leagueSearchQuery) els.leagueSearchInput.value = leagueSearchQuery;
+  const leagues = filteredLeagues();
+  els.leagueList.innerHTML = leagues.length
+    ? leagues.map(leagueCard).join("")
+    : leagueCache.length
+      ? '<section class="panel"><p class="empty">No leagues match that search.</p></section>'
+      : '<section class="panel"><p class="empty">No leagues yet. Create one to get started.</p></section>';
+}
+
+function filteredLeagues() {
+  const query = cleanText(leagueSearchQuery).toLowerCase();
+  if (!query) return leagueCache;
+  return leagueCache.filter((league) => `${league.name || ""} ${league.description || ""}`.toLowerCase().includes(query));
+}
+
+function renderLeagueTabInviteForm() {
+  if (!els.leagueTabInviteForm) return;
+  const myLeagues = leagueCache.filter((league) => myLeagueMember(league.id));
+  els.leagueTabInviteForm.classList.toggle("hidden", !myLeagues.length);
+  const select = els.leagueTabInviteForm.querySelector('[name="leagueId"]');
+  if (!select) return;
+  const selected = select.value || activeLeagueId || myLeagues[0]?.id || "";
+  select.innerHTML = myLeagues.map((league) => `<option value="${league.id}">${escapeHtml(league.name)}</option>`).join("");
+  select.value = myLeagues.some((league) => league.id === selected) ? selected : myLeagues[0]?.id || "";
 }
 
 function renderFriends() {
@@ -6372,6 +6610,7 @@ function renderLeagueDetails() {
     els.leagueRulesEditForm.elements.useAppRules.checked = !cleanText(league.rules);
     els.leagueRulesEditForm.elements.sinkAutoWin.checked = Boolean(league.sink_auto_win);
     els.leagueRulesEditForm.elements.fifaMultiplier.checked = Boolean(league.fifa_multiplier);
+    syncLeagueScoringEditor(els.leagueRulesEditForm, league);
     els.leagueRulesEditForm.elements.rules.value = league.rules || "";
     toggleLeagueRulesFields(els.leagueRulesEditForm);
   }
@@ -6419,9 +6658,275 @@ function renderLeagueGames() {
   }
 }
 
+function leagueSeasons() {
+  return leagueSeasonCache
+    .filter((season) => season.league_id === activeLeagueId)
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+}
+
+function activeLeagueSeason(leagueId = activeLeagueId) {
+  return leagueSeasonCache.find((season) => season.league_id === leagueId && season.status === "active") || null;
+}
+
+function scheduledLeagueSeasons(leagueId = activeLeagueId) {
+  return leagueSeasonCache
+    .filter((season) => season.league_id === leagueId && season.status === "scheduled")
+    .sort((a, b) => new Date(a.starts_at || a.created_at) - new Date(b.starts_at || b.created_at));
+}
+
+function archivedLeagueSeasons() {
+  return leagueSeasons().filter((season) => season.status === "archived");
+}
+
+function canControlLeagueSeasons() {
+  return isActiveLeagueOwner() && leagueHasMax(activeLeagueId);
+}
+
+async function startLeagueSeasonNow(seasonId = "") {
+  if (!canControlLeagueSeasons()) return;
+  const active = activeLeagueSeason();
+  if (active) {
+    alert("End the current season before starting another one.");
+    return;
+  }
+  const fallbackName = `Season ${leagueSeasons().length + 1}`;
+  const scheduled = scheduledLeagueSeasons().find((season) => !seasonId || season.id === seasonId) || null;
+  const payload = scheduled
+    ? { status: "active", starts_at: new Date().toISOString(), ended_at: null }
+    : {
+        league_id: activeLeagueId,
+        name: fallbackName,
+        status: "active",
+        starts_at: new Date().toISOString(),
+        created_by: currentUser.id,
+      };
+  const query = scheduled
+    ? authClient.from("league_seasons").update(payload).eq("id", scheduled.id).eq("league_id", activeLeagueId)
+    : authClient.from("league_seasons").insert(payload);
+  const { error } = await query;
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  const ownerName = cleanText(myLeagueMember()?.nickname || myLeagueMember()?.display_name || myProfileNickname() || "The Owner");
+  const seasonName = scheduled?.name || fallbackName;
+  await createLeagueChatMessage(activeLeagueId, `${ownerName} has started ${seasonName}.`, "system", {
+    seasonId: scheduled?.id || null,
+    seasonName,
+    seasonStatus: "active",
+  });
+  await loadLeagueData();
+}
+
+async function endActiveLeagueSeason() {
+  if (!canControlLeagueSeasons()) return;
+  const season = activeLeagueSeason();
+  if (!season) return;
+  const { error } = await authClient
+    .from("league_seasons")
+    .update({ status: "archived", ended_at: new Date().toISOString() })
+    .eq("id", season.id)
+    .eq("league_id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  const ownerName = cleanText(myLeagueMember()?.nickname || myLeagueMember()?.display_name || myProfileNickname() || "The Owner");
+  await createLeagueChatMessage(activeLeagueId, `${ownerName} ended ${season.name}. The season is now archived.`, "system", {
+    seasonId: season.id,
+    seasonName: season.name,
+    seasonStatus: "archived",
+  });
+  await loadLeagueData();
+}
+
+async function scheduleLeagueSeason(form) {
+  if (!canControlLeagueSeasons()) return;
+  const name = cleanText(form.get("seasonName")) || `Season ${leagueSeasons().length + 1}`;
+  const date = cleanText(form.get("seasonDate"));
+  const endDate = cleanText(form.get("seasonEndDate"));
+  const startsAt = date ? new Date(date).toISOString() : null;
+  const scheduledEndsAt = endDate ? new Date(endDate).toISOString() : null;
+  if (!startsAt || Number.isNaN(new Date(startsAt).getTime())) {
+    alert("Choose a valid planned start date.");
+    return;
+  }
+  if (scheduledEndsAt && new Date(scheduledEndsAt) <= new Date(startsAt)) {
+    alert("The planned end needs to be after the planned start.");
+    return;
+  }
+  const existing = scheduledLeagueSeasons()[0] || null;
+  const payload = {
+    league_id: activeLeagueId,
+    created_by: currentUser.id,
+    name,
+    status: "scheduled",
+    starts_at: startsAt,
+    scheduled_ends_at: scheduledEndsAt,
+  };
+  const query = existing
+    ? authClient.from("league_seasons").update(payload).eq("id", existing.id).eq("league_id", activeLeagueId)
+    : authClient.from("league_seasons").insert(payload);
+  const { error } = await query;
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  await createLeagueChatMessage(activeLeagueId, `${name} ${existing ? "schedule updated" : "scheduled"} for ${formatDate(startsAt)}.`, "system", {
+    seasonId: existing?.id || null,
+    seasonName: name,
+    seasonStatus: "scheduled",
+  });
+  await loadLeagueData();
+}
+
+async function cancelScheduledLeagueSeason(seasonId) {
+  if (!canControlLeagueSeasons() || !seasonId) return;
+  const season = scheduledLeagueSeasons().find((item) => item.id === seasonId);
+  if (!season) return;
+  const { error } = await authClient.from("league_seasons").delete().eq("id", season.id).eq("league_id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  await createLeagueChatMessage(activeLeagueId, `${season.name} was removed from the season schedule.`, "system", {
+    seasonName: season.name,
+    seasonStatus: "cancelled",
+  });
+  await loadLeagueData();
+}
+
+function unfinishedLeagueTournamentsForSeason(seasonId) {
+  if (!seasonId) return [];
+  return leagueTournaments().filter((tournament) => tournament.seasonId === seasonId && playableTournamentMatches(tournament).length);
+}
+
+function dateTimeLocalValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+async function scheduleLeagueMatchOrTournament(form) {
+  if (!canControlLeagueSeasons()) return;
+  const scheduleType = cleanText(form.get("scheduleType")) === "tournament" ? "tournament" : "match";
+  const title = cleanText(form.get("title"));
+  const date = cleanText(form.get("date"));
+  const details = cleanText(form.get("details"));
+  if (!title || !date) return;
+  const eventPayload = { title, date, details, scheduleType };
+  await createLeagueChatMessage(activeLeagueId, `${title} - ${formatDate(date)}${details ? `: ${details}` : ""}`, "event", eventPayload);
+  els.leagueScheduleForm?.reset();
+  await loadLeagueData();
+}
+
 function renderLeaguePast() {
-  if (!els.pastSeasonsList) return;
-  els.pastSeasonsList.innerHTML = '<p class="empty">No archived seasons yet.</p>';
+  const isMax = leagueHasMax(activeLeagueId);
+  const ownerControls = canControlLeagueSeasons();
+  const active = activeLeagueSeason();
+  const scheduledSeasons = scheduledLeagueSeasons();
+  const scheduledEvents = leagueChatMessages().filter((message) => message.type === "event");
+  els.leagueSeasonLock?.classList.toggle("hidden", isMax);
+  if (els.leagueSeasonLock) {
+    els.leagueSeasonLock.innerHTML = `
+      <strong>Seasons are a Leagues MAX feature.</strong>
+      <span>Track active seasons, schedule matchups and tournaments, then archive season history cleanly.</span>
+      ${isActiveLeagueOwner() ? '<button class="small-button max-plan-button plan-upgrade-button" type="button" data-season-max-upgrade>Upgrade to Leagues MAX</button>' : ""}
+    `;
+  }
+  els.leagueSeasonTools?.classList.toggle("hidden", !isMax);
+  els.openPastSeasonsBtn?.classList.toggle("hidden", !isMax);
+  els.leagueGameHistory?.classList.toggle("hidden", !isMax);
+  if (!isMax) return;
+
+  if (els.leagueSeasonStatus) {
+    els.leagueSeasonStatus.innerHTML = active
+      ? `<strong>${escapeHtml(active.name)}</strong><span>Active since ${formatDate(active.starts_at || active.created_at)}</span>`
+      : `<strong>No active season</strong><span>${scheduledSeasons.length ? `${scheduledSeasons.length} scheduled season${scheduledSeasons.length === 1 ? "" : "s"}` : "Start one when your league is ready."}</span>`;
+  }
+  els.leagueSeasonOwnerControls?.classList.toggle("hidden", !ownerControls);
+  els.leagueSeasonScheduleForm?.classList.toggle("hidden", !ownerControls);
+  els.leagueScheduleForm?.classList.toggle("hidden", !ownerControls);
+  if (els.startLeagueSeasonBtn) els.startLeagueSeasonBtn.disabled = Boolean(active);
+  if (els.endLeagueSeasonBtn) els.endLeagueSeasonBtn.disabled = !active;
+  if (els.leagueSeasonScheduleForm && ownerControls) {
+    const scheduled = scheduledSeasons[0] || null;
+    els.leagueSeasonScheduleForm.elements.seasonName.value = scheduled?.name || "";
+    els.leagueSeasonScheduleForm.elements.seasonDate.value = dateTimeLocalValue(scheduled?.starts_at);
+    els.leagueSeasonScheduleForm.elements.seasonEndDate.value = dateTimeLocalValue(scheduled?.scheduled_ends_at);
+    const submit = els.leagueSeasonScheduleForm.querySelector('[type="submit"]');
+    if (submit) submit.textContent = scheduled ? "Update Schedule" : "Save Schedule";
+  }
+  if (els.leagueScheduledList) {
+    const seasonRows = scheduledSeasons.map((season) => seasonScheduleCard(season));
+    const eventRows = scheduledEvents.map(scheduleEventCard);
+    els.leagueScheduledList.innerHTML = seasonRows.length || eventRows.length
+      ? [...seasonRows, ...eventRows].join("")
+      : '<p class="empty">No scheduled seasons, matches, or tournaments yet.</p>';
+  }
+  if (els.pastSeasonsList) {
+    const archived = archivedLeagueSeasons();
+    els.pastSeasonsList.innerHTML = archived.length
+      ? archived.map(archivedSeasonCard).join("")
+      : '<p class="empty">No archived seasons yet.</p>';
+  }
+}
+
+function seasonScheduleCard(season) {
+  const ownerActions = canControlLeagueSeasons()
+    ? `<div class="season-schedule-actions">
+        <button class="small-button export-button" type="button" data-start-scheduled-season="${season.id}">Start Now</button>
+        <button class="small-button danger-button" type="button" data-cancel-scheduled-season="${season.id}">Cancel</button>
+      </div>`
+    : "";
+  return `
+    <article class="season-schedule-card">
+      <div>
+        <strong>${escapeHtml(season.name)}</strong>
+        <span>Planned start${season.starts_at ? ` - ${formatDate(season.starts_at)}` : " not set"}</span>
+        ${season.scheduled_ends_at ? `<small>Planned end - ${formatDate(season.scheduled_ends_at)}</small>` : ""}
+      </div>
+      <div>
+        <b>Scheduled</b>
+        ${ownerActions}
+      </div>
+    </article>
+  `;
+}
+
+function scheduleEventCard(message) {
+  const payload = message.payload || {};
+  const type = payload.scheduleType === "tournament" ? "Tournament" : "Match";
+  return `
+    <article class="season-schedule-card">
+      <div>
+        <strong>${escapeHtml(payload.title || message.message)}</strong>
+        <span>${escapeHtml(type)}${payload.date ? ` - ${formatDate(payload.date)}` : ""}</span>
+        ${payload.details ? `<small>${escapeHtml(payload.details)}</small>` : ""}
+      </div>
+      <b>${escapeHtml(type)}</b>
+    </article>
+  `;
+}
+
+function archivedSeasonCard(season) {
+  const games = leagueSeasonStatGames(activeLeagueId, season.id);
+  const players = Object.values(computeLeagueStats(games).players).sort(
+    (a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.points - a.points,
+  );
+  const leader = players[0] || null;
+  return `
+    <article class="season-schedule-card archived-season-card">
+      <div>
+        <strong>${escapeHtml(season.name)}</strong>
+        <span>${season.starts_at ? formatDate(season.starts_at) : "Started"} - ${season.ended_at ? formatDate(season.ended_at) : "Ended"}</span>
+        <small>${games.length} game${games.length === 1 ? "" : "s"}${leader ? ` - Leader: ${escapeHtml(leader.name)} (${leader.wins}-${leader.losses})` : ""}</small>
+      </div>
+      <b>Archived</b>
+    </article>
+  `;
 }
 
 function openPastSeasons() {
@@ -6532,7 +7037,7 @@ function leagueTournamentMatchForm(tournament, match) {
     .replace('class="match-form tournament-big-form"', `class="match-form tournament-big-form league-tournament-match-form" data-tournament-id="${tournament.id}"`)
     .replace("Log Tournament Game", "Log League Tournament Game");
   const rules = leagueScoringRules();
-  if (rules.fifaMultiplier) form = form.replaceAll(">FIFAs<", ">FIFAs (Multiplying)<");
+  if (rules.fifaMultiplier) form = form.replaceAll(">FIFAs<", ">Laddering FIFAs<");
   const note = leagueScoringRulesNote();
   return note ? form.replace('<p class="score-helper">', `${note}<p class="score-helper">`) : form;
 }
@@ -6610,9 +7115,10 @@ function gamePlayerStatsFallback(player) {
 }
 
 function renderLeagueStats() {
-  const stats = computeLeagueStats();
+  const games = leagueDisplayStatGames();
+  const stats = computeLeagueStats(games);
   const players = leagueMembers()
-    .map((member) => ({ ...member, stats: statsForLeagueMember(stats.players, member) }))
+    .map((member) => ({ ...member, stats: statsForLeagueMember(stats.players, member, games) }))
     .sort(
       (a, b) =>
         b.stats.wins - a.stats.wins ||
@@ -6636,7 +7142,7 @@ function renderLeagueStatsTable() {
   }
 
   els.leagueExportBtn.classList.remove("hidden");
-  const stats = computeLeagueStats();
+  const stats = computeLeagueStats(leagueDisplayStatGames());
   const players = Object.values(stats.players).sort((a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.sinks - a.sinks);
   els.leagueStatsTable.innerHTML = players.length
     ? players.map(leaguePlayerStatsRow).join("")
@@ -6644,7 +7150,7 @@ function renderLeagueStatsTable() {
 }
 
 function renderLeagueRankings() {
-  const stats = computeLeagueStats();
+  const stats = computeLeagueStats(leagueDisplayStatGames());
   const players = Object.values(stats.players);
   const byOverall = [...players].sort((a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.sinks - a.sinks);
   const bySinks = [...players].sort((a, b) => b.sinks - a.sinks || b.wins - a.wins);
@@ -6854,10 +7360,29 @@ function renderLeagueSettings() {
   els.leagueSettingsForm.elements.logoTop.value = league.logo_top || "#EFBF04";
   els.leagueSettingsForm.elements.logoLeft.value = league.logo_left || "#ffffff";
   els.leagueSettingsForm.elements.logoRight.value = league.logo_right || "#4f7fc8";
+  updateLeagueSettingsSaveVisibility();
   renderCustomBadgeBuilder();
   els.leagueRulesSummary.textContent = league.rules
     ? "This league is using custom rules."
     : "This league is using the default House Rules We Play With.";
+}
+
+function leagueSettingsHaveChanges() {
+  const league = activeLeague();
+  const form = els.leagueSettingsForm;
+  if (!league || !form || !canManageActiveLeague()) return false;
+  return (
+    cleanText(form.elements.name.value) !== cleanText(league.name) ||
+    cleanText(form.elements.description.value) !== cleanText(league.description) ||
+    form.elements.privacy.value !== league.privacy ||
+    form.elements.logoTop.value.toLowerCase() !== (league.logo_top || "#EFBF04").toLowerCase() ||
+    form.elements.logoLeft.value.toLowerCase() !== (league.logo_left || "#ffffff").toLowerCase() ||
+    form.elements.logoRight.value.toLowerCase() !== (league.logo_right || "#4f7fc8").toLowerCase()
+  );
+}
+
+function updateLeagueSettingsSaveVisibility() {
+  els.saveLeagueSettingsBtn?.classList.toggle("hidden", !leagueSettingsHaveChanges());
 }
 
 function renderLeagueMembers() {
@@ -7217,10 +7742,10 @@ function renderRosterProfile() {
   `;
 }
 
-function computeLeagueStats() {
+function computeLeagueStats(games = leagueStatGames()) {
   const players = {};
   const teams = {};
-  leagueStatGames().forEach((game) => {
+  games.forEach((game) => {
     game.teams.forEach((team, teamIndex) => {
       const won = game.winnerIndex === teamIndex;
       const teamKey = team.players.join(" / ").toLowerCase();
@@ -7244,12 +7769,12 @@ function computeLeagueStats() {
     });
   });
   Object.values(players).forEach((player) => {
-    player.streak = currentLeagueStreak(player.name);
+    player.streak = currentLeagueStreak(player.name, games);
   });
   return { players, teams };
 }
 
-function statsForLeagueMember(players, member) {
+function statsForLeagueMember(players, member, games = leagueStatGames()) {
   const bucket = emptyBucket();
   const aliases = [member.display_name, member.nickname];
   if (member.user_id === currentUser?.id) aliases.push(...profileNameAliases());
@@ -7257,7 +7782,7 @@ function statsForLeagueMember(players, member) {
     mergeStatBucket(bucket, players[profileKey(name)]);
   });
   bucket.name = member.nickname || member.display_name || bucket.name;
-  bucket.streak = currentLeagueStreak(member.display_name);
+  bucket.streak = currentLeagueStreak(member.display_name, games);
   return bucket;
 }
 
@@ -7301,12 +7826,12 @@ function mergeStatBucket(target, source) {
   return target;
 }
 
-function currentLeagueStreak(playerName) {
+function currentLeagueStreak(playerName, games = leagueStatGames()) {
   const target = cleanText(playerName).toLowerCase();
   let streakType = "";
   let count = 0;
 
-  for (const game of leagueStatGames()) {
+  for (const game of games) {
     const teamIndex = game.teams.findIndex((team) => team.players.some((player) => player.toLowerCase() === target));
     if (teamIndex === -1) continue;
     const result = game.winnerIndex === teamIndex ? "W" : "L";
