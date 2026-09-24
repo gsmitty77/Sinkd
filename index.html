@@ -853,9 +853,11 @@
               Nickname
               <input name="nickname" placeholder="Nickname" required />
             </label>
-            <label>
+            <label class="preferred-partner-field hidden">
               Preferred Partner
-              <input name="preferredPartner" placeholder="Optional" />
+              <select name="preferredPartnerUserId">
+                <option value="">No preferred partner</option>
+              </select>
             </label>
             <label class="field-heading">Customize Cup</label>
             <label>
@@ -1205,6 +1207,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260924-1"></script>
+    <script src="app.js?v=20260924-2"></script>
   </body>
 </html>

@@ -958,6 +958,7 @@ function hydrateMyProfileFromUser(user) {
     name: cleanText(cloudProfile.name || cloudProfile.nickname),
     nickname: cleanText(cloudProfile.nickname || cloudProfile.name),
     playerCode: normalizePlayerCode(cloudProfile.playerCode) || generatePlayerCode(),
+    preferredPartnerUserId: cleanText(cloudProfile.preferredPartnerUserId),
     preferredPartner: cleanText(cloudProfile.preferredPartner),
     cupColor: cloudProfile.cupColor || "#d71920",
     notes: cleanText(cloudProfile.notes),
@@ -1346,12 +1347,15 @@ function bindEvents() {
     if (previousNickname && profileKey(previousNickname) !== profileKey(nickname)) {
       migrateLocalPlayerName(previousNickname, nickname);
     }
+    const requestedPartnerUserId = cleanText(form.get("preferredPartnerUserId"));
+    const preferredPartner = preferredPartnerCandidates().find((member) => member.user_id === requestedPartnerUserId) || null;
 
     state.myProfile = {
       name: nickname,
       nickname,
       playerCode: normalizePlayerCode(previousProfile?.playerCode) || generatePlayerCode(),
-      preferredPartner: cleanText(form.get("preferredPartner")),
+      preferredPartnerUserId: preferredPartner?.user_id || "",
+      preferredPartner: preferredPartner ? cleanText(preferredPartner.nickname || preferredPartner.display_name) : "",
       cupColor: form.get("cupColor") || "#d71920",
       notes: cleanText(form.get("notes")),
       aliases,
@@ -1507,7 +1511,6 @@ function bindEvents() {
 
   els.friendsList.addEventListener("click", async (event) => {
     const inviteToLeague = event.target.closest("[data-invite-friend-league]");
-    const preferredPartner = event.target.closest("[data-preferred-partner]");
     const seeProfile = event.target.closest("[data-friend-profile]");
     const unfriend = event.target.closest("[data-unfriend]");
     const confirmUnfriend = event.target.closest("[data-unfriend-confirm]");
@@ -1515,10 +1518,6 @@ function bindEvents() {
     const card = event.target.closest("[data-friend-card]");
     if (inviteToLeague) {
       await inviteFriendToLeague(inviteToLeague.dataset.inviteFriendLeague);
-      return;
-    }
-    if (preferredPartner) {
-      setPreferredPartnerFromFriend(preferredPartner.dataset.preferredPartner);
       return;
     }
     if (seeProfile) {
@@ -1936,11 +1935,6 @@ function bindEvents() {
       await addLeagueMemberAsFriend(addFriend.dataset.addFriend);
       return;
     }
-    const preferredPartner = event.target.closest("[data-roster-preferred-partner]");
-    if (preferredPartner) {
-      setPreferredPartnerFromLeagueMember(preferredPartner.dataset.rosterPreferredPartner);
-      return;
-    }
     const achievementsButton = event.target.closest("[data-roster-achievements]");
     if (achievementsButton) {
       selectedLeagueAchievementsMemberId =
@@ -1961,8 +1955,6 @@ function bindEvents() {
       addLeagueMemberAsFriend(addFriend.dataset.addFriend);
       return;
     }
-    const preferredPartner = event.target.closest("[data-roster-preferred-partner]");
-    if (preferredPartner) setPreferredPartnerFromLeagueMember(preferredPartner.dataset.rosterPreferredPartner);
   });
 
   els.closeRosterProfileBtn?.addEventListener("click", closeRosterProfile);
@@ -1975,11 +1967,6 @@ function bindEvents() {
       await addLeagueMemberAsFriend(addFriend.dataset.addFriend);
       renderRosterProfile();
       return;
-    }
-    const preferredPartner = event.target.closest("[data-roster-preferred-partner]");
-    if (preferredPartner) {
-      setPreferredPartnerFromLeagueMember(preferredPartner.dataset.rosterPreferredPartner);
-      renderRosterProfile();
     }
   });
 
@@ -3475,6 +3462,40 @@ function myActiveLeagueMemberships() {
   return leagueMemberCache.filter((member) => member.user_id === currentUser?.id && member.role !== "pending");
 }
 
+function preferredPartnerCandidates() {
+  const membership = myActiveLeagueMemberships()[0];
+  if (!membership) return [];
+  return leagueMembers(membership.league_id)
+    .filter((member) => member.user_id && member.user_id !== currentUser?.id)
+    .sort((a, b) => cleanText(a.nickname || a.display_name).localeCompare(cleanText(b.nickname || b.display_name)));
+}
+
+function selectedPreferredPartnerUserId(profile = state.myProfile) {
+  const membership = myActiveLeagueMemberships()[0];
+  if (!membership) return "";
+  const candidates = preferredPartnerCandidates();
+  if (Object.prototype.hasOwnProperty.call(membership, "preferred_partner_user_id")) {
+    const syncedId = cleanText(membership.preferred_partner_user_id);
+    return syncedId && candidates.some((member) => member.user_id === syncedId) ? syncedId : "";
+  }
+  const savedId = cleanText(profile?.preferredPartnerUserId);
+  if (savedId && candidates.some((member) => member.user_id === savedId)) return savedId;
+  const legacyName = cleanText(profile?.preferredPartner);
+  if (!legacyName) return "";
+  return candidates.find((member) => profileKey(member.nickname || member.display_name) === profileKey(legacyName))?.user_id || "";
+}
+
+function preferredPartnerName(userId, leagueId = myActiveLeagueMemberships()[0]?.league_id) {
+  if (!userId || !leagueId) return "";
+  const member = leagueMembers(leagueId).find((item) => item.user_id === userId);
+  return cleanText(member?.nickname || member?.display_name);
+}
+
+function memberPreferredPartnerName(member) {
+  if (!member?.league_id || !member.preferred_partner_user_id) return "";
+  return preferredPartnerName(member.preferred_partner_user_id, member.league_id);
+}
+
 function blocksAnotherLeagueJoin(leagueId = "") {
   const otherLeague = myActiveLeagueMemberships().find((member) => member.league_id !== leagueId);
   if (!otherLeague) return false;
@@ -4758,14 +4779,6 @@ function restoreSubmitButton(button, text) {
   delete button.dataset.originalText;
 }
 
-function setPreferredPartnerFromFriend(requestId) {
-  const request = friendRequestCache.find((item) => item.id === requestId);
-  const friend = request ? friendInfo(request) : null;
-  if (!friend?.name) return;
-  savePreferredPartner(friend.name);
-  renderFriends();
-}
-
 async function addLeagueMemberAsFriend(memberId) {
   const member = leagueMembers().find((item) => item.id === memberId);
   if (!member?.user_id || member.user_id === currentUser?.id) return;
@@ -4774,27 +4787,6 @@ async function addLeagueMemberAsFriend(memberId) {
     rosterActionFeedback = { memberId, action: "friend" };
     renderLeagueStats();
   }
-}
-
-function setPreferredPartnerFromLeagueMember(memberId) {
-  const member = leagueMembers().find((item) => item.id === memberId);
-  if (!member || member.user_id === currentUser?.id) return;
-  savePreferredPartner(member.nickname || member.display_name);
-  rosterActionFeedback = { memberId, action: "partner" };
-  renderLeagueStats();
-}
-
-function savePreferredPartner(name) {
-  const partnerName = cleanText(name);
-  if (!partnerName) return;
-  state.myProfile ||= {};
-  state.myProfile.preferredPartner = partnerName;
-  state.myProfile.updatedAt = new Date().toISOString();
-  if (!state.myProfile.nickname) state.myProfile.nickname = myProfileNickname();
-  saveCurrentProfileForUser();
-  saveState();
-  saveMyProfileToCloud();
-  renderProfiles();
 }
 
 function chooseLeagueForInvite(leagues) {
@@ -5194,11 +5186,16 @@ async function syncMyLeagueProfile() {
   const nickname = myProfileNickname();
   if (!authClient || !currentUser || !nickname) return;
   const cupColor = state.myProfile?.cupColor || "#d71920";
+  const requestedPartnerUserId = cleanText(state.myProfile?.preferredPartnerUserId);
+  const preferredPartnerUserId = preferredPartnerCandidates().some((member) => member.user_id === requestedPartnerUserId)
+    ? requestedPartnerUserId
+    : "";
 
   const { error: rpcError } = await authClient.rpc("update_my_league_profile", {
     profile_name: nickname,
     profile_cup_color: cupColor,
     profile_player_code: normalizePlayerCode(state.myProfile?.playerCode),
+    profile_preferred_partner_user_id: preferredPartnerUserId || null,
   });
   if (!rpcError) {
     await loadLeagueData();
@@ -6462,7 +6459,7 @@ function friendRow(request) {
             ${
               confirming
                 ? `<div class="friend-confirm"><span>Are you sure?</span><div class="friend-actions"><button class="small-button danger-button" type="button" data-unfriend-confirm="${request.id}">Yes</button><button class="small-button secondary-button" type="button" data-unfriend-cancel="${request.id}">Cancel</button></div></div>`
-                : `<div class="friend-actions friend-actions-stacked"><button class="primary-button roster-profile-button" type="button" data-friend-profile="${request.id}">See Profile</button><button class="small-button secondary-button preferred-partner-button" type="button" data-preferred-partner="${request.id}">Preferred Partner</button>${inviteButton}<button class="small-button danger-button" type="button" data-unfriend="${request.id}">Unfriend</button></div>`
+                : `<div class="friend-actions friend-actions-stacked"><button class="primary-button roster-profile-button" type="button" data-friend-profile="${request.id}">See Profile</button>${inviteButton}<button class="small-button danger-button" type="button" data-unfriend="${request.id}">Unfriend</button></div>`
             }
           `
           : ""
@@ -7806,7 +7803,7 @@ function renderRosterProfile() {
   const isSelf = member.user_id === currentUser?.id;
   const code = normalizePlayerCode(member.player_code);
   const friendSent = rosterActionFeedback?.memberId === member.id && rosterActionFeedback.action === "friend";
-  const partnerSent = rosterActionFeedback?.memberId === member.id && rosterActionFeedback.action === "partner";
+  const partnerName = memberPreferredPartnerName(member);
   const statItems = [
     ["Games", stats.games],
     ["Record", `${stats.wins}-${stats.losses}`],
@@ -7829,7 +7826,7 @@ function renderRosterProfile() {
         <span class="profile-cup-badge" style="--cup-color:${escapeHtml(member.cup_color || "#d71920")}">${cupSvg()}</span>
         <div>
           <strong>${escapeHtml(member.nickname || member.display_name)}</strong>
-          <span>${member.preferred_partner ? `Preferred partner: ${escapeHtml(member.preferred_partner)}` : "Preferred partner: -"}</span>
+          <span>${partnerName ? `Preferred partner: ${escapeHtml(partnerName)}` : "Preferred partner: -"}</span>
           <span>${displayRole(member.role)}</span>
           ${code ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
         </div>
@@ -7842,7 +7839,6 @@ function renderRosterProfile() {
           ? ""
           : `<div class="roster-detail-actions">
               <button class="small-button secondary-button" type="button" data-add-friend="${escapeHtml(member.id)}">${friendSent ? "Sent" : "Add Friend"}</button>
-              <button class="small-button secondary-button" type="button" data-roster-preferred-partner="${escapeHtml(member.id)}">${partnerSent ? "Sent" : "Preferred Partner"}</button>
             </div>`
       }
       ${leagueBadgeSection(stats)}
@@ -8028,9 +8024,24 @@ function renderProfiles() {
   const profile = state.myProfile;
   const nickname = myProfileNickname();
   const hasProfile = !!nickname;
+  const membership = myActiveLeagueMemberships()[0] || null;
+  const partnerCandidates = preferredPartnerCandidates();
+  const preferredPartnerUserId = selectedPreferredPartnerUserId(profile);
+  const preferredPartner = preferredPartnerName(preferredPartnerUserId, membership?.league_id);
   els.profileForm.classList.toggle("hidden", hasProfile && !editingMyProfile);
   els.profileForm.elements.nickname.value = nickname;
-  els.profileForm.elements.preferredPartner.value = profile?.preferredPartner || "";
+  const preferredPartnerField = els.profileForm.querySelector(".preferred-partner-field");
+  preferredPartnerField?.classList.toggle("hidden", !membership);
+  const preferredPartnerSelect = els.profileForm.elements.preferredPartnerUserId;
+  if (preferredPartnerSelect) {
+    preferredPartnerSelect.innerHTML = [
+      '<option value="">No preferred partner</option>',
+      ...partnerCandidates.map(
+        (member) => `<option value="${escapeHtml(member.user_id)}">${escapeHtml(member.nickname || member.display_name)}</option>`,
+      ),
+    ].join("");
+    preferredPartnerSelect.value = preferredPartnerUserId;
+  }
   els.profileForm.elements.cupColor.value = profile?.cupColor || "#d71920";
   els.profileForm.elements.notes.value = profile?.notes || "";
 
@@ -8050,10 +8061,10 @@ function renderProfiles() {
   els.profileList.innerHTML = `
     <article class="profile-card">
       <div class="profile-identity">
-        ${profileCupBadge(profile)}
+          ${profileCupBadge(profile)}
         <div>
           <strong>${escapeHtml(nickname)}</strong>
-          <span>${profile.preferredPartner ? `Preferred partner: ${escapeHtml(profile.preferredPartner)}` : "Preferred partner: -"}</span>
+          ${membership ? `<span>${preferredPartner ? `Preferred partner: ${escapeHtml(preferredPartner)}` : "Preferred partner: -"}</span>` : ""}
           <span class="player-code">${escapeHtml(playerCode)}</span>
         </div>
       </div>
