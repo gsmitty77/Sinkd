@@ -92,12 +92,12 @@ textarea {
 
 .splash-wordmark {
   color: #ffffff;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.35rem, 12vw, 3.95rem);
-  font-style: italic;
-  font-weight: 800;
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif;
+  font-size: clamp(2.25rem, 11vw, 3.75rem);
+  font-style: normal;
+  font-weight: 900;
   letter-spacing: 0;
-  line-height: 0.9;
+  line-height: 0.86;
   text-shadow: 0 14px 24px rgba(0, 0, 0, 0.24);
 }
 
@@ -156,12 +156,12 @@ textarea {
 
 .intro-wordmark {
   color: #ffffff;
-  font-family: Georgia, "Times New Roman", serif !important;
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif !important;
   font-size: 2.15rem !important;
-  font-style: italic !important;
-  font-weight: 800;
+  font-style: normal !important;
+  font-weight: 900;
   letter-spacing: 0 !important;
-  line-height: 0.9;
+  line-height: 0.86;
 }
 
 .intro-lead {
@@ -300,12 +300,12 @@ textarea {
 
 .auth-wordmark {
   color: #ffffff;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif;
   font-size: 2.05rem;
-  font-style: italic;
-  font-weight: 800;
+  font-style: normal;
+  font-weight: 900;
   letter-spacing: 0;
-  line-height: 0.9;
+  line-height: 0.86;
 }
 
 .auth-copy {
@@ -482,11 +482,12 @@ h1 {
 
 .brand-name {
   color: #ffffff;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 2.28rem;
-  font-style: italic;
-  font-weight: 800;
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif;
+  font-size: 2.12rem;
+  font-style: normal;
+  font-weight: 900;
   letter-spacing: 0;
+  line-height: 0.86;
 }
 
 h2 {
@@ -1608,22 +1609,6 @@ legend {
 
 .toggle-row:has(input:not(:checked)) .toggle-state::before {
   content: attr(data-toggle-off);
-}
-
-.league-scoring-rules {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 2px 0 10px;
-}
-
-.league-scoring-rules span {
-  padding: 5px 8px;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  color: var(--accent-strong);
-  font-size: 0.7rem;
-  font-weight: 900;
 }
 
 .league-custom-rules {
@@ -4014,8 +3999,7 @@ td {
     font-size: 0.78rem;
   }
 
-  .score-helper,
-  .league-scoring-rules {
+  .score-helper {
     margin-bottom: 6px;
     font-size: 0.68rem;
   }

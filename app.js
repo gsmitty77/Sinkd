@@ -2881,19 +2881,6 @@ function leagueScoringNoteLabels() {
   ].filter(Boolean);
 }
 
-function leagueScoringRulesNote() {
-  const labels = leagueScoringNoteLabels();
-  return labels.length ? `<div class="league-scoring-rules">${labels.map((label) => `<span>${label}</span>`).join("")}</div>` : "";
-}
-
-function renderLeagueScoringRulesNote() {
-  const note = document.querySelector("#leagueScoringRulesNote");
-  if (!note) return;
-  const labels = leagueScoringNoteLabels();
-  note.classList.toggle("hidden", !labels.length);
-  note.innerHTML = labels.map((label) => `<span>${escapeHtml(label)}</span>`).join("");
-}
-
 function readRegularGameForm(form) {
   const selfSinkTeam = form.get("selfSinkTeam") === "" ? null : Number(form.get("selfSinkTeam"));
   const selfSinkPlayer = form.get("selfSinkPlayer") === "" ? null : Number(form.get("selfSinkPlayer"));
@@ -6643,7 +6630,6 @@ function renderLeagueGames() {
   const canLog = canLogActiveLeagueGames();
   els.leagueGameForm.classList.toggle("hidden", !canLog);
   renderGamePointButtons();
-  renderLeagueScoringRulesNote();
   buildLeagueGamePlayerCards();
   const games = leagueGames();
   els.leagueQuickRematchBtn.disabled = !games.length;
@@ -7038,8 +7024,7 @@ function leagueTournamentMatchForm(tournament, match) {
     .replace("Log Tournament Game", "Log League Tournament Game");
   const rules = leagueScoringRules();
   if (rules.fifaMultiplier) form = form.replaceAll(">FIFAs<", ">Laddering FIFAs<");
-  const note = leagueScoringRulesNote();
-  return note ? form.replace('<p class="score-helper">', `${note}<p class="score-helper">`) : form;
+  return form;
 }
 
 function renderLeagueGameDetail() {
