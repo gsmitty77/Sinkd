@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=5" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=5" />
     <link rel="manifest" href="site.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260727-4" />
+    <link rel="stylesheet" href="styles.css?v=20260923-3" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -330,7 +330,7 @@
                   <input name="sinkAutoWin" type="checkbox" />
                 </label>
                 <label class="toggle-row">
-                  <span><b>FIFA Ladder</b><small>Called FIFAs score 1, 2, then 3 max.</small></span>
+                  <span><b>Laddering FIFAs</b><small>Called FIFAs score 1, 2, then 3 max.</small></span>
                   <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
                   <input name="fifaMultiplier" type="checkbox" />
                 </label>
@@ -522,8 +522,12 @@
                 </div>
                 <form class="season-schedule-form hidden" id="leagueSeasonScheduleForm">
                   <label>Season Name <input name="seasonName" maxlength="40" placeholder="Fall Season" /></label>
-                  <label>Start Date <input name="seasonDate" type="datetime-local" /></label>
-                  <button class="small-button secondary-button compact-action-button" type="submit">Schedule Season</button>
+                  <div class="season-date-grid">
+                    <label>Planned Start <input name="seasonDate" type="datetime-local" required /></label>
+                    <label>Planned End <input name="seasonEndDate" type="datetime-local" /></label>
+                  </div>
+                  <p class="form-help">Dates are reminders only. The Owner still starts and ends the season manually.</p>
+                  <button class="small-button secondary-button compact-action-button" type="submit">Save Schedule</button>
                 </form>
                 <form class="season-schedule-form hidden" id="leagueScheduleForm">
                   <label>
@@ -622,7 +626,7 @@
                 <label>Right <input name="logoRight" type="color" /></label>
               </div>
               <button class="small-button secondary-button compact-action-button leave-league-compact" id="leaveLeagueBtn" type="button">Leave League</button>
-              <button class="primary-button compact-action-button manager-setting" type="submit">Save Settings</button>
+              <button class="primary-button compact-action-button manager-setting hidden" id="saveLeagueSettingsBtn" type="submit">Save Settings</button>
               <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
               <section class="league-plus-setting hidden" id="leaguePlusSetting">
                 <div>
@@ -709,11 +713,63 @@
                     <input name="sinkAutoWin" type="checkbox" />
                   </label>
                   <label class="toggle-row">
-                    <span><b>FIFA Ladder</b><small>Called FIFAs score 1, 2, then 3 max.</small></span>
+                    <span><b>Laddering FIFAs</b><small>Called FIFAs score 1, 2, then 3 max.</small></span>
                     <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
                     <input name="fifaMultiplier" type="checkbox" />
                   </label>
                 </div>
+                <fieldset class="league-scoring-editor">
+                  <legend>Scoring Plays</legend>
+                  <p class="form-help">Choose which plays your league uses and how many points each one scores.</p>
+                  <div class="league-scoring-option" data-league-scoring-rule="tableHits">
+                    <label class="scoring-enabled-toggle">
+                      <span><b>Table Hit</b><small>Scores when the die hits the table.</small></span>
+                      <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                      <input name="scoreEnabled_tableHits" type="checkbox" checked />
+                    </label>
+                    <label class="scoring-points-field">Points <input name="scorePoints_tableHits" type="number" min="0" max="20" step="1" value="1" /></label>
+                  </div>
+                  <div class="league-scoring-option" data-league-scoring-rule="sinks">
+                    <label class="scoring-enabled-toggle">
+                      <span><b>Sink</b><small>Bounce-ins still count as sinks.</small></span>
+                      <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                      <input name="scoreEnabled_sinks" type="checkbox" checked />
+                    </label>
+                    <label class="scoring-points-field">Points <input name="scorePoints_sinks" type="number" min="0" max="20" step="1" value="3" /></label>
+                  </div>
+                  <div class="league-scoring-option" data-league-scoring-rule="tinks">
+                    <label class="scoring-enabled-toggle">
+                      <span><b>Tink</b><small>Scores when the die hits a cup.</small></span>
+                      <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                      <input name="scoreEnabled_tinks" type="checkbox" checked />
+                    </label>
+                    <label class="scoring-points-field">Points <input name="scorePoints_tinks" type="number" min="0" max="20" step="1" value="2" /></label>
+                  </div>
+                  <div class="league-scoring-option" data-league-scoring-rule="fgOffense">
+                    <label class="scoring-enabled-toggle">
+                      <span><b>Field Goal Offense</b><small>Offensive field goal score.</small></span>
+                      <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                      <input name="scoreEnabled_fgOffense" type="checkbox" checked />
+                    </label>
+                    <label class="scoring-points-field">Points <input name="scorePoints_fgOffense" type="number" min="0" max="20" step="1" value="2" /></label>
+                  </div>
+                  <div class="league-scoring-option" data-league-scoring-rule="fgDefense">
+                    <label class="scoring-enabled-toggle">
+                      <span><b>Field Goal Defense</b><small>Defensive return through the cups.</small></span>
+                      <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                      <input name="scoreEnabled_fgDefense" type="checkbox" checked />
+                    </label>
+                    <label class="scoring-points-field">Points <input name="scorePoints_fgDefense" type="number" min="0" max="20" step="1" value="2" /></label>
+                  </div>
+                  <div class="league-scoring-option" data-league-scoring-rule="fifas">
+                    <label class="scoring-enabled-toggle">
+                      <span><b>FIFA</b><small>Called FIFA score.</small></span>
+                      <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                      <input name="scoreEnabled_fifas" type="checkbox" checked />
+                    </label>
+                    <label class="scoring-points-field">Points <input name="scorePoints_fifas" type="number" min="0" max="20" step="1" value="1" /></label>
+                  </div>
+                </fieldset>
                 <label class="league-custom-rules hidden">
                   Custom League Rules
                   <textarea name="rules" rows="14" placeholder="Type your league rules here. Example: table rules, scoring notes, house penalties, toss-back rules, and anything your group argues about."></textarea>
@@ -837,8 +893,9 @@
           </section>
           <section class="panel">
             <h3>Data</h3>
-            <div class="settings-actions">
+            <div class="settings-actions account-data-actions">
               <button class="small-button danger-button" id="resetBtn" type="button">Reset Games</button>
+              <button class="small-button secondary-button" id="settingsSignOutBtn" type="button" hidden>Sign Out</button>
               <button class="small-button danger-button" id="deleteAccountBtn" type="button">Delete Account</button>
             </div>
           </section>
@@ -1146,6 +1203,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260727-4"></script>
+    <script src="app.js?v=20260923-5"></script>
   </body>
 </html>
