@@ -125,6 +125,7 @@ let pendingLeagueInviteId = "";
 let showingLeagueQr = false;
 let leagueDetailTab = "games";
 let leagueSearchQuery = "";
+let editingLeagueScheduleEventId = "";
 let editingMyProfile = false;
 let authBusy = false;
 let gamePointDraft = 11;
@@ -245,6 +246,8 @@ const els = {
   endLeagueSeasonBtn: document.querySelector("#endLeagueSeasonBtn"),
   leagueSeasonScheduleForm: document.querySelector("#leagueSeasonScheduleForm"),
   leagueScheduleForm: document.querySelector("#leagueScheduleForm"),
+  saveLeagueScheduleBtn: document.querySelector("#saveLeagueScheduleBtn"),
+  cancelLeagueScheduleEditBtn: document.querySelector("#cancelLeagueScheduleEditBtn"),
   leagueScheduledList: document.querySelector("#leagueScheduledList"),
   openPastSeasonsBtn: document.querySelector("#openPastSeasonsBtn"),
   pastSeasonsModal: document.querySelector("#pastSeasonsModal"),
@@ -1599,6 +1602,32 @@ function bindEvents() {
   els.leagueScheduleForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await scheduleLeagueMatchOrTournament(new FormData(els.leagueScheduleForm));
+  });
+  els.cancelLeagueScheduleEditBtn?.addEventListener("click", resetLeagueScheduleEventForm);
+  els.leagueScheduledList?.addEventListener("click", (event) => {
+    const editEvent = event.target.closest("[data-edit-scheduled-event]");
+    const cancelEvent = event.target.closest("[data-cancel-scheduled-event]");
+    if (editEvent) editScheduledLeagueEvent(editEvent.dataset.editScheduledEvent);
+    if (cancelEvent) {
+      showAppConfirm({
+        title: "Cancel scheduled event?",
+        message: "Remove this event from the league schedule?",
+        confirmLabel: "Yes",
+        cancelLabel: "No",
+        onConfirm: () => cancelScheduledLeagueEvent(cancelEvent.dataset.cancelScheduledEvent),
+      });
+    }
+  });
+  els.pastSeasonsList?.addEventListener("click", (event) => {
+    const deleteSeason = event.target.closest("[data-delete-archived-season]");
+    if (!deleteSeason) return;
+    showAppConfirm({
+      title: "Delete archived season?",
+      message: "Delete this season archive? Its games and lifetime stats will remain saved.",
+      confirmLabel: "Yes",
+      cancelLabel: "No",
+      onConfirm: () => deleteArchivedLeagueSeason(deleteSeason.dataset.deleteArchivedSeason),
+    });
   });
 
   els.leagueDetailTabs.forEach((tab) => {
@@ -6803,8 +6832,84 @@ async function scheduleLeagueMatchOrTournament(form) {
   const details = cleanText(form.get("details"));
   if (!title || !date) return;
   const eventPayload = { title, date, details, scheduleType };
-  await createLeagueChatMessage(activeLeagueId, `${title} - ${formatDate(date)}${details ? `: ${details}` : ""}`, "event", eventPayload);
+  const message = `${title} - ${formatDate(date)}${details ? `: ${details}` : ""}`;
+  if (editingLeagueScheduleEventId) {
+    const existing = leagueChatMessages().find(
+      (item) => item.id === editingLeagueScheduleEventId && item.type === "event",
+    );
+    if (!existing) {
+      resetLeagueScheduleEventForm();
+      return;
+    }
+    const { error } = await authClient
+      .from("league_chat_messages")
+      .update({ message, payload: eventPayload })
+      .eq("id", existing.id)
+      .eq("league_id", activeLeagueId);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+  } else {
+    await createLeagueChatMessage(activeLeagueId, message, "event", eventPayload);
+  }
+  resetLeagueScheduleEventForm();
+  await loadLeagueData();
+}
+
+function editScheduledLeagueEvent(messageId) {
+  if (!canControlLeagueSeasons()) return;
+  const event = leagueChatMessages().find((message) => message.id === messageId && message.type === "event");
+  if (!event || !els.leagueScheduleForm) return;
+  const payload = event.payload || {};
+  editingLeagueScheduleEventId = event.id;
+  els.leagueScheduleForm.elements.scheduleType.value = payload.scheduleType === "tournament" ? "tournament" : "match";
+  els.leagueScheduleForm.elements.title.value = payload.title || "";
+  els.leagueScheduleForm.elements.date.value = dateTimeLocalValue(payload.date);
+  els.leagueScheduleForm.elements.details.value = payload.details || "";
+  if (els.saveLeagueScheduleBtn) els.saveLeagueScheduleBtn.textContent = "Save Changes";
+  els.cancelLeagueScheduleEditBtn?.classList.remove("hidden");
+  els.leagueScheduleForm.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetLeagueScheduleEventForm() {
+  editingLeagueScheduleEventId = "";
   els.leagueScheduleForm?.reset();
+  if (els.saveLeagueScheduleBtn) els.saveLeagueScheduleBtn.textContent = "Schedule";
+  els.cancelLeagueScheduleEditBtn?.classList.add("hidden");
+}
+
+async function cancelScheduledLeagueEvent(messageId) {
+  if (!canControlLeagueSeasons() || !messageId) return;
+  const event = leagueChatMessages().find((message) => message.id === messageId && message.type === "event");
+  if (!event) return;
+  const { error } = await authClient
+    .from("league_chat_messages")
+    .delete()
+    .eq("id", event.id)
+    .eq("league_id", activeLeagueId);
+  if (error) {
+    alert(error.message);
+    return;
+  }
+  if (editingLeagueScheduleEventId === event.id) resetLeagueScheduleEventForm();
+  await loadLeagueData();
+}
+
+async function deleteArchivedLeagueSeason(seasonId) {
+  if (!canControlLeagueSeasons() || !seasonId) return;
+  const season = archivedLeagueSeasons().find((item) => item.id === seasonId);
+  if (!season) return;
+  const { error } = await authClient
+    .from("league_seasons")
+    .delete()
+    .eq("id", season.id)
+    .eq("league_id", activeLeagueId)
+    .eq("status", "archived");
+  if (error) {
+    alert(error.message);
+    return;
+  }
   await loadLeagueData();
 }
 
@@ -6814,6 +6919,9 @@ function renderLeaguePast() {
   const active = activeLeagueSeason();
   const scheduledSeasons = scheduledLeagueSeasons();
   const scheduledEvents = leagueChatMessages().filter((message) => message.type === "event");
+  if (editingLeagueScheduleEventId && !scheduledEvents.some((message) => message.id === editingLeagueScheduleEventId)) {
+    resetLeagueScheduleEventForm();
+  }
   els.leagueSeasonLock?.classList.toggle("hidden", isMax);
   if (els.leagueSeasonLock) {
     els.leagueSeasonLock.innerHTML = `
@@ -6885,6 +6993,12 @@ function seasonScheduleCard(season) {
 function scheduleEventCard(message) {
   const payload = message.payload || {};
   const type = payload.scheduleType === "tournament" ? "Tournament" : "Match";
+  const ownerActions = canControlLeagueSeasons()
+    ? `<div class="season-schedule-actions">
+        <button class="small-button secondary-button" type="button" data-edit-scheduled-event="${message.id}">Edit</button>
+        <button class="small-button danger-button" type="button" data-cancel-scheduled-event="${message.id}">Cancel</button>
+      </div>`
+    : "";
   return `
     <article class="season-schedule-card">
       <div>
@@ -6892,7 +7006,10 @@ function scheduleEventCard(message) {
         <span>${escapeHtml(type)}${payload.date ? ` - ${formatDate(payload.date)}` : ""}</span>
         ${payload.details ? `<small>${escapeHtml(payload.details)}</small>` : ""}
       </div>
-      <b>${escapeHtml(type)}</b>
+      <div class="season-card-side">
+        <b>${escapeHtml(type)}</b>
+        ${ownerActions}
+      </div>
     </article>
   `;
 }
@@ -6903,6 +7020,9 @@ function archivedSeasonCard(season) {
     (a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.points - a.points,
   );
   const leader = players[0] || null;
+  const deleteAction = canControlLeagueSeasons()
+    ? `<button class="small-button danger-button archived-season-delete" type="button" data-delete-archived-season="${season.id}">Delete</button>`
+    : "";
   return `
     <article class="season-schedule-card archived-season-card">
       <div>
@@ -6910,7 +7030,10 @@ function archivedSeasonCard(season) {
         <span>${season.starts_at ? formatDate(season.starts_at) : "Started"} - ${season.ended_at ? formatDate(season.ended_at) : "Ended"}</span>
         <small>${games.length} game${games.length === 1 ? "" : "s"}${leader ? ` - Leader: ${escapeHtml(leader.name)} (${leader.wins}-${leader.losses})` : ""}</small>
       </div>
-      <b>Archived</b>
+      <div class="season-card-side">
+        <b>Archived</b>
+        ${deleteAction}
+      </div>
     </article>
   `;
 }

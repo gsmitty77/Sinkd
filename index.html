@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=6" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=6" />
     <link rel="manifest" href="site.webmanifest?v=6" />
-    <link rel="stylesheet" href="styles.css?v=20260923-5" />
+    <link rel="stylesheet" href="styles.css?v=20260924-1" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -539,7 +539,10 @@
                   <label>Title <input name="title" maxlength="40" placeholder="Friday Matchups" required /></label>
                   <label>Date <input name="date" type="datetime-local" required /></label>
                   <label>Details <textarea name="details" rows="3" maxlength="180" placeholder="Teams, table, time, or tournament notes."></textarea></label>
-                  <button class="small-button export-button compact-action-button" type="submit">Schedule</button>
+                  <div class="season-form-actions">
+                    <button class="small-button export-button compact-action-button" id="saveLeagueScheduleBtn" type="submit">Schedule</button>
+                    <button class="small-button secondary-button compact-action-button hidden" id="cancelLeagueScheduleEditBtn" type="button">Cancel Edit</button>
+                  </div>
                 </form>
                 <div class="scheduled-list" id="leagueScheduledList"></div>
               </div>
@@ -1202,6 +1205,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260923-6"></script>
+    <script src="app.js?v=20260924-1"></script>
   </body>
 </html>
