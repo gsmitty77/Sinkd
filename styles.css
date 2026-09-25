@@ -23,6 +23,7 @@
 html {
   background: var(--bg);
   overflow-x: hidden;
+  overscroll-behavior-y: contain;
   touch-action: manipulation;
 }
 
@@ -34,6 +35,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   overflow-x: hidden;
+  overscroll-behavior-y: contain;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -42,6 +44,74 @@ body {
 
 body.modal-open {
   overflow: hidden;
+}
+
+.pull-refresh-indicator {
+  --pull-distance: 0px;
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, calc(-58px + var(--pull-distance)));
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.pull-refresh-indicator.visible,
+.pull-refresh-indicator.refreshing,
+.pull-refresh-indicator.complete {
+  opacity: 1;
+}
+
+.pull-refresh-indicator.ready {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pull-refresh-indicator.refreshing,
+.pull-refresh-indicator.complete {
+  --pull-distance: 58px;
+}
+
+.pull-refresh-indicator strong {
+  font-size: 0.76rem;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.pull-refresh-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid color-mix(in srgb, var(--ink) 28%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  transform: rotate(var(--pull-rotation, 0deg));
+}
+
+.pull-refresh-indicator.refreshing .pull-refresh-spinner {
+  animation: pullRefreshSpin 720ms linear infinite;
+}
+
+.pull-refresh-indicator.complete .pull-refresh-spinner {
+  border-color: var(--accent);
+  animation: none;
+}
+
+@keyframes pullRefreshSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .hidden,

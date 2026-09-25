@@ -155,6 +155,12 @@ let chatPinPressTimer = null;
 let pendingConfirmAction = null;
 let pendingCancelAction = null;
 let lastPlayerProfileLookupSyncKey = "";
+let pullRefreshStartX = 0;
+let pullRefreshStartY = 0;
+let pullRefreshDistance = 0;
+let pullRefreshTracking = false;
+let pullRefreshReady = false;
+let pullRefreshRunning = false;
 
 window.setTimeout(() => {
   document.querySelector("#splashScreen")?.classList.add("is-hidden");
@@ -368,6 +374,8 @@ const els = {
   exportBtn: document.querySelector("#exportBtn"),
   resetBtn: document.querySelector("#resetBtn"),
   deleteAccountBtn: document.querySelector("#deleteAccountBtn"),
+  pullRefreshIndicator: document.querySelector("#pullRefreshIndicator"),
+  pullRefreshText: document.querySelector("#pullRefreshText"),
 };
 
 applyTheme();
@@ -402,6 +410,7 @@ async function bootApp() {
     buildBigGamePlayerCards();
     buildLeagueGamePlayerCards();
     bindEvents();
+    setupPullToRefresh();
     await setupAuth();
     registerServiceWorker();
     render();
@@ -412,6 +421,105 @@ async function bootApp() {
     els.appShell?.classList.add("auth-locked");
     showAuthMessage(`Startup failed: ${error?.message || "Unknown error"}`);
   }
+}
+
+function setupPullToRefresh() {
+  if (!els.pullRefreshIndicator || !els.pullRefreshText) return;
+
+  document.addEventListener(
+    "touchstart",
+    (event) => {
+      if (pullRefreshRunning || !currentUser || window.scrollY > 1 || document.body.classList.contains("modal-open")) return;
+      if (event.touches.length !== 1 || event.target.closest("input, textarea, select, [contenteditable], .table-scroll")) return;
+      const touch = event.touches[0];
+      pullRefreshStartX = touch.clientX;
+      pullRefreshStartY = touch.clientY;
+      pullRefreshDistance = 0;
+      pullRefreshReady = false;
+      pullRefreshTracking = true;
+    },
+    { passive: true },
+  );
+
+  document.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!pullRefreshTracking || pullRefreshRunning || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      const verticalDelta = touch.clientY - pullRefreshStartY;
+      const horizontalDelta = Math.abs(touch.clientX - pullRefreshStartX);
+      if (verticalDelta <= 0 || horizontalDelta > verticalDelta) {
+        resetPullRefreshIndicator();
+        return;
+      }
+
+      event.preventDefault();
+      pullRefreshDistance = Math.min(88, verticalDelta * 0.52);
+      const wasReady = pullRefreshReady;
+      pullRefreshReady = pullRefreshDistance >= 62;
+      els.pullRefreshIndicator.style.setProperty("--pull-distance", `${pullRefreshDistance}px`);
+      els.pullRefreshIndicator.style.setProperty("--pull-rotation", `${Math.min(260, (pullRefreshDistance / 62) * 260)}deg`);
+      els.pullRefreshIndicator.classList.add("visible");
+      els.pullRefreshIndicator.classList.toggle("ready", pullRefreshReady);
+      els.pullRefreshIndicator.setAttribute("aria-hidden", "false");
+      els.pullRefreshText.textContent = pullRefreshReady ? "Release to refresh" : "Pull to refresh";
+      if (!wasReady && pullRefreshReady) navigator.vibrate?.(10);
+    },
+    { passive: false },
+  );
+
+  document.addEventListener("touchend", finishPullRefreshGesture, { passive: true });
+  document.addEventListener("touchcancel", resetPullRefreshIndicator, { passive: true });
+}
+
+function finishPullRefreshGesture() {
+  if (!pullRefreshTracking) return;
+  const shouldRefresh = pullRefreshReady;
+  pullRefreshTracking = false;
+  if (shouldRefresh) {
+    refreshSinkdData();
+  } else {
+    resetPullRefreshIndicator();
+  }
+}
+
+function resetPullRefreshIndicator() {
+  pullRefreshTracking = false;
+  pullRefreshDistance = 0;
+  pullRefreshReady = false;
+  if (!els.pullRefreshIndicator || pullRefreshRunning) return;
+  els.pullRefreshIndicator.classList.remove("visible", "ready", "refreshing", "complete");
+  els.pullRefreshIndicator.style.setProperty("--pull-distance", "0px");
+  els.pullRefreshIndicator.style.setProperty("--pull-rotation", "0deg");
+  els.pullRefreshIndicator.setAttribute("aria-hidden", "true");
+  els.pullRefreshText.textContent = "Pull to refresh";
+}
+
+async function refreshSinkdData() {
+  if (pullRefreshRunning || !currentUser) return;
+  pullRefreshRunning = true;
+  els.pullRefreshIndicator.classList.remove("ready");
+  els.pullRefreshIndicator.classList.add("refreshing");
+  els.pullRefreshIndicator.setAttribute("aria-hidden", "false");
+  els.pullRefreshText.textContent = "Refreshing...";
+
+  try {
+    await Promise.all([loadLeagueData(), loadFriendData(), loadNotificationData()]);
+    render();
+    els.pullRefreshIndicator.classList.remove("refreshing");
+    els.pullRefreshIndicator.classList.add("complete");
+    els.pullRefreshText.textContent = "Updated";
+  } catch (error) {
+    console.warn("Pull to refresh failed", error);
+    els.pullRefreshIndicator.classList.remove("refreshing");
+    els.pullRefreshIndicator.classList.add("complete");
+    els.pullRefreshText.textContent = "Could not refresh";
+  }
+
+  window.setTimeout(() => {
+    pullRefreshRunning = false;
+    resetPullRefreshIndicator();
+  }, 700);
 }
 
 function loadState() {
@@ -2169,6 +2277,13 @@ function bindEvents() {
       },
     });
   });
+
+  document.addEventListener("change", (event) => {
+    const select = event.target.closest("[data-league-player-select], [data-league-tournament-player]");
+    if (!select) return;
+    delete select.dataset.preferredPartnerAutofill;
+    autofillLeaguePreferredPartner(select);
+  });
 }
 
 function switchView(viewName) {
@@ -3501,6 +3616,53 @@ function preferredPartnerName(userId, leagueId = myActiveLeagueMemberships()[0]?
 function memberPreferredPartnerName(member) {
   if (!member?.league_id || !member.preferred_partner_user_id) return "";
   return preferredPartnerName(member.preferred_partner_user_id, member.league_id);
+}
+
+function autofillLeaguePreferredPartner(sourceSelect) {
+  const team = sourceSelect.closest(".regular-team-group, .league-tournament-team-row");
+  if (!team) return;
+  const selector = sourceSelect.matches("[data-league-player-select]")
+    ? "[data-league-player-select]"
+    : "[data-league-tournament-player]";
+  const teammateSelect = [...team.querySelectorAll(selector)].find((select) => select !== sourceSelect);
+  if (!teammateSelect) return;
+  if (!cleanText(sourceSelect.value)) {
+    if (teammateSelect.dataset.preferredPartnerAutofill) teammateSelect.value = "";
+    delete teammateSelect.dataset.preferredPartnerAutofill;
+    return;
+  }
+
+  const sourceMember = leagueMemberForPlayerName(sourceSelect.value);
+  const partner = sourceMember?.preferred_partner_user_id
+    ? leagueMembers(sourceMember.league_id).find((member) => member.user_id === sourceMember.preferred_partner_user_id)
+    : null;
+  const canReplace = !teammateSelect.value || Boolean(teammateSelect.dataset.preferredPartnerAutofill);
+  if (!canReplace) return;
+
+  if (!partner) {
+    if (teammateSelect.dataset.preferredPartnerAutofill) teammateSelect.value = "";
+    delete teammateSelect.dataset.preferredPartnerAutofill;
+    return;
+  }
+
+  const partnerNames = [partner.nickname, partner.display_name].map(profileKey).filter(Boolean);
+  const partnerOption = [...teammateSelect.options].find((option) => partnerNames.includes(profileKey(option.value)));
+  if (!partnerOption) return;
+  const alreadySelectedElsewhere = [...(sourceSelect.form?.querySelectorAll(selector) || [])].some(
+    (select) => select !== sourceSelect && select !== teammateSelect && profileKey(select.value) === profileKey(partnerOption.value),
+  );
+  if (alreadySelectedElsewhere) return;
+
+  teammateSelect.value = partnerOption.value;
+  teammateSelect.dataset.preferredPartnerAutofill = sourceMember.id;
+}
+
+function leagueMemberForPlayerName(playerName, leagueId = activeLeagueId) {
+  const key = profileKey(playerName);
+  if (!key) return null;
+  return leagueMembers(leagueId).find((member) =>
+    [member.nickname, member.display_name].some((name) => profileKey(name) === key),
+  ) || null;
 }
 
 function blocksAnotherLeagueJoin(leagueId = "") {
