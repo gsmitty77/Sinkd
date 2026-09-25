@@ -7586,11 +7586,20 @@ function leagueChatMessageBody(message) {
 }
 
 function pinnedChatItem(message) {
-  const label = message.type === "poll" ? message.payload?.question || message.message : message.type === "event" ? message.payload?.title || message.message : message.message;
+  const payload = message.payload || {};
+  const label = message.type === "poll" ? payload.question || message.message : message.type === "event" ? payload.title || message.message : message.message;
+  const typeLabel = payload.scheduleType === "tournament" ? "Tournament" : payload.scheduleType === "match" ? "Match" : "Event";
+  const content = message.type === "event"
+    ? `<div class="pinned-chat-content">
+        <p>${escapeHtml(typeLabel)}: ${escapeHtml(label)}</p>
+        ${payload.date ? `<span>Scheduled for ${escapeHtml(formatScheduledDateTime(payload.date))}</span>` : ""}
+        ${payload.details ? `<small>${escapeHtml(payload.details)}</small>` : ""}
+      </div>`
+    : `<div class="pinned-chat-content"><p>${escapeHtml(label)}</p></div>`;
   const unpin = canUseLeagueMaxTools()
     ? `<button class="chat-action-button pinned-unpin-button" type="button" data-pin-chat="${message.id}">Unpin</button>`
     : "";
-  return `<div class="pinned-chat-item"><p>${escapeHtml(label)}</p>${unpin}</div>`;
+  return `<div class="pinned-chat-item">${content}${unpin}</div>`;
 }
 
 function leagueJoinRequestChatRow(member) {

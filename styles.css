@@ -3458,6 +3458,20 @@ legend {
   align-items: center;
 }
 
+.pinned-chat-content {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pinned-chat-content span,
+.pinned-chat-content small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
 .pinned-chat-item .pinned-unpin-button {
   display: inline-flex;
 }
