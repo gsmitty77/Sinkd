@@ -4685,8 +4685,16 @@ async function postLeagueEvent() {
   const date = cleanText(els.leagueEventForm?.querySelector('[name="date"]')?.value);
   const details = cleanText(els.leagueEventForm?.querySelector('[name="details"]')?.value);
   if (!title || !date) return;
-  const eventPayload = { title, date, details };
-  await createLeagueChatMessage(activeLeagueId, `${title} - ${formatDate(date)}${details ? `: ${details}` : ""}`, "event", eventPayload);
+  const scheduledDate = new Date(date);
+  if (Number.isNaN(scheduledDate.getTime())) return;
+  const scheduledAt = scheduledDate.toISOString();
+  const eventPayload = { title, date: scheduledAt, details };
+  await createLeagueChatMessage(
+    activeLeagueId,
+    `Event scheduled: ${title} - ${formatScheduledDateTime(scheduledAt)}${details ? `: ${details}` : ""}`,
+    "event",
+    eventPayload,
+  );
   els.leagueEventForm?.querySelectorAll("input, textarea").forEach((field) => {
     field.value = "";
   });
@@ -6959,10 +6967,13 @@ async function scheduleLeagueSeason(form) {
     alert(error.message);
     return;
   }
-  await createLeagueChatMessage(activeLeagueId, `${name} ${existing ? "schedule updated" : "scheduled"} for ${formatDate(startsAt)}.`, "system", {
+  const scheduleWindow = `to start ${formatScheduledDateTime(startsAt)}${scheduledEndsAt ? ` and end ${formatScheduledDateTime(scheduledEndsAt)}` : ""}`;
+  await createLeagueChatMessage(activeLeagueId, `${name} ${existing ? "schedule updated" : "scheduled"} ${scheduleWindow}.`, "system", {
     seasonId: existing?.id || null,
     seasonName: name,
     seasonStatus: "scheduled",
+    startsAt,
+    scheduledEndsAt,
   });
   await loadLeagueData();
 }
@@ -7003,8 +7014,12 @@ async function scheduleLeagueMatchOrTournament(form) {
   const date = cleanText(form.get("date"));
   const details = cleanText(form.get("details"));
   if (!title || !date) return;
-  const eventPayload = { title, date, details, scheduleType };
-  const message = `${title} - ${formatDate(date)}${details ? `: ${details}` : ""}`;
+  const scheduledDate = new Date(date);
+  if (Number.isNaN(scheduledDate.getTime())) return;
+  const scheduledAt = scheduledDate.toISOString();
+  const typeLabel = scheduleType === "tournament" ? "Tournament" : "Match";
+  const eventPayload = { title, date: scheduledAt, details, scheduleType };
+  const message = `${typeLabel} scheduled: ${title} - ${formatScheduledDateTime(scheduledAt)}${details ? `: ${details}` : ""}`;
   if (editingLeagueScheduleEventId) {
     const existing = leagueChatMessages().find(
       (item) => item.id === editingLeagueScheduleEventId && item.type === "event",
@@ -7558,10 +7573,11 @@ function leagueChatMessageBody(message) {
     `;
   }
   if (message.type === "event") {
+    const typeLabel = payload.scheduleType === "tournament" ? "Tournament" : payload.scheduleType === "match" ? "Match" : "Event";
     return `
-      <p>${escapeHtml(payload.title || message.message)}</p>
+      <p>${escapeHtml(typeLabel)}: ${escapeHtml(payload.title || message.message)}</p>
       <div class="event-chat-meta">
-        <span>${escapeHtml(payload.date ? formatDate(payload.date) : "")}</span>
+        <span>${escapeHtml(payload.date ? `Scheduled for ${formatScheduledDateTime(payload.date)}` : "")}</span>
         ${payload.details ? `<small>${escapeHtml(payload.details)}</small>` : ""}
       </div>
     `;
@@ -9274,6 +9290,21 @@ function formatDate(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatScheduledDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date and time unavailable";
+  const dateText = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+  const timeText = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+  return `${dateText} at ${timeText}`;
 }
 
 function escapeHtml(value) {
