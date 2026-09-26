@@ -32,7 +32,7 @@
     <link rel="icon" type="image/png" href="assets/app-icon.png?v=6" />
     <link rel="apple-touch-icon" href="assets/app-icon.png?v=6" />
     <link rel="manifest" href="site.webmanifest?v=6" />
-    <link rel="stylesheet" href="styles.css?v=20260925-2" />
+    <link rel="stylesheet" href="styles.css?v=20260925-9" />
   </head>
   <body>
     <section class="splash-screen" id="splashScreen" aria-hidden="true">
@@ -64,14 +64,14 @@
         <h2 class="intro-wordmark">SINKD</h2>
         <p class="intro-lead">A quick guide to what each tab does before you start tracking.</p>
         <div class="intro-grid">
-          <article><strong>Quick Log</strong><span>Log fast local games and keep lifetime stats moving.</span></article>
-          <article><strong>Tournaments</strong><span>Create brackets, play one match at a time, and track tournament runs.</span></article>
-          <article><strong>Leagues</strong><span>Join friends, sync shared games, rankings, rosters, and badges.</span></article>
-          <article><strong>Player Stats</strong><span>View local-only stats from games saved on this device.</span></article>
-          <article><strong>My Profile</strong><span>Set your nickname, cup color, partner, and see lifetime totals.</span></article>
-          <article><strong>Settings</strong><span>Export PDFs, manage players, read rules, and send feedback.</span></article>
+          <article><strong>Quick Log</strong><span>Log local games and lifetime stats.</span></article>
+          <article><strong>Tournaments</strong><span>Build brackets and track tournament runs.</span></article>
+          <article><strong>Leagues</strong><span>Sync games, rankings, rosters, and badges.</span></article>
+          <article><strong>Player Stats</strong><span>See stats saved on this device.</span></article>
+          <article><strong>My Profile</strong><span>Set your nickname, cup, partner, and career.</span></article>
+          <article><strong>Settings</strong><span>Manage data, rules, themes, and feedback.</span></article>
         </div>
-        <button class="primary-button" id="closeIntroBtn" type="button">Track Stats Now</button>
+        <button class="primary-button" id="closeIntroBtn" type="button">Press Here to Track Stats Now</button>
       </div>
     </section>
 
@@ -143,7 +143,6 @@
         </div>
         <div class="account-block">
           <span id="userEmail"></span>
-          <button class="small-button secondary-button" id="signOutBtn" type="button" hidden>Sign Out</button>
         </div>
       </header>
 
@@ -589,7 +588,7 @@
               <div class="table-scroll league-stats-scroll">
                 <table>
                   <thead>
-                    <tr>
+                    <tr id="leagueStatsHeadRow">
                       <th>Player</th>
                       <th>League W-L</th>
                       <th>Win %</th>
@@ -616,7 +615,53 @@
               <p class="meta-line" id="leagueRulesSummary">Use the default house rules or save custom rules for this league.</p>
               <div class="league-rule-actions">
                 <button class="small-button export-button" id="openLeagueRulesBtn" type="button">View Rules</button>
-                <button class="small-button secondary-button manager-setting" id="editLeagueRulesBtn" type="button">Edit Rules</button>
+                <button class="small-button secondary-button manager-setting" id="editLeagueRulesBtn" type="button">Edit Rules &amp; Scoring</button>
+              </div>
+            </section>
+            <section class="panel commissioner-tools hidden" id="commissionerTools">
+              <div class="section-head compact-section-head">
+                <div>
+                  <h3>Commissioner Tools</h3>
+                  <p class="meta-line">Schedule league activity and build custom league badges.</p>
+                </div>
+                <span id="commissionerToolsStatus">Leagues MAX</span>
+              </div>
+              <div class="commissioner-tool-form commissioner-event-form" id="leagueEventForm">
+                <h4>Schedule Event</h4>
+                <label>Game, Tournament, or Event <input name="title" maxlength="40" placeholder="Friday Night Games" required /></label>
+                <label>Date <input name="date" type="datetime-local" required /></label>
+                <label>Details <textarea name="details" rows="3" maxlength="180" placeholder="Table, time, teams, or anything the league needs to know."></textarea></label>
+                <button class="small-button secondary-button compact-action-button" id="postLeagueEventBtn" type="button">Post Event</button>
+              </div>
+              <div class="commissioner-tool-form commissioner-badge-form" id="customBadgesForm">
+                <h4>Custom Badges</h4>
+                <div class="custom-badge-list" id="customBadgeList"></div>
+                <label>Badge Name <input name="badgeName" maxlength="24" placeholder="Clutch Thrower" /></label>
+                <label>
+                  Stat
+                  <select name="badgeStat">
+                    <option value="sinks">Sinks</option>
+                    <option value="tinks">Tinks</option>
+                    <option value="tableHits">Table Hits</option>
+                    <option value="fgOffense">FG Offense</option>
+                    <option value="fgDefense">FG Defense</option>
+                    <option value="fifas">FIFAs</option>
+                    <option value="selfSinks">Self Sinks</option>
+                    <option value="wins">Wins</option>
+                    <option value="points">Total Points</option>
+                  </select>
+                </label>
+                <label>
+                  Tiers
+                  <select name="badgeTiers" id="customBadgeTiersSelect">
+                    <option value="1">1 tier: Diamond only</option>
+                    <option value="2">2 tiers: Gold, Diamond</option>
+                    <option value="3">3 tiers: Silver, Gold, Diamond</option>
+                    <option value="4" selected>4 tiers: Copper, Silver, Gold, Diamond</option>
+                  </select>
+                </label>
+                <div class="custom-badge-thresholds" id="customBadgeThresholds"></div>
+                <button class="small-button export-button compact-action-button" id="saveCustomBadgesBtn" type="button">Add Badge</button>
               </div>
             </section>
             <form class="panel" id="leagueSettingsForm">
@@ -637,7 +682,7 @@
               </div>
               <button class="small-button secondary-button compact-action-button leave-league-compact" id="leaveLeagueBtn" type="button">Leave League</button>
               <button class="primary-button compact-action-button manager-setting hidden" id="saveLeagueSettingsBtn" type="submit">Save Settings</button>
-              <button class="small-button danger-button compact-danger-button" id="deleteLeagueBtn" type="button">Delete League</button>
+              <button class="small-button danger-button compact-danger-button league-delete-button" id="deleteLeagueBtn" type="button">Delete League</button>
               <section class="league-plus-setting hidden" id="leaguePlusSetting">
                 <div>
                   <strong id="leaguePlusTitle">League Plan</strong>
@@ -649,11 +694,17 @@
                 </div>
               </section>
               <div class="owner-transfer manager-setting hidden" id="ownerTransferControls">
-                <label>
-                  Transfer Ownership
-                  <select id="transferOwnershipSelect"></select>
-                </label>
                 <button class="small-button secondary-button compact-action-button" id="transferOwnershipBtn" type="button">Transfer Ownership</button>
+                <div class="owner-transfer-picker hidden" id="transferOwnershipPicker">
+                  <label>
+                    Select New Owner
+                    <select id="transferOwnershipSelect"></select>
+                  </label>
+                  <div class="owner-transfer-actions">
+                    <button class="small-button export-button compact-action-button" id="confirmTransferOwnershipBtn" type="button">Continue</button>
+                    <button class="small-button secondary-button compact-action-button" id="cancelTransferOwnershipBtn" type="button">Cancel</button>
+                  </div>
+                </div>
               </div>
               <div class="leave-confirm hidden" id="leaveLeagueConfirm">
                 <span>Are you sure?</span>
@@ -662,47 +713,6 @@
                   <button class="text-button" id="cancelLeaveLeagueBtn" type="button">Cancel</button>
                 </div>
               </div>
-              <section class="commissioner-tools hidden" id="commissionerTools">
-                <div class="section-head compact-section-head">
-                  <h3>Commissioner Tools</h3>
-                  <span id="commissionerToolsStatus">Leagues MAX</span>
-                </div>
-                <div class="commissioner-tool-form" id="customBadgesForm">
-                  <div class="custom-badge-list" id="customBadgeList"></div>
-                  <label>Badge Name <input name="badgeName" maxlength="24" placeholder="Clutch Thrower" /></label>
-                  <label>
-                    Stat
-                    <select name="badgeStat">
-                      <option value="sinks">Sinks</option>
-                      <option value="tinks">Tinks</option>
-                      <option value="tableHits">Table Hits</option>
-                      <option value="fgOffense">FG Offense</option>
-                      <option value="fgDefense">FG Defense</option>
-                      <option value="fifas">FIFAs</option>
-                      <option value="selfSinks">Self Sinks</option>
-                      <option value="wins">Wins</option>
-                      <option value="points">Total Points</option>
-                    </select>
-                  </label>
-                  <label>
-                    Tiers
-                    <select name="badgeTiers" id="customBadgeTiersSelect">
-                      <option value="1">1 tier: Diamond only</option>
-                      <option value="2">2 tiers: Gold, Diamond</option>
-                      <option value="3">3 tiers: Silver, Gold, Diamond</option>
-                      <option value="4" selected>4 tiers: Copper, Silver, Gold, Diamond</option>
-                    </select>
-                  </label>
-                  <div class="custom-badge-thresholds" id="customBadgeThresholds"></div>
-                  <button class="small-button export-button compact-action-button" id="saveCustomBadgesBtn" type="button">Add Badge</button>
-                </div>
-                <div class="commissioner-tool-form" id="leagueEventForm">
-                  <label>Scheduled Game/Event <input name="title" maxlength="40" placeholder="Friday Night Games" required /></label>
-                  <label>Date <input name="date" type="datetime-local" required /></label>
-                  <label>Details <textarea name="details" rows="3" maxlength="180" placeholder="Table, time, teams, or anything the league needs to know."></textarea></label>
-                  <button class="small-button secondary-button compact-action-button" id="postLeagueEventBtn" type="button">Post Event</button>
-                </div>
-              </section>
             </form>
           </section>
 
@@ -778,6 +788,34 @@
                       <input name="scoreEnabled_fifas" type="checkbox" checked />
                     </label>
                     <label class="scoring-points-field">Points <input name="scorePoints_fifas" type="number" min="0" max="20" step="1" value="1" /></label>
+                  </div>
+                </fieldset>
+                <fieldset class="league-custom-stat-editor hidden" id="leagueCustomStatEditor">
+                  <legend>Custom Scoring Stats</legend>
+                  <p class="form-help">Leagues MAX Commissioners can add up to two scoring stats. Their totals follow players everywhere league stats appear.</p>
+                  <div class="league-custom-stat-option">
+                    <label class="custom-stat-name-field">
+                      Stat 1 Name
+                      <input name="customStatName_custom1" type="text" maxlength="24" placeholder="Example: Backboard" />
+                    </label>
+                    <label class="scoring-enabled-toggle custom-stat-toggle">
+                      <span><b>Use Stat 1</b><small>Show its counter while logging games.</small></span>
+                      <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                      <input name="customStatEnabled_custom1" type="checkbox" />
+                    </label>
+                    <label class="scoring-points-field">Points <input name="customStatPoints_custom1" type="number" min="0" max="20" step="1" value="1" /></label>
+                  </div>
+                  <div class="league-custom-stat-option">
+                    <label class="custom-stat-name-field">
+                      Stat 2 Name
+                      <input name="customStatName_custom2" type="text" maxlength="24" placeholder="Example: Trick Catch" />
+                    </label>
+                    <label class="scoring-enabled-toggle custom-stat-toggle">
+                      <span><b>Use Stat 2</b><small>Show its counter while logging games.</small></span>
+                      <b class="toggle-state" data-toggle-off="Off" data-toggle-on="On"></b>
+                      <input name="customStatEnabled_custom2" type="checkbox" />
+                    </label>
+                    <label class="scoring-points-field">Points <input name="customStatPoints_custom2" type="number" min="0" max="20" step="1" value="1" /></label>
                   </div>
                 </fieldset>
                 <label class="league-custom-rules hidden">
@@ -862,7 +900,10 @@
               <input name="nickname" placeholder="Nickname" required />
             </label>
             <label class="preferred-partner-field hidden">
-              Preferred Partner
+              <span class="preferred-partner-label-row">
+                <span>Preferred Partner</span>
+                <b class="preferred-partner-alert hidden" id="preferredPartnerAlert">Add a preferred partner</b>
+              </span>
               <select name="preferredPartnerUserId">
                 <option value="">No preferred partner</option>
               </select>
@@ -1215,6 +1256,6 @@
     </section>
 
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260925-2"></script>
+    <script src="app.js?v=20260925-8"></script>
   </body>
 </html>

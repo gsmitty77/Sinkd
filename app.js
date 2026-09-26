@@ -26,15 +26,8 @@ const leaguePlayerStatFields = [
   ["fgDefense", "Field Goal (Defense)"],
   ["fifas", "FIFAs"],
 ];
-const leagueGameDetailStatFields = [
-  ["tableHits", "Table Hits"],
-  ["sinks", "Sinks"],
-  ["tinks", "Tinks"],
-  ["fgOffense", "FG Offense"],
-  ["fgDefense", "FG Defense"],
-  ["fifas", "FIFAs"],
-  ["selfSinks", "Self Sinks"],
-];
+const leagueCustomStatKeys = ["custom1", "custom2"];
+const leagueAggregateStatFields = [...allStatFields, ...leagueCustomStatKeys.map((key) => [key, key])];
 const genericLeagueExampleNames = ["Alex", "Jordan", "Casey", "Taylor", "Morgan", "Riley", "Drew", "Quinn"];
 const genericLeagueTeamNames = ["Gold Team", "Navy Team", "White Team", "Black Team"];
 const scoringPointValues = {
@@ -127,6 +120,7 @@ let leagueDetailTab = "games";
 let leagueSearchQuery = "";
 let editingLeagueScheduleEventId = "";
 let showLeagueSeasonStats = false;
+let showingTransferOwnership = false;
 let editingMyProfile = false;
 let authBusy = false;
 let gamePointDraft = 11;
@@ -226,6 +220,7 @@ const els = {
   leagueInviteList: document.querySelector("#leagueInviteList"),
   friendRequestList: document.querySelector("#friendRequestList"),
   friendsList: document.querySelector("#friendsList"),
+  preferredPartnerAlert: document.querySelector("#preferredPartnerAlert"),
   showLeagueCreateBtn: document.querySelector("#showLeagueCreateBtn"),
   leagueForm: document.querySelector("#leagueForm"),
   leagueTabInviteForm: document.querySelector("#leagueTabInviteForm"),
@@ -290,12 +285,14 @@ const els = {
   closeLeaguePollBtn: document.querySelector("#closeLeaguePollBtn"),
   addPollAnswerBtn: document.querySelector("#addPollAnswerBtn"),
   leagueStatsTable: document.querySelector("#leagueStatsTable"),
+  leagueStatsHeadRow: document.querySelector("#leagueStatsHeadRow"),
   leagueExportBtn: document.querySelector("#leagueExportBtn"),
   leagueSeasonStatsToggle: document.querySelector("#leagueSeasonStatsToggle"),
   leagueWeeklyReportBtn: document.querySelector("#leagueWeeklyReportBtn"),
   openLeagueRulesBtn: document.querySelector("#openLeagueRulesBtn"),
   editLeagueRulesBtn: document.querySelector("#editLeagueRulesBtn"),
   leagueRulesEditForm: document.querySelector("#leagueRulesEditForm"),
+  leagueCustomStatEditor: document.querySelector("#leagueCustomStatEditor"),
   disableAppRulesBtn: document.querySelector("#disableAppRulesBtn"),
   backToLeagueSettingsBtn: document.querySelector("#backToLeagueSettingsBtn"),
   closeLeagueRulesBtn: document.querySelector("#closeLeagueRulesBtn"),
@@ -315,8 +312,11 @@ const els = {
   leaguePlusBtn: document.querySelector("#leaguePlusBtn"),
   leagueMaxBtn: document.querySelector("#leagueMaxBtn"),
   ownerTransferControls: document.querySelector("#ownerTransferControls"),
+  transferOwnershipPicker: document.querySelector("#transferOwnershipPicker"),
   transferOwnershipSelect: document.querySelector("#transferOwnershipSelect"),
   transferOwnershipBtn: document.querySelector("#transferOwnershipBtn"),
+  confirmTransferOwnershipBtn: document.querySelector("#confirmTransferOwnershipBtn"),
+  cancelTransferOwnershipBtn: document.querySelector("#cancelTransferOwnershipBtn"),
   commissionerTools: document.querySelector("#commissionerTools"),
   commissionerToolsStatus: document.querySelector("#commissionerToolsStatus"),
   customBadgesForm: document.querySelector("#customBadgesForm"),
@@ -767,7 +767,7 @@ function setAuthView(user) {
   const isSignedIn = Boolean(user);
   els.authShell.classList.toggle("hidden", isSignedIn);
   els.appShell.classList.toggle("auth-locked", !isSignedIn);
-  els.signOutBtn.hidden = !isSignedIn;
+  if (els.signOutBtn) els.signOutBtn.hidden = !isSignedIn;
   if (els.settingsSignOutBtn) els.settingsSignOutBtn.hidden = !isSignedIn;
   updateAccountLabel();
   if (isSignedIn) showAuthMessage("");
@@ -975,7 +975,7 @@ function showPasswordRecoveryForm(user) {
   currentUser = user || currentUser;
   els.authShell.classList.remove("hidden");
   els.appShell.classList.add("auth-locked");
-  els.signOutBtn.hidden = true;
+  if (els.signOutBtn) els.signOutBtn.hidden = true;
   els.signInBtn.textContent = "Save New Password";
   els.signUpBtn.classList.add("hidden");
   els.googleBtn.classList.add("hidden");
@@ -1401,7 +1401,7 @@ function bindEvents() {
   els.signUpBtn.addEventListener("click", signUpWithEmail);
   els.forgotPasswordBtn.addEventListener("click", sendPasswordReset);
   els.googleBtn.addEventListener("click", signInWithGoogle);
-  els.signOutBtn.addEventListener("click", signOut);
+  els.signOutBtn?.addEventListener("click", signOut);
   els.settingsSignOutBtn?.addEventListener("click", signOut);
   els.authForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1985,6 +1985,16 @@ function bindEvents() {
 
   els.transferOwnershipBtn?.addEventListener("click", () => {
     if (!isActiveLeagueOwner()) return;
+    showingTransferOwnership = true;
+    renderLeagueSettings();
+    window.requestAnimationFrame(() => els.transferOwnershipSelect?.focus());
+  });
+  els.cancelTransferOwnershipBtn?.addEventListener("click", () => {
+    showingTransferOwnership = false;
+    renderLeagueSettings();
+  });
+  els.confirmTransferOwnershipBtn?.addEventListener("click", () => {
+    if (!isActiveLeagueOwner()) return;
     const memberId = els.transferOwnershipSelect?.value;
     if (!memberId) return;
     showAppConfirm({
@@ -2301,6 +2311,14 @@ function switchView(viewName) {
   }
   els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === viewName));
   els.views.forEach((view) => view.classList.toggle("active", view.id === `${viewName}View`));
+  if (viewName === "profiles" && shouldShowPreferredPartnerReminder()) {
+    renderProfiles();
+    acknowledgePreferredPartnerReminder();
+    renderNotifications();
+    window.setTimeout(() => {
+      document.querySelectorAll(".preferred-partner-alert").forEach((alert) => alert.classList.add("hidden"));
+    }, 2400);
+  }
   scrollAppToTop();
 }
 
@@ -2321,6 +2339,7 @@ function openBigGamePage() {
 function openLeagueDetails(leagueId) {
   activeLeagueId = leagueId;
   showLeagueSeasonStats = false;
+  showingTransferOwnership = false;
   selectedLeagueRosterMemberId = "";
   selectedLeagueAchievementsMemberId = "";
   activeLeagueGameDetailId = "";
@@ -2524,7 +2543,7 @@ function leagueGamePlayerStatCard(number, label) {
       </label>
       ${sinkAutoWin ? autoWinSinkButton(`${playerPrefix}_sinks`, teamIndex) : ""}
       <div class="counter-list">
-        ${leaguePlayerStatFields
+        ${leagueGameStatFields()
           .filter(([key]) => rules.scoring[key]?.enabled && (!sinkAutoWin || key !== "sinks"))
           .map(([key, statLabel]) => counterControl(`${playerPrefix}_${key}`, leagueRuleStatLabel(key, statLabel), teamIndex, rules.scoring[key]))
           .join("")}
@@ -2717,7 +2736,7 @@ function renamePlayerInGame(game, oldName, newName) {
 
 function mergeSingleGameStats(existing = {}, incoming = {}) {
   const merged = { ...(existing || {}) };
-  allStatFields.forEach(([key]) => {
+  leagueAggregateStatFields.forEach(([key]) => {
     merged[key] = (Number(merged[key]) || 0) + (Number(incoming[key]) || 0);
   });
   return merged;
@@ -2855,13 +2874,14 @@ function counterControl(name, label, teamIndex = "", scoringRule = null) {
   const statKey = name.split("_").pop();
   const scorePoints = scoringRule?.points ?? scoringPointValues[statKey] ?? 0;
   const teamAttribute = teamIndex === "" ? "" : ` data-team-index="${teamIndex}"`;
+  const safeLabel = escapeHtml(label);
   return `
     <div class="counter-row"${teamAttribute} data-score-stat="${statKey}" data-score-points="${scorePoints}">
-      <span class="counter-label">${label}</span>
+      <span class="counter-label">${safeLabel}</span>
       <div class="counter-control">
-        <button type="button" data-counter-action="minus" aria-label="Decrease ${label}">-</button>
+        <button type="button" data-counter-action="minus" aria-label="Decrease ${safeLabel}">-</button>
         <input name="${name}" type="number" min="0" value="0" readonly />
-        <button type="button" data-counter-action="plus" aria-label="Increase ${label}">+</button>
+        <button type="button" data-counter-action="plus" aria-label="Increase ${safeLabel}">+</button>
       </div>
     </div>
   `;
@@ -2881,12 +2901,13 @@ function staticPlayerStatCard(playerName, prefix) {
 
 function staticBigPlayerStatCard(playerName, prefix, playerNumber, teamIndex, sinkAutoWin = false, leagueMode = false) {
   const rules = leagueMode ? leagueScoringRules() : { scoring: normalizeLeagueScoringConfig() };
+  const counterFields = leagueMode ? leagueGameStatFields() : bigGameCounterFields;
   return `
     <section class="player-stat-card compact-player-card">
       <strong>${escapeHtml(playerName)}</strong>
       ${sinkAutoWin ? autoWinSinkButton(`${prefix}_sinks`, teamIndex) : ""}
       <div class="counter-list">
-        ${bigGameCounterFields
+        ${counterFields
           .filter(([key]) => (!leagueMode || rules.scoring[key]?.enabled) && (!sinkAutoWin || key !== "sinks"))
           .map(([key, statLabel]) => counterControl(`${prefix}_${key}`, leagueMode ? leagueRuleStatLabel(key, statLabel) : statLabel, teamIndex, rules.scoring[key]))
           .join("")}
@@ -2972,7 +2993,7 @@ function multiplyingScore(count, basePoints = 1) {
 
 function normalizeLeagueScoringConfig(rawConfig = {}) {
   const config = rawConfig && typeof rawConfig === "object" && !Array.isArray(rawConfig) ? rawConfig : {};
-  return Object.fromEntries(
+  const baseConfig = Object.fromEntries(
     leagueScoringSettingFields.map(([key]) => {
       const saved = config[key] && typeof config[key] === "object" ? config[key] : {};
       const requestedPoints = Number(saved.points);
@@ -2982,6 +3003,37 @@ function normalizeLeagueScoringConfig(rawConfig = {}) {
       return [key, { enabled: saved.enabled !== false, points }];
     }),
   );
+  leagueCustomStatKeys.forEach((key) => {
+    const saved = config[key] && typeof config[key] === "object" ? config[key] : {};
+    const label = cleanText(saved.label).slice(0, 24);
+    const requestedPoints = Number(saved.points);
+    baseConfig[key] = {
+      label,
+      enabled: Boolean(label) && saved.enabled !== false,
+      points: Number.isFinite(requestedPoints) ? Math.max(0, Math.min(20, Math.round(requestedPoints))) : 1,
+    };
+  });
+  return baseConfig;
+}
+
+function leagueCustomStatFields(league = activeLeague()) {
+  const scoring = normalizeLeagueScoringConfig(league?.scoring_rules);
+  return leagueCustomStatKeys
+    .filter((key) => scoring[key].label)
+    .map((key) => [key, scoring[key].label]);
+}
+
+function leagueGameStatFields(league = activeLeague()) {
+  const leagueId = league?.id || activeLeagueId;
+  return [...leaguePlayerStatFields, ...(leagueHasMax(leagueId) ? leagueCustomStatFields(league) : [])];
+}
+
+function leagueGameDetailStatFields(league = activeLeague()) {
+  return [
+    ...leaguePlayerStatFields.map(([key, label]) => [key, label.replace("Field Goal", "FG")]),
+    ...leagueCustomStatFields(league),
+    ["selfSinks", "Self Sinks"],
+  ];
 }
 
 function leagueScoringRules() {
@@ -3009,7 +3061,7 @@ function leagueRuleStatLabel(key, label) {
 
 function leagueScoringNoteLabels() {
   const rules = leagueScoringRules();
-  const scoringLabels = leagueScoringSettingFields
+  const scoringLabels = [...leagueScoringSettingFields, ...leagueCustomStatFields()]
     .filter(([key]) => rules.scoring[key]?.enabled)
     .map(([key, label]) => `${label}: ${rules.scoring[key].points}`);
   return [
@@ -3131,16 +3183,18 @@ function readGameForm(form, source, tournamentId = "") {
   };
 }
 
-function readTournamentGameForm(form, match, tournamentId) {
+function readTournamentGameForm(form, match, tournamentId, leagueMode = false) {
   const selfSinkTeam = form.get("selfSinkTeam") === "" ? null : Number(form.get("selfSinkTeam"));
   const selfSinkPlayer = form.get("selfSinkPlayer") === "" ? null : Number(form.get("selfSinkPlayer"));
   const teamAPlayers = match.teamA.players.map((name, index) => ({
     name,
-    stats: readBigPlayerStats(form, `tournamentPlayer${index + 1}`),
+    stats: leagueMode ? readLeaguePlayerStats(form, `tournamentPlayer${index + 1}`) : readBigPlayerStats(form, `tournamentPlayer${index + 1}`),
   }));
   const teamBPlayers = match.teamB.players.map((name, index) => ({
     name,
-    stats: readBigPlayerStats(form, `tournamentPlayer${teamAPlayers.length + index + 1}`),
+    stats: leagueMode
+      ? readLeaguePlayerStats(form, `tournamentPlayer${teamAPlayers.length + index + 1}`)
+      : readBigPlayerStats(form, `tournamentPlayer${teamAPlayers.length + index + 1}`),
   }));
   const players = [...teamAPlayers, ...teamBPlayers];
 
@@ -3181,7 +3235,7 @@ function readBigPlayerStats(form, prefix) {
 }
 
 function readLeaguePlayerStats(form, prefix) {
-  const stats = Object.fromEntries(allStatFields.map(([key]) => [key, Number(form.get(`${prefix}_${key}`)) || 0]));
+  const stats = Object.fromEntries(leagueAggregateStatFields.map(([key]) => [key, Number(form.get(`${prefix}_${key}`)) || 0]));
   stats.points = pointsFromLeagueStats(stats);
   return stats;
 }
@@ -3208,7 +3262,7 @@ function playerStatsFromNames(form, teamPrefix, players) {
 
 function sumStats(statSets) {
   return Object.fromEntries(
-    allStatFields.map(([key]) => [key, statSets.reduce((total, stats) => total + (stats[key] || 0), 0)]),
+    leagueAggregateStatFields.map(([key]) => [key, statSets.reduce((total, stats) => total + (stats[key] || 0), 0)]),
   );
 }
 
@@ -3590,6 +3644,32 @@ function preferredPartnerCandidates() {
   return leagueMembers(membership.league_id)
     .filter((member) => member.user_id && member.user_id !== currentUser?.id)
     .sort((a, b) => cleanText(a.nickname || a.display_name).localeCompare(cleanText(b.nickname || b.display_name)));
+}
+
+function preferredPartnerReminderKey(membership = myActiveLeagueMemberships()[0]) {
+  const accountKey = profileStorageKey() || "guest";
+  const membershipKey = membership?.id || membership?.league_id || "none";
+  return `sinkdPreferredPartnerReminderSeen:${accountKey}:${membershipKey}`;
+}
+
+function shouldShowPreferredPartnerReminder() {
+  const membership = myActiveLeagueMemberships()[0];
+  if (!membership || selectedPreferredPartnerUserId() || !preferredPartnerCandidates().length) return false;
+  try {
+    return localStorage.getItem(preferredPartnerReminderKey(membership)) !== "true";
+  } catch {
+    return false;
+  }
+}
+
+function acknowledgePreferredPartnerReminder() {
+  const membership = myActiveLeagueMemberships()[0];
+  if (!membership) return;
+  try {
+    localStorage.setItem(preferredPartnerReminderKey(membership), "true");
+  } catch (error) {
+    console.warn("Preferred partner reminder could not be saved.", error);
+  }
 }
 
 function selectedPreferredPartnerUserId(profile = state.myProfile) {
@@ -4108,7 +4188,7 @@ function leagueScoringSummaryLines(league = activeLeague()) {
     fifaMultiplier: Boolean(league?.fifa_multiplier),
     scoring: normalizeLeagueScoringConfig(league?.scoring_rules),
   };
-  return leagueScoringSettingFields.map(([key, label]) => {
+  return [...leagueScoringSettingFields, ...leagueCustomStatFields(league)].map(([key, label]) => {
     const rule = rules.scoring[key];
     if (!rule.enabled) return `${label}: Off`;
     if (key === "sinks" && rules.sinkAutoWin) return `${label}: Automatic win (${rule.points} points recorded)`;
@@ -4189,6 +4269,16 @@ function syncLeagueScoringEditor(form, league = activeLeague()) {
     if (enabledField) enabledField.checked = scoring[key].enabled;
     if (pointsField) pointsField.value = scoring[key].points;
   });
+  const canEditCustomStats = isActiveLeagueOwner() && leagueHasMax(activeLeagueId);
+  els.leagueCustomStatEditor?.classList.toggle("hidden", !canEditCustomStats);
+  leagueCustomStatKeys.forEach((key) => {
+    const nameField = form.elements[`customStatName_${key}`];
+    const enabledField = form.elements[`customStatEnabled_${key}`];
+    const pointsField = form.elements[`customStatPoints_${key}`];
+    if (nameField) nameField.value = scoring[key].label;
+    if (enabledField) enabledField.checked = scoring[key].enabled;
+    if (pointsField) pointsField.value = scoring[key].points;
+  });
 }
 
 function leagueScoringConfigFromForm(form) {
@@ -4201,6 +4291,19 @@ function leagueScoringConfigFromForm(form) {
       },
     ]),
   );
+  const existing = normalizeLeagueScoringConfig(activeLeague()?.scoring_rules);
+  leagueCustomStatKeys.forEach((key) => {
+    if (isActiveLeagueOwner() && leagueHasMax(activeLeagueId)) {
+      const label = cleanText(form.get(`customStatName_${key}`)).slice(0, 24);
+      config[key] = {
+        label,
+        enabled: Boolean(label) && form.get(`customStatEnabled_${key}`) === "on",
+        points: Math.max(0, Math.min(20, Math.round(Number(form.get(`customStatPoints_${key}`)) || 0))),
+      };
+    } else {
+      config[key] = existing[key];
+    }
+  });
   if (form.get("sinkAutoWin") === "on") config.sinks.enabled = true;
   if (form.get("fifaMultiplier") === "on") config.fifas.enabled = true;
   return config;
@@ -5560,6 +5663,7 @@ async function transferCloudLeagueOwnership(memberId) {
 
   await authClient.from("league_members").update({ role: "co_leader" }).eq("id", oldOwner.id);
   await authClient.from("league_members").update({ role: "owner" }).eq("id", newOwner.id);
+  showingTransferOwnership = false;
   await loadLeagueData();
 }
 
@@ -5697,7 +5801,7 @@ async function logLeagueTournamentMatch(tournamentId, matchId, form) {
   const beforeStats = computeLeagueStats();
   const beforeAchievementRanks = leagueAchievementRanks(beforeStats);
   const beforeLeaders = leagueRankingLeaders(computeLeagueStats(leagueDisplayStatGames()));
-  const game = readTournamentGameForm(form, match, tournament.id);
+  const game = readTournamentGameForm(form, match, tournament.id, true);
   game.source = "league_tournament";
   game.leagueId = activeLeagueId;
   game.leagueTournamentId = tournament.id;
@@ -5768,7 +5872,7 @@ function populateLeagueGameForm(game) {
     const stats = game.playerStats?.[playerName] || emptyLeagueStats();
     const select = form.elements[`leaguePlayer${playerNumber}_name`];
     if (select) select.value = playerName;
-    leaguePlayerStatFields.forEach(([key]) => {
+    leagueGameStatFields().forEach(([key]) => {
       const input = form.elements[`leaguePlayer${playerNumber}_${key}`];
       if (input) input.value = stats[key] || 0;
     });
@@ -5907,7 +6011,7 @@ function normalizeLeagueTournament(row) {
 }
 
 function emptyLeagueStats() {
-  return Object.fromEntries(allStatFields.map(([key]) => [key, 0]));
+  return Object.fromEntries(leagueAggregateStatFields.map(([key]) => [key, 0]));
 }
 
 function profileNameFromEmail(email) {
@@ -6475,8 +6579,9 @@ function renderNotifications() {
 function updateProfileTabBadge(count = 0) {
   const profileBadge = document.querySelector("#profileTabBadge");
   if (!profileBadge) return;
-  profileBadge.textContent = count > 99 ? "99+" : String(count);
-  profileBadge.classList.toggle("hidden", count === 0);
+  const total = Math.max(0, Number(count) || 0) + (shouldShowPreferredPartnerReminder() ? 1 : 0);
+  profileBadge.textContent = total > 99 ? "99+" : String(total);
+  profileBadge.classList.toggle("hidden", total === 0);
 }
 
 function actionNotificationRow(item) {
@@ -7396,7 +7501,7 @@ function leagueGamePlayerDetail(player, stats) {
     <article class="match-detail-player">
       <strong>${escapeHtml(player)}</strong>
       <div class="match-stat-grid">
-        ${leagueGameDetailStatFields
+        ${leagueGameDetailStatFields()
           .map(([key, label]) => `<span><b>${stats[key] || 0}</b><small>${label}</small></span>`)
           .join("")}
       </div>
@@ -7430,6 +7535,27 @@ function renderLeagueStats() {
 }
 
 function renderLeagueStatsTable() {
+  const customFields = leagueCustomStatFields();
+  if (els.leagueStatsHeadRow) {
+    els.leagueStatsHeadRow.innerHTML = [
+      "Player",
+      "League W-L",
+      "Win %",
+      "Current Streak",
+      "Table Hits",
+      "Sinks",
+      "Tinks",
+      "FG Off",
+      "FG Def",
+      "FIFAs",
+      ...customFields.map(([, label]) => label),
+      "Self Sinks",
+      "Tourney W/L",
+    ]
+      .map((label) => `<th>${escapeHtml(label)}</th>`)
+      .join("");
+  }
+  const columnCount = 12 + customFields.length;
   const activeSeason = activeLeagueSeason();
   if (!activeSeason) showLeagueSeasonStats = false;
   if (els.leagueSeasonStatsToggle) {
@@ -7442,7 +7568,7 @@ function renderLeagueStatsTable() {
     els.leagueExportBtn.classList.add("hidden");
     els.leagueSeasonStatsToggle?.closest("label")?.classList.add("hidden");
     els.leagueWeeklyReportBtn.classList.add("hidden");
-    els.leagueStatsTable.innerHTML = '<tr><td colspan="12">Join this league to view or export league stats.</td></tr>';
+    els.leagueStatsTable.innerHTML = `<tr><td colspan="${columnCount}">Join this league to view or export league stats.</td></tr>`;
     return;
   }
 
@@ -7454,7 +7580,7 @@ function renderLeagueStatsTable() {
   const players = Object.values(stats.players).sort((a, b) => b.wins - a.wins || winPercent(b) - winPercent(a) || b.sinks - a.sinks);
   els.leagueStatsTable.innerHTML = players.length
     ? players.map(leaguePlayerStatsRow).join("")
-    : `<tr><td colspan="12">${showLeagueSeasonStats ? "No games logged in the active season yet." : "No league games logged yet."}</td></tr>`;
+    : `<tr><td colspan="${columnCount}">${showLeagueSeasonStats ? "No games logged in the active season yet." : "No league games logged yet."}</td></tr>`;
 }
 
 function renderLeagueRankings() {
@@ -7663,13 +7789,16 @@ function renderLeagueSettings() {
     els.commissionerToolsStatus.textContent = hasMax ? "Leagues MAX" : "Upgrade required";
   }
   const transferCandidates = leagueMembers().filter((item) => item.role !== "owner" && item.user_id && item.user_id !== currentUser?.id);
+  if (!isOwner || !transferCandidates.length) showingTransferOwnership = false;
   els.ownerTransferControls?.classList.toggle("hidden", !isOwner || !transferCandidates.length);
+  els.transferOwnershipBtn?.classList.toggle("hidden", showingTransferOwnership);
+  els.transferOwnershipPicker?.classList.toggle("hidden", !showingTransferOwnership);
   if (els.transferOwnershipSelect) {
     els.transferOwnershipSelect.innerHTML = transferCandidates.length
       ? transferCandidates.map((item) => `<option value="${item.id}">${escapeHtml(item.nickname || item.display_name)} - ${displayRole(item.role)}</option>`).join("")
       : '<option value="">No eligible members</option>';
   }
-  if (els.transferOwnershipBtn) els.transferOwnershipBtn.disabled = !transferCandidates.length;
+  if (els.confirmTransferOwnershipBtn) els.confirmTransferOwnershipBtn.disabled = !transferCandidates.length;
   els.editLeagueRulesBtn.classList.toggle("hidden", !canManage);
   if (!league || !canManage) return;
   els.leagueSettingsForm.elements.name.value = league.name;
@@ -7836,7 +7965,6 @@ function leagueMemberRow(member, canManage, isOwner) {
 function leagueRosterCard(member) {
   const stats = member.stats || emptyBucket();
   const isSelected = member.id === selectedLeagueRosterMemberId;
-  const code = normalizePlayerCode(member.player_code);
   const isSelf = member.user_id === currentUser?.id;
   const canPromote = isActiveLeagueOwner() && !isSelf && ["member", "ref"].includes(member.role);
   const canDemote = isActiveLeagueOwner() && !isSelf && ["ref", "co_leader"].includes(member.role);
@@ -7860,7 +7988,6 @@ function leagueRosterCard(member) {
             <div>
               <strong>${escapeHtml(member.nickname || member.display_name)}</strong>
               <span>${member.nickname ? escapeHtml(member.display_name) : "No nickname"} - ${displayRole(member.role)}</span>
-              ${code && !isSelf ? `<span class="player-code roster-player-code">${escapeHtml(code)}</span>` : ""}
             </div>
           </div>
           <div class="league-roster-stats">
@@ -7928,6 +8055,7 @@ function leagueCompareCard(player) {
     ["FG Off.", stats.fgOffense],
     ["FG Def.", stats.fgDefense],
     ["FIFAs", stats.fifas],
+    ...leagueCustomStatFields().map(([key, label]) => [label, stats[key] || 0]),
     ["Self Sinks", stats.selfSinks],
   ];
   return `
@@ -7967,6 +8095,7 @@ function leagueRosterDetailCard(selected) {
     ["FG Offense", stats.fgOffense],
     ["FG Defense", stats.fgDefense],
     ["FIFAs", stats.fifas],
+    ...leagueCustomStatFields().map(([key, label]) => [label, stats[key] || 0]),
     ["Self Sinks", stats.selfSinks],
     ["Tourney Record", `${stats.tournamentWins || 0}-${stats.tournamentLosses || 0}`],
   ];
@@ -8028,6 +8157,7 @@ function renderRosterProfile() {
     ["FG Offense", stats.fgOffense],
     ["FG Defense", stats.fgDefense],
     ["FIFAs", stats.fifas],
+    ...leagueCustomStatFields().map(([key, label]) => [label, stats[key] || 0]),
     ["Self Sinks", stats.selfSinks],
     ["Tourney Record", `${stats.tournamentWins || 0}-${stats.tournamentLosses || 0}`],
   ];
@@ -8165,6 +8295,7 @@ function streakLabel(stats = {}) {
 }
 
 function leaguePlayerStatsRow(player) {
+  const customCells = leagueCustomStatFields().map(([key]) => `<td>${player[key] || 0}</td>`).join("");
   return `
     <tr>
       <td>${escapeHtml(player.name)}</td>
@@ -8177,6 +8308,7 @@ function leaguePlayerStatsRow(player) {
       <td>${player.fgOffense}</td>
       <td>${player.fgDefense}</td>
       <td>${player.fifas}</td>
+      ${customCells}
       <td>${player.selfSinks}</td>
       <td>${player.tournamentWins || 0}-${player.tournamentLosses || 0}</td>
     </tr>
@@ -8241,10 +8373,12 @@ function renderProfiles() {
   const partnerCandidates = preferredPartnerCandidates();
   const preferredPartnerUserId = selectedPreferredPartnerUserId(profile);
   const preferredPartner = preferredPartnerName(preferredPartnerUserId, membership?.league_id);
+  const showPartnerReminder = shouldShowPreferredPartnerReminder();
   els.profileForm.classList.toggle("hidden", hasProfile && !editingMyProfile);
   els.profileForm.elements.nickname.value = nickname;
   const preferredPartnerField = els.profileForm.querySelector(".preferred-partner-field");
   preferredPartnerField?.classList.toggle("hidden", !membership);
+  els.preferredPartnerAlert?.classList.toggle("hidden", !showPartnerReminder);
   const preferredPartnerSelect = els.profileForm.elements.preferredPartnerUserId;
   if (preferredPartnerSelect) {
     preferredPartnerSelect.innerHTML = [
@@ -8277,7 +8411,14 @@ function renderProfiles() {
           ${profileCupBadge(profile)}
         <div>
           <strong>${escapeHtml(nickname)}</strong>
-          ${membership ? `<span>${preferredPartner ? `Preferred partner: ${escapeHtml(preferredPartner)}` : "Preferred partner: -"}</span>` : ""}
+          ${
+            membership
+              ? `<span class="profile-partner-line">
+                  <span>${preferredPartner ? `Preferred partner: ${escapeHtml(preferredPartner)}` : "Preferred partner: -"}</span>
+                  ${showPartnerReminder ? '<b class="preferred-partner-alert">Add a preferred partner</b>' : ""}
+                </span>`
+              : ""
+          }
           <span class="player-code">${escapeHtml(playerCode)}</span>
         </div>
       </div>
@@ -8673,7 +8814,7 @@ function emptyBucket() {
     tournamentWins: 0,
     tournamentLosses: 0,
     games: 0,
-    ...Object.fromEntries(allStatFields.map(([key]) => [key, 0])),
+    ...Object.fromEntries(leagueAggregateStatFields.map(([key]) => [key, 0])),
   };
 }
 
@@ -8681,7 +8822,7 @@ function addGameToBucket(bucket, gameStats, won) {
   bucket.games += 1;
   bucket.wins += won ? 1 : 0;
   bucket.losses += won ? 0 : 1;
-  allStatFields.forEach(([key]) => {
+  leagueAggregateStatFields.forEach(([key]) => {
     bucket[key] += gameStats[key] || 0;
   });
 }
@@ -9142,6 +9283,7 @@ function statReportHtml({ leagueOnly = false } = {}) {
   const players = Object.values(stats).sort((a, b) => b.overall.wins - a.overall.wins || b.overall.sinks - a.overall.sinks);
   const league = activeLeague();
   const leagueStats = league ? Object.values(computeLeagueStats().players).sort((a, b) => b.wins - a.wins || b.sinks - a.sinks) : [];
+  const reportCustomFields = league ? leagueCustomStatFields(league) : [];
   const reportBuckets = leagueOnly ? leagueStats : players.map((player) => player.overall);
   const overallRecord = statReportRecord(reportBuckets);
   const gameRecord = statReportGameRecord();
@@ -9194,23 +9336,24 @@ function statReportHtml({ leagueOnly = false } = {}) {
             Field Goals: ${(overallRecord.fgOffense || 0) + (overallRecord.fgDefense || 0)} &nbsp;&nbsp;
             FIFAs: ${overallRecord.fifas} &nbsp;&nbsp;
             Self Sinks: ${overallRecord.selfSinks}
+            ${leagueOnly ? reportCustomFields.map(([key, label]) => `&nbsp;&nbsp; ${escapeHtml(label)}: ${overallRecord[key] || 0}`).join("") : ""}
           </div>
           <div class="section-title">${leagueOnly ? "League games Sorted by Win Pct" : "All games Sorted by Win Pct"}</div>
           ${
             leagueOnly
-              ? statReportTable(leagueStats.map((player, index) => statReportPlayerRow(index + 1, player.name, player)), statReportTotalsRow(overallRecord))
+              ? statReportTable(leagueStats.map((player, index) => statReportPlayerRow(index + 1, player.name, player, reportCustomFields)), statReportTotalsRow(overallRecord, reportCustomFields), reportCustomFields)
               : statReportTable(players.map((player, index) => statReportPlayerRow(index + 1, player.name, player.overall)), statReportTotalsRow(overallRecord))
           }
           <div class="section-title">${leagueOnly ? "League games Sorted by Total Sinks" : "All games Sorted by Total Sinks"}</div>
           ${
             leagueOnly
-              ? statReportTable([...leagueStats].sort((a, b) => b.sinks - a.sinks || b.wins - a.wins).map((player, index) => statReportPlayerRow(index + 1, player.name, player)), statReportTotalsRow(overallRecord))
+              ? statReportTable([...leagueStats].sort((a, b) => b.sinks - a.sinks || b.wins - a.wins).map((player, index) => statReportPlayerRow(index + 1, player.name, player, reportCustomFields)), statReportTotalsRow(overallRecord, reportCustomFields), reportCustomFields)
               : statReportTable([...players].sort((a, b) => b.overall.sinks - a.overall.sinks || b.overall.wins - a.overall.wins).map((player, index) => statReportPlayerRow(index + 1, player.name, player.overall)), statReportTotalsRow(overallRecord))
           }
           ${
             league && !leagueOnly
               ? `<div class="section-title">${escapeHtml(league.name)} League Statistics</div>
-                 ${statReportTable(leagueStats.map((player, index) => statReportPlayerRow(index + 1, player.name, player)), statReportTotalsRow(statReportRecord(leagueStats)))}`
+                 ${statReportTable(leagueStats.map((player, index) => statReportPlayerRow(index + 1, player.name, player, reportCustomFields)), statReportTotalsRow(statReportRecord(leagueStats), reportCustomFields), reportCustomFields)}`
               : ""
           }
         </main>
@@ -9219,21 +9362,24 @@ function statReportHtml({ leagueOnly = false } = {}) {
   `;
 }
 
-function statReportTable(rows, totalsRow = "") {
+function statReportTable(rows, totalsRow = "", customFields = []) {
+  const customHeaders = customFields.map(([, label]) => `<th title="${escapeHtml(label)}">${escapeHtml(label)}</th>`).join("");
+  const columnCount = 14 + customFields.length;
   return `
     <table>
       <thead>
         <tr>
-          <th>#</th><th>Player</th><th>GP</th><th>W-L</th><th>WIN%</th><th>PTS</th><th>TH</th><th>SNK</th><th>TNK</th><th>OFF</th><th>DEF</th><th>FIFA</th><th>SS</th><th>PPG</th>
+          <th>#</th><th>Player</th><th>GP</th><th>W-L</th><th>WIN%</th><th>PTS</th><th>TH</th><th>SNK</th><th>TNK</th><th>OFF</th><th>DEF</th><th>FIFA</th>${customHeaders}<th>SS</th><th>PPG</th>
         </tr>
       </thead>
-      <tbody>${rows.length ? `${rows.join("")}${totalsRow}` : '<tr><td colspan="14">No stats yet.</td></tr>'}</tbody>
+      <tbody>${rows.length ? `${rows.join("")}${totalsRow}` : `<tr><td colspan="${columnCount}">No stats yet.</td></tr>`}</tbody>
     </table>
   `;
 }
 
-function statReportPlayerRow(index, name, stats) {
+function statReportPlayerRow(index, name, stats, customFields = []) {
   const pointsPerGame = stats.games ? ((stats.points || 0) / stats.games).toFixed(1) : "0.0";
+  const customCells = customFields.map(([key]) => `<td>${stats[key] || 0}</td>`).join("");
   return `
     <tr>
       <td>${index}</td>
@@ -9248,19 +9394,21 @@ function statReportPlayerRow(index, name, stats) {
       <td>${stats.fgOffense || 0}</td>
       <td>${stats.fgDefense || 0}</td>
       <td>${stats.fifas || 0}</td>
+      ${customCells}
       <td>${stats.selfSinks || 0}</td>
       <td>${pointsPerGame}</td>
     </tr>
   `;
 }
 
-function statReportTotalsRow(totals) {
+function statReportTotalsRow(totals, customFields = []) {
   const pointsPerGame = totals.games ? ((totals.points || 0) / totals.games).toFixed(1) : "0.0";
+  const customCells = customFields.map(([key]) => `<td>${totals[key] || 0}</td>`).join("");
   return `
     <tr class="totals">
       <td></td><td>Totals</td><td>${totals.games}</td><td>${totals.wins}-${totals.losses}</td><td>${formatPercent(winPercent(totals))}</td>
       <td>${totals.points}</td><td>${totals.tableHits}</td><td>${totals.sinks}</td><td>${totals.tinks}</td>
-      <td>${totals.fgOffense}</td><td>${totals.fgDefense}</td><td>${totals.fifas}</td><td>${totals.selfSinks}</td><td>${pointsPerGame}</td>
+      <td>${totals.fgOffense}</td><td>${totals.fgDefense}</td><td>${totals.fifas}</td>${customCells}<td>${totals.selfSinks}</td><td>${pointsPerGame}</td>
     </tr>
   `;
 }
@@ -9271,7 +9419,7 @@ function statReportRecord(buckets) {
       total.games += bucket.games || 0;
       total.wins += bucket.wins || 0;
       total.losses += bucket.losses || 0;
-      allStatFields.forEach(([key]) => {
+      leagueAggregateStatFields.forEach(([key]) => {
         total[key] += bucket[key] || 0;
       });
       return total;
