@@ -1446,11 +1446,23 @@ function bindEvents() {
     }, { success: "Logged", restoreText: "Log Big Game" });
   });
 
-  els.profileForm.addEventListener("submit", (event) => {
+  els.profileForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submitButton = event.submitter || els.profileForm.querySelector('button[type="submit"]');
+    const submitLabel = submitButton?.textContent || "Save My Profile";
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Saving...";
+    }
     const form = new FormData(els.profileForm);
     const nickname = cleanText(form.get("nickname"));
-    if (!nickname) return;
+    if (!nickname) {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = submitLabel;
+      }
+      return;
+    }
     const previousProfile = state.myProfile ? { ...state.myProfile } : null;
     const previousNickname = myProfileNickname();
     const aliases = mergePlayerNames([...(previousProfile?.aliases || []), previousNickname].filter((name) => profileKey(name) !== profileKey(nickname)));
@@ -1474,14 +1486,21 @@ function bindEvents() {
     };
     editingMyProfile = false;
     saveState();
-    saveMyProfileToCloud();
-    if (previousNickname && profileKey(previousNickname) !== profileKey(nickname)) {
-      migrateCloudPlayerName(previousNickname, nickname);
+    try {
+      await saveMyProfileToCloud();
+      if (previousNickname && profileKey(previousNickname) !== profileKey(nickname)) {
+        await migrateCloudPlayerName(previousNickname, nickname);
+      }
+      await syncMyLeagueProfile();
+      buildRegularPlayerCards();
+      buildBigGamePlayerCards();
+      render();
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = submitLabel;
+      }
     }
-    syncMyLeagueProfile();
-    buildRegularPlayerCards();
-    buildBigGamePlayerCards();
-    render();
   });
 
   els.profileList.addEventListener("click", (event) => {
@@ -3678,7 +3697,7 @@ function selectedPreferredPartnerUserId(profile = state.myProfile) {
   const candidates = preferredPartnerCandidates();
   if (Object.prototype.hasOwnProperty.call(membership, "preferred_partner_user_id")) {
     const syncedId = cleanText(membership.preferred_partner_user_id);
-    return syncedId && candidates.some((member) => member.user_id === syncedId) ? syncedId : "";
+    if (syncedId && candidates.some((member) => member.user_id === syncedId)) return syncedId;
   }
   const savedId = cleanText(profile?.preferredPartnerUserId);
   if (savedId && candidates.some((member) => member.user_id === savedId)) return savedId;
@@ -5500,6 +5519,7 @@ async function syncMyLeagueProfile() {
             nickname,
             cup_color: cupColor,
             player_code: normalizePlayerCode(state.myProfile?.playerCode),
+            preferred_partner_user_id: preferredPartnerUserId || null,
             user_id: currentUser.id,
             email: currentUser.email,
           })
