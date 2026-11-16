@@ -5459,29 +5459,45 @@ async function consumePendingLeagueInvite() {
   const leagueId = pendingLeagueInviteId;
   pendingLeagueInviteId = "";
 
+  let requestedInviteOnly = false;
   const existingMember = leagueMemberCache.some((member) => member.league_id === leagueId && (member.user_id === currentUser.id || member.email?.toLowerCase() === currentUser.email?.toLowerCase()));
   if (!existingMember) {
+    let league = leagueCache.find((item) => item.id === leagueId);
+    if (!league) {
+      const { data } = await authClient.from("leagues").select("id, privacy, name").eq("id", leagueId).maybeSingle();
+      league = data || null;
+    }
+    if (!league) {
+      alert("That league invite is no longer available.");
+      return;
+    }
+    const inviteOnly = league.privacy === "invite";
     const nickname = myProfileNickname();
     const { error } = await authClient.from("league_members").insert({
       league_id: leagueId,
+      user_id: inviteOnly ? currentUser.id : null,
       email: currentUser.email,
       display_name: nickname || "A player",
       nickname: "",
+      cup_color: state.myProfile?.cupColor || "#d71920",
       player_code: normalizePlayerCode(state.myProfile?.playerCode),
-      role: "member",
+      role: inviteOnly ? "pending" : "member",
     });
     if (error && error.code !== "23505") {
       alert(error.message);
       return;
     }
-    await createNotification({
-      recipientEmail: currentUser.email,
-      leagueId,
-      type: "league_invite",
-      title: "League invite added",
-      message: "Your league invite is ready to accept.",
-      linkTarget: "friends",
-    });
+    requestedInviteOnly = inviteOnly && !error;
+    if (!inviteOnly && !error) {
+      await createNotification({
+        recipientEmail: currentUser.email,
+        leagueId,
+        type: "league_invite",
+        title: "League invite added",
+        message: "Your league invite is ready to accept.",
+        linkTarget: "friends",
+      });
+    }
   }
 
   const url = new URL(window.location.href);
@@ -5489,7 +5505,9 @@ async function consumePendingLeagueInvite() {
   window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
   await loadLeagueData();
   switchView("friends");
-  alert("League invite added to your inbox. Accept it from League Invites when you're ready.");
+  alert(requestedInviteOnly
+    ? "Request sent. A commissioner or co-leader has to approve you."
+    : "League invite added to your inbox. Accept it from League Invites when you're ready.");
 }
 
 async function syncMyLeagueProfile() {
