@@ -17,6 +17,7 @@ type NotificationRow = {
   id: string;
   recipient_id: string | null;
   recipient_email: string | null;
+  league_id: string | null;
   type: string;
   title: string;
   message: string;
@@ -36,22 +37,31 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
   const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
   const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:support@sinkd.app";
 
-  if (!supabaseUrl || !serviceRoleKey || !vapidPublicKey || !vapidPrivateKey) {
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !vapidPublicKey || !vapidPrivateKey) {
     return json({ error: "Push function secrets are not fully configured." }, 500);
   }
 
-  const callerId = authUserId(request.headers.get("authorization") || "");
-  if (!callerId) return json({ error: "Missing authenticated user." }, 401);
+  const authorization = request.headers.get("Authorization") || request.headers.get("authorization") || "";
+  const users = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authorization } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: authData, error: authError } = await users.auth.getUser();
+  const callerId = authData?.user?.id || "";
+  if (authError || !callerId) return json({ error: "Missing authenticated user." }, 401);
 
   const { notificationId } = await request.json().catch(() => ({ notificationId: "" }));
-  if (!notificationId) return json({ error: "Missing notificationId." }, 400);
+  if (!notificationId || !isUuid(notificationId)) return json({ error: "Missing notificationId." }, 400);
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const { data: notification, error: notificationError } = await supabase
     .from("notifications")
     .select("*")
@@ -59,7 +69,14 @@ Deno.serve(async (request) => {
     .single<NotificationRow>();
 
   if (notificationError || !notification) return json({ error: "Notification not found." }, 404);
-  if (notification.created_by && notification.created_by !== callerId) return json({ error: "Not allowed." }, 403);
+  if (!notification.created_by || notification.created_by !== callerId) return json({ error: "Not allowed." }, 403);
+
+  const { data: allowed, error: allowedError } = await users.rpc("can_create_notification", {
+    target_recipient_id: notification.recipient_id,
+    target_recipient_email: notification.recipient_email || "",
+    target_league_id: notification.league_id,
+  });
+  if (allowedError || allowed !== true) return json({ error: "Not allowed." }, 403);
 
   let query = supabase.from("push_subscriptions").select("id, subscription");
   if (notification.recipient_id) {
@@ -117,16 +134,6 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function authUserId(header: string) {
-  const token = header.replace(/^Bearer\s+/i, "");
-  const [, payload] = token.split(".");
-  if (!payload) return "";
-  try {
-    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const normalized = `${normalizedPayload}${"=".repeat((4 - (normalizedPayload.length % 4)) % 4)}`;
-    const decoded = JSON.parse(atob(normalized));
-    return decoded.sub || "";
-  } catch {
-    return "";
-  }
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
