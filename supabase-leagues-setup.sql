@@ -703,6 +703,16 @@ begin
     raise exception 'Open leagues are joined as a member.';
   end if;
 
+  if not self_insert
+     and auth.uid() is not null
+     and not public.is_league_member(new.league_id) then
+    raise exception 'You must be in this league to invite players.';
+  end if;
+
+  if not self_insert and new.role not in ('member', 'pending') and not public.can_manage_league(new.league_id) then
+    raise exception 'Only a league owner or co-leader can grant that role.';
+  end if;
+
   if not self_insert and new.role = 'co_leader' and not public.is_league_owner(new.league_id) then
     raise exception 'Only the league owner can grant that role.';
   end if;
@@ -959,6 +969,16 @@ with check (
         public.is_league_owner(league_id)
         or role in ('member', 'pending', 'ref')
       )
+    )
+    or (
+      public.is_league_member(league_id)
+      and not (user_id is not null and user_id = auth.uid())
+      and not (
+        coalesce(auth.jwt() ->> 'email', '') <> ''
+        and email is not null
+        and lower(email) = lower(auth.jwt() ->> 'email')
+      )
+      and role in ('member', 'pending')
     )
   )
 );
