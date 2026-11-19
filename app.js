@@ -3786,6 +3786,10 @@ function canLogActiveLeagueGames() {
   return Boolean(myLeagueMember());
 }
 
+function canEditActiveLeagueGames() {
+  return ["owner", "co_leader", "ref"].includes(myLeagueMember()?.role);
+}
+
 function canInviteActiveLeague() {
   return Boolean(myLeagueMember());
 }
@@ -4487,6 +4491,7 @@ async function createNotification({ recipientId = null, recipientEmail = "", lea
     message,
     link_target: linkTarget,
     image_url: imageUrl,
+    created_by: currentUser.id,
   }).select("*").single();
   if (error) console.warn(error);
   if (!error && data) await triggerPushNotification(data);
@@ -5454,29 +5459,45 @@ async function consumePendingLeagueInvite() {
   const leagueId = pendingLeagueInviteId;
   pendingLeagueInviteId = "";
 
+  let requestedInviteOnly = false;
   const existingMember = leagueMemberCache.some((member) => member.league_id === leagueId && (member.user_id === currentUser.id || member.email?.toLowerCase() === currentUser.email?.toLowerCase()));
   if (!existingMember) {
+    let league = leagueCache.find((item) => item.id === leagueId);
+    if (!league) {
+      const { data } = await authClient.from("leagues").select("id, privacy, name").eq("id", leagueId).maybeSingle();
+      league = data || null;
+    }
+    if (!league) {
+      alert("That league invite is no longer available.");
+      return;
+    }
+    const inviteOnly = league.privacy === "invite";
     const nickname = myProfileNickname();
     const { error } = await authClient.from("league_members").insert({
       league_id: leagueId,
+      user_id: inviteOnly ? currentUser.id : null,
       email: currentUser.email,
       display_name: nickname || "A player",
       nickname: "",
+      cup_color: state.myProfile?.cupColor || "#d71920",
       player_code: normalizePlayerCode(state.myProfile?.playerCode),
-      role: "member",
+      role: inviteOnly ? "pending" : "member",
     });
     if (error && error.code !== "23505") {
       alert(error.message);
       return;
     }
-    await createNotification({
-      recipientEmail: currentUser.email,
-      leagueId,
-      type: "league_invite",
-      title: "League invite added",
-      message: "Your league invite is ready to accept.",
-      linkTarget: "friends",
-    });
+    requestedInviteOnly = inviteOnly && !error;
+    if (!inviteOnly && !error) {
+      await createNotification({
+        recipientEmail: currentUser.email,
+        leagueId,
+        type: "league_invite",
+        title: "League invite added",
+        message: "Your league invite is ready to accept.",
+        linkTarget: "friends",
+      });
+    }
   }
 
   const url = new URL(window.location.href);
@@ -5484,7 +5505,9 @@ async function consumePendingLeagueInvite() {
   window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
   await loadLeagueData();
   switchView("friends");
-  alert("League invite added to your inbox. Accept it from League Invites when you're ready.");
+  alert(requestedInviteOnly
+    ? "Request sent. A commissioner or co-leader has to approve you."
+    : "League invite added to your inbox. Accept it from League Invites when you're ready.");
 }
 
 async function syncMyLeagueProfile() {
@@ -5675,20 +5698,25 @@ async function transferCloudLeagueOwnership(memberId) {
     return;
   }
 
-  const { error: leagueError } = await authClient.from("leagues").update({ owner_id: newOwner.user_id }).eq("id", league.id);
-  if (leagueError) {
-    alert(leagueError.message);
+  const { error } = await authClient.rpc("transfer_league_ownership", {
+    target_member_id: newOwner.id,
+  });
+  if (error) {
+    alert(error.message || "Could not transfer ownership.");
     return;
   }
 
-  await authClient.from("league_members").update({ role: "co_leader" }).eq("id", oldOwner.id);
-  await authClient.from("league_members").update({ role: "owner" }).eq("id", newOwner.id);
   showingTransferOwnership = false;
   await loadLeagueData();
 }
 
 async function logCloudLeagueGame(form) {
-  if (!canLogActiveLeagueGames()) return false;
+  const isEdit = Boolean(editingLeagueGameId);
+  if (isEdit) {
+    if (!canEditActiveLeagueGames()) return false;
+  } else if (!canLogActiveLeagueGames()) {
+    return false;
+  }
   const beforeStats = computeLeagueStats();
   const beforeAchievementRanks = leagueAchievementRanks(beforeStats);
   const beforeLeaders = leagueRankingLeaders(computeLeagueStats(leagueDisplayStatGames()));
@@ -5784,7 +5812,7 @@ async function deleteCloudLeagueTournament(tournamentId) {
 }
 
 async function deleteCloudLeagueGame(gameId) {
-  if (!isActiveLeagueOwner()) return;
+  if (!canEditActiveLeagueGames()) return;
   const { error } = await authClient.from("league_games").delete().eq("id", gameId).eq("league_id", activeLeagueId);
   if (error) {
     alert(error.message);
@@ -5869,7 +5897,7 @@ function resetLocalGames() {
 }
 
 function startLeagueGameEdit(gameId) {
-  if (!canLogActiveLeagueGames()) return;
+  if (!canEditActiveLeagueGames()) return;
   const game = leagueGames().find((item) => item.id === gameId);
   if (!game) return;
   leagueDetailTab = "games";
@@ -6971,7 +6999,7 @@ function renderLeagueGames() {
     ? games.map((game) => gameCard(game)).join("")
     : '<p class="empty">No league games logged yet.</p>';
   const editingGame = editingLeagueGameId ? games.find((game) => game.id === editingLeagueGameId) : null;
-  if (editingGame && canLog) {
+  if (editingGame && canEditActiveLeagueGames()) {
     populateLeagueGameForm(editingGame);
   } else if (editingLeagueGameId) {
     resetLeagueGameForm();
@@ -7475,10 +7503,10 @@ function renderLeagueGameDetail() {
   }
 
   const winner = game.teams[game.winnerIndex];
-  const editButton = canLogActiveLeagueGames()
+  const editButton = canEditActiveLeagueGames()
     ? `<button class="primary-button compact-action-button" type="button" data-detail-edit-league-game="${game.id}">Edit Game</button>`
     : "";
-  const deleteButton = isActiveLeagueOwner()
+  const deleteButton = canEditActiveLeagueGames()
     ? `<button class="danger-button compact-action-button" type="button" data-detail-delete-league-game="${game.id}">Delete Game</button>`
     : "";
   const detailActions = editButton || deleteButton

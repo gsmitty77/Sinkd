@@ -1,0 +1,22 @@
+# Repo internals stay in git. They are not part of the live site.
+# Vercel serves an uploaded static file before any rewrite, so these paths
+# are left out of the deployment and 404 on https://www.sinkd.online.
+# The live app files stay where they are: index.html, app.js, styles.css,
+# sw.js, site.webmanifest, app-icon.png, and assets/ icons and images.
+
+*.sql
+*.md
+supabase
+supabase/**
+build-me-a-simple-beer-die
+build-me-a-simple-beer-die/**
+
+assets/index.html
+assets/app.js
+assets/styles.css
+assets/site.webmanifest
+assets/parked-features.md
+assets/supabase-leagues-setup.sql
+assets/README.txt
+assets/assets
+assets/assets/**
