@@ -1322,17 +1322,45 @@ async function deleteAccount() {
     showAuthMessage("Sign in before deleting your account.");
     return;
   }
+  if (authBusy) return;
 
-  const { error } = await authClient.functions.invoke("delete-account");
-  if (error) {
-    showAuthMessage("Account deletion needs the secure delete-account function added in Supabase first.");
-    return;
+  if (els.deleteAccountBtn) els.deleteAccountBtn.disabled = true;
+  setAuthBusy(true, "Deleting account...");
+  try {
+    const { error } = await authClient.functions.invoke("delete-account");
+    if (error) {
+      showAuthMessage("");
+      alert(await deleteAccountErrorMessage(error));
+      return;
+    }
+
+    const user = currentUser;
+    localStorage.removeItem(introStorageKey(user));
+    await authClient.auth.signOut().catch(() => {});
+    setAuthView(null);
+    showAuthMessage("Account deleted.");
+  } finally {
+    if (els.deleteAccountBtn) els.deleteAccountBtn.disabled = false;
+    setAuthBusy(false);
   }
+}
 
-  localStorage.removeItem(introStorageKey(currentUser));
-  await authClient.auth.signOut();
-  setAuthView(null);
-  showAuthMessage("Account deleted.");
+async function deleteAccountErrorMessage(error) {
+  const notDeployed = "Account deletion needs the secure delete-account function added in Supabase first.";
+  try {
+    const response = error?.context;
+    const status = Number(response?.status) || 0;
+    if (response && typeof response.clone === "function") {
+      const body = await response.clone().json();
+      const message = cleanText(body?.error || body?.message || "");
+      if (message) return message;
+    }
+    if (status === 404) return notDeployed;
+  } catch {
+    // The function can fail before it returns JSON, usually because it is not deployed yet.
+  }
+  if (/not found|404/i.test(String(error?.message || ""))) return notDeployed;
+  return "Could not delete the account. Try again.";
 }
 
 function authRedirectUrl() {
@@ -2174,7 +2202,7 @@ function bindEvents() {
   els.deleteAccountBtn.addEventListener("click", () => {
     showAppConfirm({
       title: "Delete account?",
-      message: "This will permanently delete your Sinkd account if account deletion is enabled. Local games on this device will stay unless you reset them.",
+      message: "This permanently deletes your Sinkd account. If you own a league with other people, transfer ownership first. Games saved only on this device stay unless you reset them.",
       confirmLabel: "Delete",
       onConfirm: deleteAccount,
     });
@@ -4099,7 +4127,7 @@ function clearNotificationCloudState() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.register("sw.js", { scope: "/" });
   } catch (error) {
     console.warn(error);
   }
